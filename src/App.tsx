@@ -228,12 +228,11 @@ export default function App() {
   const [appWindow, setAppWindow] = useState<WebviewWindow | null>(null);
 
   useEffect(() => {
-    // Permet de tester l'UI dans un simple navigateur sans planter
+    // Permet de tester l'UI dans un simple navigateur sans planter :
+    // si on n'est pas dans Tauri, getCurrentWindow() lève une erreur.
     try {
-      // @ts-expect-error: __TAURI__ n'existe pas dans un navigateur classique
-      if (window && (window as any).__TAURI__) {
-        setAppWindow(getCurrentWindow());
-      }
+      const win = getCurrentWindow();
+      setAppWindow(win);
     } catch {
       setAppWindow(null);
     }
