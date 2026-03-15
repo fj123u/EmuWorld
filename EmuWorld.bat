@@ -1,45 +1,54 @@
 @echo off
-title EmuWorld Launcher
+title Universal Emulator Hub (C++/Qt)
 cd /d "%~dp0"
 
 echo.
-echo  ============================
-echo   EmuWorld - Starting...
-echo  ============================
+echo  ============================================
+echo   Universal Emulator Hub - C++ / Qt Launcher
+echo  ============================================
 echo.
 
-:: Check if Node.js is available
-where node >nul 2>&1
+:: Vérifie CMake
+where cmake >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not installed or not in PATH.
-    echo Please install Node.js from https://nodejs.org/
+    echo [ERROR] CMake n'est pas installe ou pas dans le PATH.
+    echo         Installe-le depuis https://cmake.org/
     pause
     exit /b 1
 )
 
-:: Check if Rust/Cargo is available
-where cargo >nul 2>&1
-if %errorlevel% neq 0 (
-    echo [ERROR] Rust is not installed or not in PATH.
-    echo Please install Rust from https://www.rust-lang.org/
-    pause
-    exit /b 1
+:: Crée le dossier de build s'il n'existe pas
+if not exist "build" (
+    mkdir build
 )
 
-:: Install dependencies if needed
-if not exist "node_modules" (
-    echo [INFO] Installing dependencies...
-    npm install
+cd build
+
+:: Configure le projet (une seule fois)
+if not exist "CMakeCache.txt" (
+    echo [INFO] Configuration du projet CMake...
+    cmake ..
     if %errorlevel% neq 0 (
-        echo [ERROR] Failed to install dependencies.
+        echo [ERROR] Echec de la configuration CMake.
         pause
         exit /b 1
     )
 )
 
-echo [INFO] Launching EmuWorld in development mode...
-echo [INFO] The app window will appear shortly.
-echo [INFO] Press Ctrl+C in this window to stop the app.
+:: Compile en Debug
+echo [INFO] Compilation du projet...
+cmake --build . --config Debug
+if %errorlevel% neq 0 (
+    echo [ERROR] Echec de la compilation.
+    pause
+    exit /b 1
+)
+
+echo [INFO] Lancement de l'application...
 echo.
 
-npm run tauri dev
+UniversalEmulatorHubCpp.exe
+
+echo.
+echo [INFO] L'application s'est fermee.
+pause
