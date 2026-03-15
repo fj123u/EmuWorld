@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, WebviewWindow } from "@tauri-apps/api/window";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -225,10 +225,23 @@ export default function App() {
   });
 
   // ---- Window controls ----
-  const appWindow = getCurrentWindow();
-  const minimize = () => appWindow.minimize();
-  const maximize = () => appWindow.toggleMaximize();
-  const close = () => appWindow.close();
+  const [appWindow, setAppWindow] = useState<WebviewWindow | null>(null);
+
+  useEffect(() => {
+    // Permet de tester l'UI dans un simple navigateur sans planter
+    try {
+      // @ts-expect-error: __TAURI__ n'existe pas dans un navigateur classique
+      if (window && (window as any).__TAURI__) {
+        setAppWindow(getCurrentWindow());
+      }
+    } catch {
+      setAppWindow(null);
+    }
+  }, []);
+
+  const minimize = () => appWindow?.minimize();
+  const maximize = () => appWindow?.toggleMaximize();
+  const close = () => appWindow?.close();
 
   return (
     <>
