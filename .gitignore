@@ -3,35 +3,35 @@ node_modules/
 
 # Build outputs
 dist/
+
+# Tauri build
 src-tauri/target/
+src-tauri/WixTools/
+src-tauri/NSIS/
+
+# C++ build (legacy)
+build/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# Environment variables
+# Env
 .env
 .env.local
-.env.*.local
 
 # Logs
 npm-debug.log*
 yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Tauri
-src-tauri/target/
-src-tauri/WixTools/
-src-tauri/NSIS/
 
 # TypeScript
 *.tsbuildinfo
+
+# Lock files (keep package-lock.json)

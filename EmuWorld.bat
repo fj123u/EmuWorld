@@ -1,54 +1,43 @@
 @echo off
-title Universal Emulator Hub (C++/Qt)
+title EmuWorld Launcher
 cd /d "%~dp0"
 
 echo.
-echo  ============================================
-echo   Universal Emulator Hub - C++ / Qt Launcher
-echo  ============================================
+echo  ============================
+echo   EmuWorld - Starting...
+echo  ============================
 echo.
 
-:: Vérifie CMake
-where cmake >nul 2>&1
+:: Check Node.js
+where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] CMake n'est pas installe ou pas dans le PATH.
-    echo         Installe-le depuis https://cmake.org/
+    echo [ERROR] Node.js not found. Install from https://nodejs.org/
     pause
     exit /b 1
 )
 
-:: Crée le dossier de build s'il n'existe pas
-if not exist "build" (
-    mkdir build
+:: Check Rust
+where cargo >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] Rust not found. Install from https://www.rust-lang.org/
+    pause
+    exit /b 1
 )
 
-cd build
-
-:: Configure le projet (une seule fois)
-if not exist "CMakeCache.txt" (
-    echo [INFO] Configuration du projet CMake...
-    cmake ..
+:: Install deps if needed
+if not exist "node_modules" (
+    echo [INFO] Installing dependencies...
+    call npm install
     if %errorlevel% neq 0 (
-        echo [ERROR] Echec de la configuration CMake.
+        echo [ERROR] npm install failed.
         pause
         exit /b 1
     )
 )
 
-:: Compile en Debug
-echo [INFO] Compilation du projet...
-cmake --build . --config Debug
-if %errorlevel% neq 0 (
-    echo [ERROR] Echec de la compilation.
-    pause
-    exit /b 1
-)
-
-echo [INFO] Lancement de l'application...
+echo [INFO] Launching EmuWorld...
+echo [INFO] The app window will appear shortly.
+echo [INFO] Press Ctrl+C to stop.
 echo.
 
-UniversalEmulatorHubCpp.exe
-
-echo.
-echo [INFO] L'application s'est fermee.
-pause
+call npm run tauri dev

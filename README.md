@@ -1,40 +1,54 @@
-## Universal Emulator Hub (C++ / Qt)
+# 🎮 EmuWorld
 
-Projet universitaire : lanceur / gestionnaire d'émulateurs écrit en **C++17** avec **Qt 6** et **CMake**.
+All-in-one emulator launcher for Windows. Download, install, and launch emulators from a single modern interface.
 
-### Prérequis
+## ✨ Features
 
-- [CMake](https://cmake.org/)
-- Qt 6 (modules **Widgets** et **Network**)
-- Un compilateur C++ compatible C++17 (MSVC, clang, etc.)
+- **Emulator Catalog** — 10 emulators (mGBA, melonDS, DeSmuME, Snes9x, Project64, Dolphin, DuckStation, PCSX2, PPSSPP, RetroArch)
+- **One-Click Install** — Automatic download & extraction from official sources
+- **Game Library** — Scan ROM folders and launch games with the right emulator
+- **Modern UI** — Dark theme, glassmorphism, Framer Motion animations, custom titlebar
 
-### Compilation et lancement (Windows)
+## 🚀 Quick Start
 
-1. **Double-cliquer** sur `EmuWorld.bat`
-   - Configure CMake dans le dossier `build/`
-   - Compile le projet en Debug
-   - Lance l'exécutable `UniversalEmulatorHubCpp.exe`
-
-2. Ou en ligne de commande :
+**Double-click `EmuWorld.bat`** or run:
 
 ```bash
-cmake -S . -B build
-cmake --build build --config Debug
-build/UniversalEmulatorHubCpp.exe
+npm install
+npm run tauri dev
 ```
 
-### Structure du projet
+### Prerequisites
 
-```text
-UniversalEmulatorHubCpp/
-├── CMakeLists.txt
-├── src/
-│   ├── CMakeLists.txt
-│   ├── main.cpp
-│   ├── MainWindow.h / .cpp        # Fenêtre principale (UI)
-│   ├── EmulatorManager.h / .cpp   # Gestion du catalogue et des téléchargements
-│   └── models/
-│       ├── Emulator.h
-│       └── Rom.h
-└── EmuWorld.bat                   # Script de build + lancement
+- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://www.rust-lang.org/) (latest stable)
+- [7-Zip](https://www.7-zip.org/) (optional, for .7z emulators)
+
+## 🛠️ Tech Stack
+
+- **Frontend**: React 19 + TypeScript + Vite
+- **Backend**: Tauri 2 (Rust)
+- **UI**: Vanilla CSS + Framer Motion + Lucide Icons
+
+## 📁 Structure
+
 ```
+EmuWorld/
+├── src/                    # React frontend
+│   ├── App.tsx             # Main app component
+│   ├── App.css             # Design system
+│   └── main.tsx            # Entry point
+├── src-tauri/              # Rust backend
+│   ├── src/
+│   │   ├── lib.rs          # Core logic
+│   │   ├── emulators.rs    # Emulator catalog
+│   │   └── main.rs         # Entry point
+│   ├── Cargo.toml
+│   └── tauri.conf.json
+├── EmuWorld.bat            # Double-click to launch
+└── package.json
+```
+
+## 📄 License
+
+MIT
