@@ -254,10 +254,10 @@ export default function App() {
   return (
     <>
       {/* ===== Custom Titlebar ===== */}
-      <div className="titlebar">
-        <div className="titlebar__logo">
+      <div className="titlebar" data-tauri-drag-region onDoubleClick={maximize}>
+        <div className="titlebar__logo" data-tauri-drag-region>
           <div className="titlebar__logo-icon">🎮</div>
-          <span>EmuWorld</span>
+          <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <div className="titlebar__controls">
           <button className="titlebar__btn" onClick={minimize} title="Réduire">
