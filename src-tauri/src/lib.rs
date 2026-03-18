@@ -35,12 +35,18 @@ fn config_path() -> PathBuf {
 #[tauri::command]
 fn get_config() -> AppConfig {
     let path = config_path();
-    if path.exists() {
+    let config = if path.exists() {
         let data = fs::read_to_string(&path).unwrap_or_default();
         serde_json::from_str(&data).unwrap_or_default()
     } else {
         AppConfig::default()
-    }
+    };
+
+    // Auto-create ROMs and Emulators directories
+    fs::create_dir_all(&config.roms_directory).ok();
+    fs::create_dir_all(&config.emulators_directory).ok();
+
+    config
 }
 
 #[tauri::command]
@@ -158,6 +164,10 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
     fs::remove_file(&archive_path).ok();
 
     let exe_found = find_executable(&install_dir, &emu.executable_name).is_some();
+
+    // Auto-create a ROM subfolder for this console
+    let roms_dir = PathBuf::from(&config.roms_directory).join(&emu.console);
+    fs::create_dir_all(&roms_dir).ok();
 
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
