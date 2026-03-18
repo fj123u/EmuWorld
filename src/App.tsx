@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import { getCurrentWindow, WebviewWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -40,6 +40,7 @@ interface EmulatorInfo {
   supported_extensions: string[];
   icon: string;
   website: string;
+  archive_type: string;
 }
 
 interface RomFile {
@@ -227,21 +228,27 @@ export default function App() {
   });
 
   // ---- Window controls ----
-  const [appWindow, setAppWindow] = useState<WebviewWindow | null>(null);
+  const [appWindow, setAppWindow] = useState<ReturnType<typeof getCurrentWindow> | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
 
   useEffect(() => {
     try {
       const win = getCurrentWindow();
       setAppWindow(win);
       win.isFullscreen().then(setIsFullscreen).catch(() => {});
+      win.isMaximized().then(setIsMaximized).catch(() => {});
     } catch {
       setAppWindow(null);
     }
   }, []);
 
   const minimize = () => appWindow?.minimize();
-  const maximize = () => appWindow?.toggleMaximize();
+  const maximize = async () => {
+    if (!appWindow) return;
+    await appWindow.toggleMaximize();
+    setIsMaximized(await appWindow.isMaximized());
+  };
   const close = () => appWindow?.close();
 
   const toggleFullscreen = async () => {
@@ -264,7 +271,7 @@ export default function App() {
             <Minus size={14} />
           </button>
           <button className="titlebar__btn" onClick={maximize} title="Agrandir / Restaurer">
-            <Square size={12} />
+            {isMaximized ? <Minimize2 size={12} /> : <Square size={12} />}
           </button>
           <button
             className="titlebar__btn"
