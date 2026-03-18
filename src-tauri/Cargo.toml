@@ -23,3 +23,4 @@ tokio = { version = "1", features = ["full"] }
 zip = "2"
 walkdir = "2"
 dirs = "6"
+sevenz-rust = "0.6"

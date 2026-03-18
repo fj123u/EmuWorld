@@ -205,24 +205,9 @@ fn extract_zip(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Stri
 }
 
 fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), String> {
-    let result = Command::new("7z")
-        .args(["x", "-y", &format!("-o{}", install_dir.to_string_lossy())])
-        .arg(archive_path)
-        .output();
-
-    match result {
-        Ok(output) => {
-            if output.status.success() {
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                Err(format!("7z extraction failed: {}. Install 7-Zip and add it to PATH.", stderr))
-            }
-        }
-        Err(_) => {
-            Err("7-Zip not found. Please install 7-Zip from https://www.7-zip.org/ and add it to your PATH.".to_string())
-        }
-    }
+    sevenz_rust::decompress_file(archive_path, install_dir)
+        .map_err(|e| format!("7z extraction failed: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
