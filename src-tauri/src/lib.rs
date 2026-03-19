@@ -84,7 +84,8 @@ fn get_installed_emulators() -> Vec<String> {
                     .unwrap_or(false);
                 if has_files {
                     if let Some(name) = entry.file_name().to_str() {
-                        installed.push(name.to_string());
+                        // Always return lowercase to match catalog IDs
+                        installed.push(name.to_lowercase());
                     }
                 }
             }
@@ -199,13 +200,22 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
 
 #[tauri::command]
 fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
+    let id_lower = emulator_id.to_lowercase();
     let config = get_config();
-    let install_dir = PathBuf::from(&config.emulators_directory).join(&emulator_id);
+    let install_dir = PathBuf::from(&config.emulators_directory).join(&id_lower);
+    
     if install_dir.exists() {
-        fs::remove_dir_all(&install_dir).map_err(|e| e.to_string())?;
-        Ok(format!("Emulator '{}' uninstalled", emulator_id))
+        // Try to remove. On Windows, this fails if an EXE is running.
+        fs::remove_dir_all(&install_dir).map_err(|e| {
+            if e.to_string().contains("Access is denied") {
+                format!("Uninstallation failed: The emulator folder is locked. Please make sure the emulator is closed before uninstalling.")
+            } else {
+                format!("Failed to uninstall {}: {}", id_lower, e)
+            }
+        })?;
+        Ok(format!("Emulator '{}' uninstalled", id_lower))
     } else {
-        Err("Emulator not installed".to_string())
+        Err(format!("Emulator '{}' is not installed (checked {})", id_lower, install_dir.display()))
     }
 }
 
@@ -368,20 +378,12 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     }
     
     // Build candidate names to try
-    let mut candidates = vec![safe_name.clone()];
+    let mut candidates = vec![game_name.clone(), safe_name.clone()];
     
-    // Try without region tags: "Super Mario Bros. 3 (USA)" -> "Super Mario Bros. 3"
-    if let Some(paren_start) = safe_name.find('(') {
-        let trimmed = safe_name[..paren_start].trim().to_string();
-        if !trimmed.is_empty() {
-            candidates.push(trimmed);
-        }
-    }
-    if let Some(bracket_start) = safe_name.find('[') {
-        let trimmed = safe_name[..bracket_start].trim().to_string();
-        if !trimmed.is_empty() {
-            candidates.push(trimmed);
-        }
+    // Add common libretro region tags as blind fallbacks
+    let regions = vec![" (USA)", " (Europe)", " (Japan)", " (World)", " (En)"];
+    for reg in regions {
+        candidates.push(format!("{}{}", &safe_name, reg));
     }
 
     let client = reqwest::Client::builder()
@@ -395,44 +397,27 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         
         for candidate in &candidates {
             let encoded_name = urlencoding::encode(candidate);
-            
-            // For Nintendo Switch, we try shawnshyguy/Boxart with .png then .jpg
-            let extensions = if console == "Nintendo Switch" {
-                vec![".png", ".jpg"]
-            } else {
-                vec![".png"]
-            };
-
-            for ext in extensions {
-                let url = if console == "Nintendo Switch" {
-                    format!(
-                        "https://raw.githubusercontent.com/shawnshyguy/Boxart/main/Nintendo%20-%20Switch/Boxart/Front-Boxart/{}{}",
-                        encoded_name, ext
-                    )
-                } else {
-                    format!(
-                        "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
-                        encoded_system, encoded_name
-                    )
-                };
+            let url = format!(
+                "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
+                encoded_system, encoded_name
+            );
                 
-                match client.get(&url).send().await {
-                    Ok(response) if response.status().is_success() => {
-                        if let Ok(bytes) = response.bytes().await {
-                            if bytes.len() > 500 {
-                                fs::create_dir_all(&console_covers_dir).ok();
-                                if let Ok(mut file) = fs::File::create(&file_path) {
-                                    use std::io::Write;
-                                    let _ = file.write_all(&bytes);
-                                }
-                                use base64::Engine;
-                                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                                return Ok(format!("data:image/png;base64,{}", b64));
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    if let Ok(bytes) = response.bytes().await {
+                        if bytes.len() > 500 {
+                            fs::create_dir_all(&console_covers_dir).ok();
+                            if let Ok(mut file) = fs::File::create(&file_path) {
+                                use std::io::Write;
+                                let _ = file.write_all(&bytes);
                             }
+                            use base64::Engine;
+                            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                            return Ok(format!("data:image/png;base64,{}", b64));
                         }
                     }
-                    _ => continue,
                 }
+                _ => continue,
             }
         }
     }
