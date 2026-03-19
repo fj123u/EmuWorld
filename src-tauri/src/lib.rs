@@ -395,27 +395,44 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         
         for candidate in &candidates {
             let encoded_name = urlencoding::encode(candidate);
-            let url = format!(
-                "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
-                encoded_system, encoded_name
-            );
             
-            match client.get(&url).send().await {
-                Ok(response) if response.status().is_success() => {
-                    if let Ok(bytes) = response.bytes().await {
-                        if bytes.len() > 500 {
-                            fs::create_dir_all(&console_covers_dir).ok();
-                            if let Ok(mut file) = fs::File::create(&file_path) {
-                                use std::io::Write;
-                                let _ = file.write_all(&bytes);
+            // For Nintendo Switch, we try shawnshyguy/Boxart with .png then .jpg
+            let extensions = if console == "Nintendo Switch" {
+                vec![".png", ".jpg"]
+            } else {
+                vec![".png"]
+            };
+
+            for ext in extensions {
+                let url = if console == "Nintendo Switch" {
+                    format!(
+                        "https://raw.githubusercontent.com/shawnshyguy/Boxart/main/Nintendo%20-%20Switch/Boxart/Front-Boxart/{}{}",
+                        encoded_name, ext
+                    )
+                } else {
+                    format!(
+                        "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
+                        encoded_system, encoded_name
+                    )
+                };
+                
+                match client.get(&url).send().await {
+                    Ok(response) if response.status().is_success() => {
+                        if let Ok(bytes) = response.bytes().await {
+                            if bytes.len() > 500 {
+                                fs::create_dir_all(&console_covers_dir).ok();
+                                if let Ok(mut file) = fs::File::create(&file_path) {
+                                    use std::io::Write;
+                                    let _ = file.write_all(&bytes);
+                                }
+                                use base64::Engine;
+                                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                return Ok(format!("data:image/png;base64,{}", b64));
                             }
-                            use base64::Engine;
-                            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                            return Ok(format!("data:image/png;base64,{}", b64));
                         }
                     }
+                    _ => continue,
                 }
-                _ => continue,
             }
         }
     }

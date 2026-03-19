@@ -118,7 +118,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             name: "Ryubing".to_string(),
             console: "Nintendo Switch".to_string(),
             description: "A community fork of Ryujinx for Nintendo Switch emulation. Fast, accurate, and actively maintained on GitLab.".to_string(),
-            download_url: "https://git.ryujinx.app/ryubing/ryujinx/-/releases".to_string(),
+            download_url: "https://git.ryujinx.app/api/v4/projects/1/packages/generic/Ryubing/1.3.3/ryujinx-1.3.3-win_x64.zip".to_string(),
             executable_name: "Ryujinx.exe".to_string(),
             supported_extensions: vec!["nca".to_string(), "nro".to_string(), "nsp".to_string(), "xci".to_string()],
             icon: "🎮".to_string(),
