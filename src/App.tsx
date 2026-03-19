@@ -192,6 +192,7 @@ export default function App() {
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.3.2", date: "2026-03-19", changes: ["🎮 Added Ryubing for Nintendo Switch emulation", "🖼️ Improved cover matching: Added GB/GBC fallbacks for GBA console (mGBA support)", "🎨 New custom EmuWorld app icon and branding"] },
     { version: "0.3.0", date: "2026-03-19", changes: ["✨ Cover Art! Box art auto-downloaded from libretro-thumbnails CDN", "Per-console cover caching in Covers directory", "22 consoles supported for cover art", "Shimmer loading animation on game cards"] },
     { version: "0.2.9", date: "2026-03-19", changes: ["Renamed 'Library' to 'Roms' in the UI", "Stopped automatic ROM folder creation during emulator installation"] },
     { version: "0.2.3", date: "2026-03-19", changes: ["Fixed Close button (added window control permissions)", "Switched NES emulator to Nestopia UE", "Updated Xbox (xemu), PS3 (RPCS3), and Switch (Ryujinx) links to stable mirrors"] },

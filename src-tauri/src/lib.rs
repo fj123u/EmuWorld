@@ -320,29 +320,31 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     let covers_dir = PathBuf::from(&config.covers_directory);
     
     // Map EmuWorld console names to libretro system directory names
-    let libretro_system = match console.as_str() {
-        "NES" => "Nintendo - Nintendo Entertainment System",
-        "Super Nintendo" => "Nintendo - Super Nintendo Entertainment System",
-        "Nintendo 64" => "Nintendo - Nintendo 64",
-        "Game Boy Advance" => "Nintendo - Game Boy Advance",
-        "Nintendo DS" => "Nintendo - Nintendo DS",
-        "GameCube / Wii" => "Nintendo - GameCube",
-        "Wii U" => "Nintendo - Wii U",
-        "Virtual Boy" => "Nintendo - Virtual Boy",
-        "PlayStation 1" => "Sony - PlayStation",
-        "PlayStation 2" => "Sony - PlayStation 2",
-        "PlayStation 3" => "Sony - PlayStation 3",
-        "PlayStation Portable" => "Sony - PlayStation Portable",
-        "Dreamcast" => "Sega - Dreamcast",
-        "Mega Drive" => "Sega - Mega Drive - Genesis",
-        "Master System" => "Sega - Master System - Mark III",
-        "Saturn" => "Sega - Saturn",
-        "Game Gear" => "Sega - Game Gear",
-        "Xbox" => "Microsoft - Xbox",
-        "Neo-Geo" => "SNK - Neo Geo",
-        "Arcade" => "FBNeo - Arcade Games",
-        "PC Engine" => "NEC - PC Engine - TurboGrafx 16",
-        "Atari 2600" => "Atari - 2600",
+    // Some consoles have multiple possible system names for better matching
+    let libretro_systems: Vec<&str> = match console.as_str() {
+        "NES" => vec!["Nintendo - Nintendo Entertainment System"],
+        "Super Nintendo" => vec!["Nintendo - Super Nintendo Entertainment System"],
+        "Nintendo 64" => vec!["Nintendo - Nintendo 64"],
+        "Game Boy Advance" => vec!["Nintendo - Game Boy Advance", "Nintendo - Game Boy Color", "Nintendo - Game Boy"],
+        "Nintendo DS" => vec!["Nintendo - Nintendo DS"],
+        "GameCube / Wii" => vec!["Nintendo - GameCube", "Nintendo - Wii"],
+        "Wii U" => vec!["Nintendo - Wii U"],
+        "Nintendo Switch" => vec!["Nintendo - Nintendo Switch"],
+        "Virtual Boy" => vec!["Nintendo - Virtual Boy"],
+        "PlayStation 1" => vec!["Sony - PlayStation"],
+        "PlayStation 2" => vec!["Sony - PlayStation 2"],
+        "PlayStation 3" => vec!["Sony - PlayStation 3"],
+        "PlayStation Portable" => vec!["Sony - PlayStation Portable"],
+        "Dreamcast" => vec!["Sega - Dreamcast"],
+        "Mega Drive" => vec!["Sega - Mega Drive - Genesis"],
+        "Master System" => vec!["Sega - Master System - Mark III"],
+        "Saturn" => vec!["Sega - Saturn"],
+        "Game Gear" => vec!["Sega - Game Gear"],
+        "Xbox" => vec!["Microsoft - Xbox"],
+        "Neo-Geo" => vec!["SNK - Neo Geo"],
+        "Arcade" => vec!["FBNeo - Arcade Games", "MAME"],
+        "PC Engine" => vec!["NEC - PC Engine - TurboGrafx 16"],
+        "Atari 2600" => vec!["Atari - 2600"],
         _ => return Err(format!("No cover source for console: {}", console)),
     };
     
@@ -387,33 +389,34 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         .build()
         .map_err(|e| e.to_string())?;
     
-    let encoded_system = urlencoding::encode(libretro_system);
-    
-    for candidate in &candidates {
-        let encoded_name = urlencoding::encode(candidate);
-        // Use the libretro thumbnails CDN (much more reliable than raw GitHub)
-        let url = format!(
-            "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
-            encoded_system, encoded_name
-        );
+    // Try each system and each candidate name
+    for system in &libretro_systems {
+        let encoded_system = urlencoding::encode(system);
         
-        match client.get(&url).send().await {
-            Ok(response) if response.status().is_success() => {
-                if let Ok(bytes) = response.bytes().await {
-                    if bytes.len() > 100 { // Sanity check: valid image
-                        fs::create_dir_all(&console_covers_dir).ok();
-                        if let Ok(mut file) = fs::File::create(&file_path) {
-                            use std::io::Write;
-                            let _ = file.write_all(&bytes);
+        for candidate in &candidates {
+            let encoded_name = urlencoding::encode(candidate);
+            let url = format!(
+                "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
+                encoded_system, encoded_name
+            );
+            
+            match client.get(&url).send().await {
+                Ok(response) if response.status().is_success() => {
+                    if let Ok(bytes) = response.bytes().await {
+                        if bytes.len() > 500 {
+                            fs::create_dir_all(&console_covers_dir).ok();
+                            if let Ok(mut file) = fs::File::create(&file_path) {
+                                use std::io::Write;
+                                let _ = file.write_all(&bytes);
+                            }
+                            use base64::Engine;
+                            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                            return Ok(format!("data:image/png;base64,{}", b64));
                         }
-                        // Return as base64 data URL
-                        use base64::Engine;
-                        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                        return Ok(format!("data:image/png;base64,{}", b64));
                     }
                 }
+                _ => continue,
             }
-            _ => continue,
         }
     }
     
