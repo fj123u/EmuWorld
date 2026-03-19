@@ -295,11 +295,18 @@ fn match_extension(ext: &str, catalog: &[emulators::EmulatorInfo]) -> Option<(St
 
 #[tauri::command]
 async fn fetch_boxart(game_name: String, console: String) -> Result<String, String> {
-    let config_dir = dirs::config_dir().ok_or("Could not find config directory")?.join("EmuWorld");
-    let covers_dir = config_dir.join("Covers");
-    let safe_name = game_name.replace(|c: char| !c.is_alphanumeric() && c != ' ', "_");
+    let config = get_config();
+    let covers_dir = PathBuf::from(&config.covers_directory);
+    
+    // Libretro naming convention for files: replace forbidden characters with _
+    let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|'];
+    let safe_name: String = game_name.chars()
+        .map(|c| if forbidden.contains(&c) { '_' } else { c })
+        .collect();
+    
     let file_path = covers_dir.join(format!("{}.png", safe_name));
     if file_path.exists() { return Ok(file_path.to_string_lossy().to_string()); }
+
     let libretro_console = match console.as_str() {
         "NES" => "Nintendo_-_Nintendo_Entertainment_System",
         "Super Nintendo" => "Nintendo_-_Super_Nintendo_Entertainment_System",
@@ -323,7 +330,11 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         "Neo-Geo" => "SNK_-_Neo_Geo",
         _ => return Err("Unsupported console".to_string()),
     };
-    let url = format!("https://raw.githubusercontent.com/libretro-thumbnails/{}/master/Named_Boxarts/{}.png", libretro_console, game_name);
+    
+    // URL MUST encode the sanitized name for GitHub
+    let encoded_name = urlencoding::encode(&safe_name);
+    let url = format!("https://raw.githubusercontent.com/libretro-thumbnails/{}/master/Named_Boxarts/{}.png", libretro_console, encoded_name);
+    
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() { return Err(format!("Boxart not found: {}", response.status())); }
     let bytes = response.bytes().await.map_err(|e| e.to_string())?;

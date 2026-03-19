@@ -384,7 +384,6 @@ body::before {
 }
 
 .sidebar__category .sidebar__item {
-  padding-left: 24px;
   font-size: 0.85rem;
   margin-bottom: 2px;
 }
@@ -412,6 +411,59 @@ body::before {
   background: linear-gradient(90deg, transparent, var(--neon-purple), transparent);
   margin: 8px 16px;
   opacity: 0.2;
+}
+
+/* --- Hierarchical Indentation --- */
+.sidebar__category-items {
+  padding-left: 0;
+}
+
+.sidebar__console {
+  margin-bottom: 2px;
+}
+
+.sidebar__console .sidebar__item {
+  padding-left: 24px;
+  font-size: 0.85rem;
+}
+
+.sidebar__game-list {
+  padding-left: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  border-left: 1px solid rgba(179, 77, 255, 0.1);
+  margin-left: 32px;
+}
+
+.sidebar__game-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-radius: 4px;
+  transition: all 0.2s;
+  text-align: left;
+  width: 100%;
+}
+
+.sidebar__game-item:hover {
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--neon-cyan);
+}
+
+.sidebar__game-icon {
+  opacity: 0.5;
+  color: var(--neon-purple);
+}
+
+.sidebar__game-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ===== Main Content ===== */

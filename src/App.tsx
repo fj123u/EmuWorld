@@ -174,6 +174,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -307,6 +308,13 @@ export default function App() {
     setExpandedLibraryCategories(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
     );
+  };
+
+  const toggleSidebarConsole = (con: string) => {
+    setExpandedSidebarConsoles(prev =>
+      prev.includes(con) ? prev.filter(c => c !== con) : [...prev, con]
+    );
+    setConsoleFilter(con);
   };
 
   // ---- Derived data ----
@@ -452,7 +460,7 @@ export default function App() {
               All Consoles
             </button>
             {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
-              const isExpanded = expandedCategories.includes(category);
+              const isCatExpanded = expandedCategories.includes(category);
               const isCatActive = categoryFilter === category;
               return (
                 <div key={category} className="sidebar__category">
@@ -460,30 +468,59 @@ export default function App() {
                     className={`sidebar__category-title ${isCatActive ? "sidebar__category-title--active" : ""}`}
                     onClick={() => toggleCategory(category)}
                   >
-                    {isExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}
+                    {isCatExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}
                     {category}
                   </button>
                   <AnimatePresence>
-                    {isExpanded && (
+                    {isCatExpanded && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: "auto", opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
                         className="sidebar__category-items"
                       >
-                        {categoryConsoles.sort().map((c) => (
-                          <button
-                            key={c}
-                            className={`sidebar__item ${consoleFilter === c ? "sidebar__item--active" : ""}`}
-                            onClick={() => {
-                              setConsoleFilter(c);
-                              if (page === "settings") setPage("catalog");
-                            }}
-                          >
-                            <span className="sidebar__item-icon">{CONSOLE_ICONS[c] || "🎮"}</span>
-                            {c}
-                          </button>
-                        ))}
+                        {categoryConsoles.sort().map((con) => {
+                          const isConExpanded = expandedSidebarConsoles.includes(con);
+                          const isConActive = consoleFilter === con;
+                          const consoleGames = roms.filter(r => r.console === con);
+                          
+                          return (
+                            <div key={con} className="sidebar__console">
+                              <button
+                                className={`sidebar__item ${isConActive ? "sidebar__item--active" : ""}`}
+                                onClick={() => toggleSidebarConsole(con)}
+                              >
+                                <span className="sidebar__item-icon">{isConExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}</span>
+                                <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                                {con}
+                                <span className="sidebar__item-count">{consoleGames.length}</span>
+                              </button>
+                              
+                              <AnimatePresence>
+                                {isConExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="sidebar__game-list"
+                                  >
+                                    {consoleGames.sort((a,b) => a.name.localeCompare(b.name)).map(game => (
+                                      <button 
+                                        key={game.path} 
+                                        className="sidebar__game-item"
+                                        onClick={() => handleLaunch(game)}
+                                        title={game.name}
+                                      >
+                                        <Play size={10} className="sidebar__game-icon" />
+                                        <span className="sidebar__game-name">{game.name}</span>
+                                      </button>
+                                    ))}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
                       </motion.div>
                     )}
                   </AnimatePresence>
