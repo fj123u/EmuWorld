@@ -149,9 +149,19 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
     fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
 
     if emu.archive_type == "zip" {
-        extract_zip(&archive_path, &install_dir)?;
+        extract_zip(&archive_path, &install_dir).map_err(|e| format!("Zip extraction failed: {}", e))?;
+    } else if emu.archive_type == "7z" {
+        extract_7z(&archive_path, &install_dir).map_err(|e| format!("7z extraction failed: {}", e))?;
     } else {
-        extract_7z(&archive_path, &install_dir)?;
+        return Err(format!("Unsupported archive type: {}", emu.archive_type));
+    }
+
+    // Clean up archive
+    fs::remove_file(&archive_path).ok();
+
+    // Verify executable exists
+    if find_executable(&install_dir, &emu.executable_name).is_none() {
+        return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
     }
 
     fs::remove_file(&archive_path).ok();
@@ -225,20 +235,32 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
 }
 
 fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
+    let target_name = name.to_lowercase();
+    
+    // 1. Direct match (try original and lowercase)
     let direct = dir.join(name);
     if direct.exists() { return Some(direct); }
-    for entry in walkdir::WalkDir::new(dir).max_depth(5) {
-        if let Ok(e) = entry {
-            if e.file_type().is_file() {
-                if e.file_name().to_string_lossy() == name { return Some(e.path().to_path_buf()); }
-            }
-        }
-    }
+    let direct_lower = dir.join(&target_name);
+    if direct_lower.exists() { return Some(direct_lower); }
+
+    // 2. Recursive search
     for entry in walkdir::WalkDir::new(dir).max_depth(5) {
         if let Ok(e) = entry {
             if e.file_type().is_file() {
                 let file_name = e.file_name().to_string_lossy().to_lowercase();
-                if file_name.ends_with(".exe") && !file_name.contains("uninstall") {
+                if file_name == target_name {
+                    return Some(e.path().to_path_buf());
+                }
+            }
+        }
+    }
+
+    // 3. Fallback: first .exe that isn't an uninstaller
+    for entry in walkdir::WalkDir::new(dir).max_depth(5) {
+        if let Ok(e) = entry {
+            if e.file_type().is_file() {
+                let file_name = e.file_name().to_string_lossy().to_lowercase();
+                if file_name.ends_with(".exe") && !file_name.contains("uninstall") && !file_name.contains("setup") {
                     return Some(e.path().to_path_buf());
                 }
             }
