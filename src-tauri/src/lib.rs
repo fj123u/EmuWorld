@@ -319,74 +319,100 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
     
-    // Libretro naming convention for files: replace forbidden characters with _
+    // Map EmuWorld console names to libretro system directory names
+    let libretro_system = match console.as_str() {
+        "NES" => "Nintendo - Nintendo Entertainment System",
+        "Super Nintendo" => "Nintendo - Super Nintendo Entertainment System",
+        "Nintendo 64" => "Nintendo - Nintendo 64",
+        "Game Boy Advance" => "Nintendo - Game Boy Advance",
+        "Nintendo DS" => "Nintendo - Nintendo DS",
+        "GameCube / Wii" => "Nintendo - GameCube",
+        "Wii U" => "Nintendo - Wii U",
+        "Virtual Boy" => "Nintendo - Virtual Boy",
+        "PlayStation 1" => "Sony - PlayStation",
+        "PlayStation 2" => "Sony - PlayStation 2",
+        "PlayStation 3" => "Sony - PlayStation 3",
+        "PlayStation Portable" => "Sony - PlayStation Portable",
+        "Dreamcast" => "Sega - Dreamcast",
+        "Mega Drive" => "Sega - Mega Drive - Genesis",
+        "Master System" => "Sega - Master System - Mark III",
+        "Saturn" => "Sega - Saturn",
+        "Game Gear" => "Sega - Game Gear",
+        "Xbox" => "Microsoft - Xbox",
+        "Neo-Geo" => "SNK - Neo Geo",
+        "Arcade" => "FBNeo - Arcade Games",
+        "PC Engine" => "NEC - PC Engine - TurboGrafx 16",
+        "Atari 2600" => "Atari - 2600",
+        _ => return Err(format!("No cover source for console: {}", console)),
+    };
+    
+    // Libretro naming: replace characters forbidden in filenames with _
     let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|', '"'];
     let safe_name: String = game_name.chars()
         .map(|c| if forbidden.contains(&c) { '_' } else { c })
         .collect();
     
-    let file_path = covers_dir.join(format!("{}.png", safe_name));
-    if file_path.exists() { return Ok(file_path.to_string_lossy().to_string()); }
-
-    let libretro_console = match console.as_str() {
-        "NES" => "Nintendo_-_Nintendo_Entertainment_System",
-        "Super Nintendo" => "Nintendo_-_Super_Nintendo_Entertainment_System",
-        "Nintendo 64" => "Nintendo_-_Nintendo_64",
-        "Game Boy" => "Nintendo_-_Game_Boy",
-        "Game Boy Color" => "Nintendo_-_Game_Boy_Color",
-        "Game Boy Advance" => "Nintendo_-_Game_Boy_Advance",
-        "Nintendo DS" => "Nintendo_-_Nintendo_DS",
-        "Nintendo Switch" => "Nintendo_-_Nintendo_Switch",
-        "GameCube / Wii" => "Nintendo_-_GameCube",
-        "Wii U" => "Nintendo_-_Wii_U",
-        "PlayStation 1" => "Sony_-_PlayStation",
-        "PlayStation 2" => "Sony_-_PlayStation_2",
-        "PlayStation 3" => "Sony_-_PlayStation_3",
-        "PSP" => "Sony_-_PlayStation_Portable",
-        "Mega Drive" => "Sega_-_Mega_Drive_-_Genesis",
-        "Master System" => "Sega_-_Master_System_-_Mark_III",
-        "Dreamcast" => "Sega_-_Dreamcast",
-        "Saturn" => "Sega_-_Saturn",
-        "Game Gear" => "Sega_-_Game_Gear",
-        "Neo-Geo" => "SNK_-_Neo_Geo",
-        _ => return Err("Unsupported console".to_string()),
-    };
-
-    // Candidates for game titles on GitHub
-    let mut candidates = vec![game_name.clone()];
+    // Cache in per-console subdirectories
+    let console_covers_dir = covers_dir.join(&console);
+    let file_path = console_covers_dir.join(format!("{}.png", &safe_name));
     
-    // Remove region tags like (Japan), (Europe), (France), (SGB Enhanced)
-    if let Some(bracket_start) = game_name.find('(') {
-        candidates.push(game_name[..bracket_start].trim().to_string());
+    // Return cached file if it exists
+    if file_path.exists() {
+        return Ok(file_path.to_string_lossy().to_string());
     }
-    if let Some(bracket_start) = game_name.find('[') {
-        candidates.push(game_name[..bracket_start].trim().to_string());
+    
+    // Build candidate names to try
+    let mut candidates = vec![safe_name.clone()];
+    
+    // Try without region tags: "Super Mario Bros. 3 (USA)" -> "Super Mario Bros. 3"
+    if let Some(paren_start) = safe_name.find('(') {
+        let trimmed = safe_name[..paren_start].trim().to_string();
+        if !trimmed.is_empty() {
+            candidates.push(trimmed);
+        }
+    }
+    if let Some(bracket_start) = safe_name.find('[') {
+        let trimmed = safe_name[..bracket_start].trim().to_string();
+        if !trimmed.is_empty() {
+            candidates.push(trimmed);
+        }
     }
 
-    for candidate in candidates {
-        // Sanitize for URL
-        let safe_candidate: String = candidate.chars()
-            .map(|c| if forbidden.contains(&c) { '_' } else { c })
-            .collect();
-        let encoded_name = urlencoding::encode(&safe_candidate);
-        let url = format!("https://raw.githubusercontent.com/libretro-thumbnails/{}/master/Named_Boxarts/{}.png", libretro_console, encoded_name);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    
+    let encoded_system = urlencoding::encode(libretro_system);
+    
+    for candidate in &candidates {
+        let encoded_name = urlencoding::encode(candidate);
+        // Use the libretro thumbnails CDN (much more reliable than raw GitHub)
+        let url = format!(
+            "https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png",
+            encoded_system, encoded_name
+        );
         
-        if let Ok(response) = reqwest::get(&url).await {
-            if response.status().is_success() {
+        match client.get(&url).send().await {
+            Ok(response) if response.status().is_success() => {
                 if let Ok(bytes) = response.bytes().await {
-                    fs::create_dir_all(&covers_dir).ok();
-                    if let Ok(mut file) = fs::File::create(&file_path) {
-                        use std::io::Write;
-                        let _ = file.write_all(&bytes);
-                        return Ok(file_path.to_string_lossy().to_string());
+                    if bytes.len() > 100 { // Sanity check: valid image
+                        fs::create_dir_all(&console_covers_dir).ok();
+                        if let Ok(mut file) = fs::File::create(&file_path) {
+                            use std::io::Write;
+                            let _ = file.write_all(&bytes);
+                            return Ok(file_path.to_string_lossy().to_string());
+                        }
                     }
                 }
             }
+            _ => continue,
         }
     }
     
-    Err("Boxart not found after trying fallbacks".to_string())
+    Err("Boxart not found".to_string())
 }
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

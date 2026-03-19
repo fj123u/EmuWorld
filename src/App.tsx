@@ -148,15 +148,15 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
         onLaunch(rom);
       }}
     >
-      <div className="game-card__cover">
+      <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`}>
         {cover ? (
           <img src={cover} alt={rom.name} />
-        ) : (
+        ) : !loading ? (
           <div className="game-card__placeholder">
             <span className="game-card__placeholder-icon">🎮</span>
             <div className="game-card__placeholder-title">{rom.name}</div>
           </div>
-        )}
+        ) : null}
         <div className="game-card__overlay">
           <Play size={24} fill="currentColor" />
         </div>
@@ -192,8 +192,8 @@ export default function App() {
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.3.0", date: "2026-03-19", changes: ["✨ Cover Art! Box art auto-downloaded from libretro-thumbnails CDN", "Per-console cover caching in Covers directory", "22 consoles supported for cover art", "Shimmer loading animation on game cards"] },
     { version: "0.2.9", date: "2026-03-19", changes: ["Renamed 'Library' to 'Roms' in the UI", "Stopped automatic ROM folder creation during emulator installation"] },
-    { version: "0.2.8", date: "2026-03-19", changes: ["Fixed Mesen 2 ROM loading (stripped UNC prefixes and normalized paths)", "Improved launch stability for all emulators"] },
     { version: "0.2.3", date: "2026-03-19", changes: ["Fixed Close button (added window control permissions)", "Switched NES emulator to Nestopia UE", "Updated Xbox (xemu), PS3 (RPCS3), and Switch (Ryujinx) links to stable mirrors"] },
     { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
     { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
