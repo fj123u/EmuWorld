@@ -164,18 +164,13 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
     }
 
-    fs::remove_file(&archive_path).ok();
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
         "status": "done",
         "progress": 100
     }));
 
-    if exe_found {
-        Ok(format!("{} installed successfully!", emu.name))
-    } else {
-        Ok(format!("{} files extracted. The executable '{}' was not found.", emu.name, emu.executable_name))
-    }
+    Ok(format!("{} installed successfully!", emu.name))
 }
 
 fn extract_zip(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), String> {
