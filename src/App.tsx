@@ -174,8 +174,8 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
-  const [expandedLibraryConsoles, setExpandedLibraryConsoles] = useState<string[]>([]);
   const [installing, setInstalling] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -304,15 +304,17 @@ export default function App() {
     if (page !== "catalog" && page !== "library") setPage("catalog");
   };
 
+  const toggleSidebarConsole = (con: string) => {
+    setExpandedSidebarConsoles(prev =>
+      prev.includes(con) ? prev.filter(c => c !== con) : [...prev, con]
+    );
+    setConsoleFilter(con);
+    if (page !== "library") setPage("library");
+  };
+
   const toggleLibraryCategory = (cat: string) => {
     setExpandedLibraryCategories(prev =>
       prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
-  };
-
-  const toggleLibraryConsole = (con: string) => {
-    setExpandedLibraryConsoles(prev =>
-      prev.includes(con) ? prev.filter(c => c !== con) : [...prev, con]
     );
   };
 
@@ -337,28 +339,13 @@ export default function App() {
     return matchesSearch && matchesCategory && matchesConsole;
   });
 
-  const gamesByCategory = roms.reduce((acc, rom) => {
-    const emu = catalog.find(e => e.console === rom.console);
-    const category = emu ? emu.category : "Arcade & Retro";
-    if (!acc[category]) acc[category] = {};
-    if (!acc[category][rom.console]) acc[category][rom.console] = [];
-    acc[category][rom.console].push(rom);
-    return acc;
-  }, {} as Record<string, Record<string, RomFile[]>>);
-
-  const filteredGamesByCategory = Object.entries(gamesByCategory).reduce((acc, [cat, consoles]) => {
-    if (categoryFilter && cat !== categoryFilter) return acc;
-    
-    const filteredConsoles = Object.entries(consoles).reduce((cAcc, [con, games]) => {
-      if (consoleFilter && con !== consoleFilter) return cAcc;
-      const fg = games.filter(g => !search || g.name.toLowerCase().includes(search.toLowerCase()));
-      if (fg.length > 0) cAcc[con] = fg;
-      return cAcc;
-    }, {} as Record<string, RomFile[]>);
-
-    if (Object.keys(filteredConsoles).length > 0) acc[cat] = filteredConsoles;
-    return acc;
-  }, {} as Record<string, Record<string, RomFile[]>>);
+  const filteredGames = roms.filter((g) => {
+    const matchesSearch = !search || g.name.toLowerCase().includes(search.toLowerCase());
+    const emu = catalog.find((e) => e.console === g.console);
+    const matchesCategory = !categoryFilter || (emu && emu.category === categoryFilter);
+    const matchesConsole = !consoleFilter || g.console === consoleFilter;
+    return matchesSearch && matchesCategory && matchesConsole;
+  });
 
   // ---- Window controls ----
   const [appWindow, setAppWindow] = useState<ReturnType<typeof getCurrentWindow> | null>(null);
@@ -478,19 +465,51 @@ export default function App() {
                         exit={{ height: 0, opacity: 0 }}
                         className="sidebar__category-items"
                       >
-                        {categoryConsoles.sort().map((c) => (
-                          <button
-                            key={c}
-                            className={`sidebar__item ${consoleFilter === c ? "sidebar__item--active" : ""}`}
-                            onClick={() => {
-                              setConsoleFilter(c);
-                              if (page === "settings") setPage("catalog");
-                            }}
-                          >
-                            <span className="sidebar__item-icon">{CONSOLE_ICONS[c] || "🎮"}</span>
-                            {c}
-                          </button>
-                        ))}
+                        {categoryConsoles.sort().map((con) => {
+                          const isConExpanded = expandedSidebarConsoles.includes(con);
+                          const isConActive = consoleFilter === con;
+                          const consoleGames = roms.filter(r => r.console === con);
+                          
+                          return (
+                            <div key={con} className="sidebar__console">
+                              <button
+                                className={`sidebar__item ${isConActive ? "sidebar__item--active" : ""}`}
+                                onClick={() => toggleSidebarConsole(con)}
+                              >
+                                <span className="sidebar__item-icon">{isConExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}</span>
+                                <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                                {con}
+                                <span className="sidebar__item-count">{consoleGames.length}</span>
+                              </button>
+                              
+                              <AnimatePresence>
+                                {isConExpanded && (
+                                  <motion.div
+                                    initial={{ height: 0, opacity: 0 }}
+                                    animate={{ height: "auto", opacity: 1 }}
+                                    exit={{ height: 0, opacity: 0 }}
+                                    className="sidebar__game-list"
+                                  >
+                                    {consoleGames.sort((a,b) => a.name.localeCompare(b.name)).map(game => (
+                                      <button 
+                                        key={game.path} 
+                                        className={`sidebar__game-item ${consoleFilter === game.path ? "sidebar__game-item--active" : ""}`}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleLaunch(game);
+                                        }}
+                                        title={game.name}
+                                      >
+                                        <Play size={10} className="sidebar__game-icon" />
+                                        <span className="sidebar__game-name">{game.name}</span>
+                                      </button>
+                                    ))}
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          );
+                        })}
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -519,7 +538,7 @@ export default function App() {
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} emulators available`}
-                    {page === "library" && `${roms.length} games detected`}
+                    {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                   </p>
@@ -527,18 +546,6 @@ export default function App() {
                 <div className="main-content__actions">
                   {(page === "catalog" || page === "library") && (
                     <>
-                      <button 
-                        className="btn btn--ghost btn--sm" 
-                        onClick={() => setExpandedLibraryCategories(Object.keys(page === "catalog" ? consolesByCategory : gamesByCategory))}
-                      >
-                        Expand All
-                      </button>
-                      <button 
-                        className="btn btn--ghost btn--sm" 
-                        onClick={() => setExpandedLibraryCategories([])}
-                      >
-                        Collapse All
-                      </button>
                       <div className="search-bar">
                         <Search size={16} className="search-bar__icon" />
                         <input
@@ -624,70 +631,13 @@ export default function App() {
               )}
 
               {page === "library" && (
-                <div className="catalog-blocks">
-                  {Object.entries(filteredGamesByCategory).map(([catName, consoles]) => {
-                    const isExpanded = expandedLibraryCategories.includes(catName);
-                    return (
-                      <div key={catName} className="catalog-block">
-                        <button 
-                          className="catalog-block__header" 
-                          onClick={() => toggleLibraryCategory(catName)}
-                        >
-                          <h2 className="catalog-block__title">{catName}</h2>
-                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </button>
-                        
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.3, ease: "easeInOut" }}
-                              style={{ overflow: "hidden" }}
-                            >
-                              <div className="catalog-block__content">
-                                {Object.entries(consoles).map(([conName, games]) => {
-                                  const isConExpanded = expandedLibraryConsoles.includes(`${catName}-${conName}`);
-                                  return (
-                                    <div key={conName} className="library-console-accordion">
-                                      <button 
-                                        className="library-console-accordion__header"
-                                        onClick={() => toggleLibraryConsole(`${catName}-${conName}`)}
-                                      >
-                                        <h3 className="library-console-title">
-                                          <span className="console-icon">{CONSOLE_ICONS[conName] || "🎮"}</span>
-                                          {conName}
-                                        </h3>
-                                        {isConExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                      </button>
-                                      
-                                      <AnimatePresence>
-                                        {isConExpanded && (
-                                          <motion.div
-                                            initial={{ height: 0, opacity: 0 }}
-                                            animate={{ height: "auto", opacity: 1 }}
-                                            exit={{ height: 0, opacity: 0 }}
-                                            transition={{ duration: 0.2 }}
-                                            style={{ overflow: "hidden" }}
-                                          >
-                                            <div className="emu-grid">
-                                              {games.map(rom => <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />)}
-                                            </div>
-                                          </motion.div>
-                                        )}
-                                      </AnimatePresence>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })}
-                  {roms.length === 0 && (
+                <div className="library-content">
+                  <div className="game-grid">
+                    {filteredGames.map(rom => (
+                      <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />
+                    ))}
+                  </div>
+                  {filteredGames.length === 0 && (
                     <div className="empty-state">
                       <div className="empty-state__icon">📂</div>
                       <div className="empty-state__title">No games found</div>
