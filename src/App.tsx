@@ -192,9 +192,9 @@ export default function App() {
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.2.5", date: "2026-03-19", changes: ["Removed DOSBox-X and Ryujinx", "Updated Nestopia UE to 1.53.2", "Added Mesen 2 (64-bit) for NES/SNES/GB"] },
+    { version: "0.2.4", date: "2026-03-19", changes: ["Manually verified all emulator links", "Improved find_executable robustness (case-insensitivity)", "Better extraction error reporting"] },
     { version: "0.2.3", date: "2026-03-19", changes: ["Fixed Close button (added window control permissions)", "Switched NES emulator to Nestopia UE", "Updated Xbox (xemu), PS3 (RPCS3), and Switch (Ryujinx) links to stable mirrors"] },
-    { version: "0.2.2", date: "2026-03-19", changes: ["Parallel Emulator Downloads: Install multiple systems at once!", "Improved install progress reliability"] },
-    { version: "0.2.1", date: "2026-03-19", changes: ["Fixed Box Art visibility (Asset Scope)", "Fixed One-Click Launch (CSS Overlay)", "Added Card Hover/Tap feedback"] },
     { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
     { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
     { version: "0.1.0", date: "2026-03-10", changes: ["Initial Beta Launch", "Support for 20+ retro consoles", "Automatic ROM scanning"] }
