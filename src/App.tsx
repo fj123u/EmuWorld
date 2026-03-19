@@ -174,6 +174,7 @@ export default function App() {
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
+  const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -300,6 +301,12 @@ export default function App() {
     setCategoryFilter(cat);
     setConsoleFilter(null);
     if (page !== "catalog" && page !== "library") setPage("catalog");
+  };
+
+  const toggleLibraryCategory = (cat: string) => {
+    setExpandedLibraryCategories(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
   };
 
   // ---- Derived data ----
@@ -512,15 +519,29 @@ export default function App() {
                 </div>
                 <div className="main-content__actions">
                   {(page === "catalog" || page === "library") && (
-                    <div className="search-bar">
-                      <Search size={16} className="search-bar__icon" />
-                      <input
-                        className="search-bar__input"
-                        placeholder="Search..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </div>
+                    <>
+                      <button 
+                        className="btn btn--ghost btn--sm" 
+                        onClick={() => setExpandedLibraryCategories(Object.keys(page === "catalog" ? consolesByCategory : gamesByCategory))}
+                      >
+                        Expand All
+                      </button>
+                      <button 
+                        className="btn btn--ghost btn--sm" 
+                        onClick={() => setExpandedLibraryCategories([])}
+                      >
+                        Collapse All
+                      </button>
+                      <div className="search-bar">
+                        <Search size={16} className="search-bar__icon" />
+                        <input
+                          className="search-bar__input"
+                          placeholder="Search..."
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                        />
+                      </div>
+                    </>
                   )}
                   {page === "library" && (
                     <button className="btn btn--ghost" onClick={() => loadData()}>
@@ -535,38 +556,60 @@ export default function App() {
                   {Object.entries(consolesByCategory).map(([catName]) => {
                     const emusInCat = filteredCatalog.filter(e => e.category === catName);
                     if (emusInCat.length === 0) return null;
+                    const isExpanded = expandedLibraryCategories.includes(catName);
                     return (
                       <div key={catName} className="catalog-block">
-                        <h2 className="catalog-block__title">{catName}</h2>
-                        <div className="emu-grid">
-                          {emusInCat.map((emu) => (
-                            <motion.div key={emu.id} className="emu-card">
-                              <div className="emu-card__header">
-                                <div className="emu-card__icon">{emu.icon}</div>
-                                <div className="emu-card__info">
-                                  <div className="emu-card__name">{emu.name}</div>
-                                  <div className="emu-card__console">{emu.console}</div>
+                        <button 
+                          className="catalog-block__header" 
+                          onClick={() => toggleLibraryCategory(catName)}
+                        >
+                          <h2 className="catalog-block__title">{catName}</h2>
+                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                              style={{ overflow: "hidden" }}
+                            >
+                              <div className="catalog-block__content">
+                                <div className="emu-grid">
+                                  {emusInCat.map((emu) => (
+                                    <motion.div key={emu.id} className="emu-card">
+                                      <div className="emu-card__header">
+                                        <div className="emu-card__icon">{emu.icon}</div>
+                                        <div className="emu-card__info">
+                                          <div className="emu-card__name">{emu.name}</div>
+                                          <div className="emu-card__console">{emu.console}</div>
+                                        </div>
+                                        {installed.includes(emu.id) && (
+                                          <div className="emu-card__status emu-card__status--installed">
+                                            <CheckCircle size={12} /> Installed
+                                          </div>
+                                        )}
+                                      </div>
+                                      <p className="emu-card__desc">{emu.description}</p>
+                                      <div className="emu-card__actions">
+                                        {installed.includes(emu.id) ? (
+                                          <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
+                                        ) : (
+                                          <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
+                                            {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                                          </button>
+                                        )}
+                                        <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
+                                      </div>
+                                    </motion.div>
+                                  ))}
                                 </div>
-                                {installed.includes(emu.id) && (
-                                  <div className="emu-card__status emu-card__status--installed">
-                                    <CheckCircle size={12} /> Installed
-                                  </div>
-                                )}
-                              </div>
-                              <p className="emu-card__desc">{emu.description}</p>
-                              <div className="emu-card__actions">
-                                {installed.includes(emu.id) ? (
-                                  <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
-                                ) : (
-                                  <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
-                                    {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
-                                  </button>
-                                )}
-                                <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
                               </div>
                             </motion.div>
-                          ))}
-                        </div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     );
                   })}
@@ -575,22 +618,46 @@ export default function App() {
 
               {page === "library" && (
                 <div className="catalog-blocks">
-                  {Object.entries(filteredGamesByCategory).map(([catName, consoles]) => (
-                    <div key={catName} className="catalog-block">
-                      <h2 className="catalog-block__title">{catName}</h2>
-                      {Object.entries(consoles).map(([conName, games]) => (
-                        <div key={conName} className="library-console-group">
-                          <h3 className="library-console-title">
-                            <span className="console-icon">{CONSOLE_ICONS[conName] || "🎮"}</span>
-                            {conName}
-                          </h3>
-                          <div className="emu-grid">
-                            {games.map(rom => <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
+                  {Object.entries(filteredGamesByCategory).map(([catName, consoles]) => {
+                    const isExpanded = expandedLibraryCategories.includes(catName);
+                    return (
+                      <div key={catName} className="catalog-block">
+                        <button 
+                          className="catalog-block__header" 
+                          onClick={() => toggleLibraryCategory(catName)}
+                        >
+                          <h2 className="catalog-block__title">{catName}</h2>
+                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                        </button>
+                        
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.3, ease: "easeInOut" }}
+                              style={{ overflow: "hidden" }}
+                            >
+                              <div className="catalog-block__content">
+                                {Object.entries(consoles).map(([conName, games]) => (
+                                  <div key={conName} className="library-console-group">
+                                    <h3 className="library-console-title">
+                                      <span className="console-icon">{CONSOLE_ICONS[conName] || "🎮"}</span>
+                                      {conName}
+                                    </h3>
+                                    <div className="emu-grid">
+                                      {games.map(rom => <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />)}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    );
+                  })}
                   {roms.length === 0 && (
                     <div className="empty-state">
                       <div className="empty-state__icon">📂</div>

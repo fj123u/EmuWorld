@@ -533,41 +533,65 @@ body::before {
 .btn--sm { padding: 5px 10px; font-size: 12px; }
 .btn--disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
-/* ===== Emulator Grid ===== */
+/* ===== Catalog Blocks (Grouped by Manufacturer) ===== */
 .catalog-blocks {
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 30px;
   padding-bottom: 40px;
 }
 
 .catalog-block {
+  background: rgba(18, 18, 43, 0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.catalog-block__header {
+  width: 100%;
+  padding: 15px 20px;
+  background: none;
+  border: none;
   display: flex;
-  flex-direction: column;
-  gap: 20px;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.catalog-block__header:hover {
+  background: var(--bg-hover);
 }
 
 .catalog-block__title {
-  font-family: 'Press Start 2P', cursive;
-  font-size: 14px;
-  color: var(--accent-cyan);
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  color: var(--neon-purple);
   text-transform: uppercase;
-  margin: 0;
-  padding-bottom: 10px;
-  border-bottom: 2px solid rgba(0, 255, 255, 0.1);
+  letter-spacing: 2px;
+  margin: 0 !important;
+  text-shadow: 0 0 10px var(--neon-purple-glow);
   display: flex;
   align-items: center;
   gap: 10px;
-  text-shadow: 0 0 10px rgba(0, 255, 255, 0.3);
+  padding-bottom: 0 !important;
+  border-bottom: none !important;
 }
 
-.catalog-block__title::before {
-  content: '';
-  display: block;
-  width: 4px;
-  height: 14px;
-  background: var(--accent-cyan);
-  box-shadow: 0 0 8px var(--accent-cyan);
+.catalog-block__content {
+  padding: 0 20px 20px;
+  border-top: 1px solid rgba(179, 77, 255, 0.1);
+}
+
+.catalog-block__header svg {
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.catalog-block__header:hover svg {
+  color: var(--neon-purple);
 }
 
 .emu-grid {

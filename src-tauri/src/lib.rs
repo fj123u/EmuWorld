@@ -4,8 +4,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::Emitter;
 use reqwest;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 
 mod emulators;
 
