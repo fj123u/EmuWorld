@@ -229,7 +229,13 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
         .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
-    if let Some(rom) = rom_path { cmd.arg(&rom); }
+    if let Some(rom) = rom_path {
+        if emu.id == "nestopia" {
+            cmd.arg("-IMAGE").arg(&rom);
+        } else {
+            cmd.arg(&rom);
+        }
+    }
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(format!("Launched {}", emu.name))
 }
