@@ -1,0 +1,81 @@
+﻿cargo :     Checking 
+tauri-plugin-fs v2.4.5
+Au caractère Ligne:1 : 
+1
++ cargo check 2>&1 | 
+Out-File -FilePath 
+"cargo_errors.txt" 
+-Encoding ut ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo     
+         : NotSpecifi  
+  ed: (    Checking    
+ tauri-plugin-fs v2    
+.4.5:String) [], R    
+emoteException
+    + FullyQualifiedEr 
+   rorId : NativeComm  
+  andError
+ 
+   Compiling emuworld 
+v0.1.0 (C:\Users\Utilis
+ateur\Desktop\EmuWorld\
+src-tauri)
+    Checking 
+tauri-plugin-opener 
+v2.5.3
+error: failed to run 
+custom build command 
+for `emuworld v0.1.0 (C
+:\Users\Utilisateur\Des
+ktop\EmuWorld\src-tauri
+)`
+
+Caused by:
+  process didn't exit 
+successfully: `C:\Users
+\Utilisateur\Desktop\Em
+uWorld\src-tauri\target
+\debug\build\emuworld-f
+033a10bc3f31190\build-s
+cript-build` (exit 
+code: 1)
+  --- stdout
+  cargo:rerun-if-env-ch
+anged=TAURI_CONFIG
+  cargo:rustc-check-cfg
+=cfg(desktop)
+  
+cargo:rustc-cfg=desktop
+  cargo:rustc-check-cfg
+=cfg(mobile)
+  cargo:rerun-if-change
+d=C:\Users\Utilisateur\
+Desktop\EmuWorld\src-ta
+uri\tauri.conf.json
+  cargo:rustc-env=TAURI
+_ANDROID_PACKAGE_NAME_A
+PP_NAME=app
+  cargo:rustc-env=TAURI
+_ANDROID_PACKAGE_NAME_P
+REFIX=com_emuworld
+  cargo:rustc-check-cfg
+=cfg(dev)
+  cargo:rustc-cfg=dev
+
+        The `tauri` 
+dependency features on 
+the `Cargo.toml` file 
+does not match the 
+allowlist defined 
+under 
+`tauri.conf.json`.
+        Please run 
+`tauri dev` or `tauri 
+build` or remove the 
+`protocol-asset` 
+feature.
+      
+warning: build failed, 
+waiting for other jobs 
+to finish...

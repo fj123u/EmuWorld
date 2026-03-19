@@ -7,6 +7,7 @@
     "core:default",
     "opener:default",
     "dialog:default",
+    "fs:default",
     "core:event:default",
     "core:window:default",
     "core:app:default",
@@ -14,7 +15,6 @@
     "core:image:default",
     "core:menu:default",
     "core:path:default",
-    "core:webview:default",
-    "core:path:allow-asset-protocol"
+    "core:webview:default"
   ]
 }
