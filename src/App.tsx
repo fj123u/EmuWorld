@@ -188,10 +188,11 @@ export default function App() {
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
-  const [installing, setInstalling] = useState<string | null>(null);
+  const [installing, setInstalling] = useState<string[]>([]);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.2.2", date: "2026-03-19", changes: ["Parallel Emulator Downloads: Install multiple systems at once!", "Improved install progress reliability"] },
     { version: "0.2.1", date: "2026-03-19", changes: ["Fixed Box Art visibility (Asset Scope)", "Fixed One-Click Launch (CSS Overlay)", "Added Card Hover/Tap feedback"] },
     { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
     { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
@@ -245,7 +246,7 @@ export default function App() {
       "install-progress",
       (event) => {
         if (event.payload.status === "done") {
-          setInstalling(null);
+          setInstalling((prev) => prev.filter((id) => id !== event.payload.emulator_id));
           loadData();
           showToast("Emulator installed successfully!", "success");
         }
@@ -258,12 +259,12 @@ export default function App() {
 
   // ---- Actions ----
   const handleInstall = async (id: string) => {
-    setInstalling(id);
+    setInstalling((prev) => [...prev, id]);
     showToast("Downloading emulator...", "info");
     try {
       await invoke("install_emulator", { emulatorId: id });
     } catch (err: any) {
-      setInstalling(null);
+      setInstalling((prev) => prev.filter((i) => i !== id));
       showToast(`Install failed: ${err}`, "error");
     }
   };
@@ -682,8 +683,8 @@ export default function App() {
                           {installed.includes(emu.id) ? (
                             <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
                           ) : (
-                            <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
-                              {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                            <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing.includes(emu.id)}>
+                              {installing.includes(emu.id) ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
                             </button>
                           )}
                           <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
