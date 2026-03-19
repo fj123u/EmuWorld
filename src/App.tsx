@@ -28,6 +28,7 @@ import {
   ChevronRight as ChevronIcon,
   CheckCircle,
   AlertCircle,
+  FileText,
 } from "lucide-react";
 
 /* ============================
@@ -68,7 +69,13 @@ interface Toast {
   type: "success" | "error" | "info";
 }
 
-type Page = "catalog" | "library" | "installed" | "settings";
+interface ChangelogEntry {
+  version: string;
+  date: string;
+  changes: string[];
+}
+
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs";
 
 /* ============================
    Console icon mapping
@@ -133,8 +140,13 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
       layout
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
+      whileHover={{ scale: 1.02, y: -4 }}
+      whileTap={{ scale: 0.98 }}
       className="game-card"
-      onClick={() => onLaunch(rom)}
+      onClick={() => {
+        console.log("GameCard click detected:", rom.name);
+        onLaunch(rom);
+      }}
     >
       <div className="game-card__cover">
         {cover ? (
@@ -177,7 +189,13 @@ export default function App() {
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string | null>(null);
+  const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
+    { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
+    { version: "0.1.0", date: "2026-03-10", changes: ["Initial Beta Launch", "Support for 20+ retro consoles", "Automatic ROM scanning"] }
+  ]);
 
   // ---- Toast helpers ----
   const showToast = useCallback(
@@ -261,17 +279,22 @@ export default function App() {
 
   const handleLaunch = async (rom: RomFile) => {
     try {
+      console.log("handleLaunch triggered for ROM:", rom);
       const emulator = catalog.find(e => e.console === rom.console);
       if (!emulator) {
-        showToast(`No emulator found for ${rom.console}`, "error");
+        console.error("Emulator discovery failure. ROM console:", rom.console, "Catalog consoles:", catalog.map(e => e.console));
+        showToast(`No emulator found for ${rom.console}. Check if it's supported!`, "error");
         return;
       }
-      await invoke("launch_emulator", {
+      console.log("Found Emulator:", emulator.name, "(ID:", emulator.id, ") for console:", rom.console);
+      const res: string = await invoke("launch_emulator", {
         emulatorId: emulator.id,
-        romPath: rom.path,
+        romPath: rom.path || null,
       });
-      showToast("Emulator launched!", "success");
+      console.log("Backend Launch Success:", res);
+      showToast(`Launching ${rom.name}...`, "success");
     } catch (err: any) {
+      console.error("Launch Exception:", err);
       showToast(`Launch failed: ${err}`, "error");
     }
   };
@@ -373,9 +396,13 @@ export default function App() {
 
   const toggleFullscreen = async () => {
     if (!appWindow) return;
-    const next = !isFullscreen;
-    await appWindow.setFullscreen(next);
-    setIsFullscreen(next);
+    try {
+      const next = !isFullscreen;
+      await appWindow.setFullscreen(next);
+      setIsFullscreen(next);
+    } catch (err) {
+      console.error("Fullscreen error:", err);
+    }
   };
 
   return (
@@ -431,6 +458,13 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><Settings size={16} /></span>
               Settings
+            </button>
+            <button
+              className={`sidebar__item ${page === "changelogs" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("changelogs")}
+            >
+              <span className="sidebar__item-icon"><FileText size={16} /></span>
+              Changelogs
             </button>
           </div>
 
@@ -615,6 +649,13 @@ export default function App() {
                       <RefreshCw size={14} /> Refresh
                     </button>
                   )}
+                  <button 
+                    className="btn btn--ghost" 
+                    onClick={toggleFullscreen}
+                    title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                  >
+                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  </button>
                 </div>
               </div>
 
@@ -710,6 +751,24 @@ export default function App() {
                       <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {page === "changelogs" && (
+                <div className="changelogs">
+                  {changelogs.map((log: ChangelogEntry) => (
+                    <div key={log.version} className="changelog-card">
+                      <div className="changelog-card__header">
+                        <h2 className="changelog-card__version">Version {log.version}</h2>
+                        <span className="changelog-card__date">{log.date}</span>
+                      </div>
+                      <ul className="changelog-card__list">
+                        {log.changes.map((change: string, i: number) => (
+                          <li key={i} className="changelog-card__item">{change}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               )}
             </motion.div>

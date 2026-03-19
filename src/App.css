@@ -305,6 +305,7 @@ body::before {
   opacity: 0;
   transition: opacity 0.2s;
   color: white;
+  pointer-events: none;
 }
 
 .game-card:hover .game-card__overlay {
@@ -943,4 +944,60 @@ body::before {
   background: linear-gradient(180deg, rgba(179, 77, 255, 0.03) 0%, transparent 100%);
   pointer-events: none;
   z-index: 1;
+}
+
+/* ===== Changelogs ===== */
+.changelogs {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px;
+}
+
+.changelog-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+}
+
+.changelog-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+.changelog-card__version {
+  font-family: var(--font-pixel);
+  font-size: 14px;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan-glow);
+}
+
+.changelog-card__date {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.changelog-card__list {
+  list-style: none;
+  padding: 0;
+}
+
+.changelog-card__item {
+  position: relative;
+  padding-left: 20px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.changelog-card__item::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: var(--neon-purple);
 }
