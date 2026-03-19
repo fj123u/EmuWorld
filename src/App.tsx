@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -20,11 +21,13 @@ import {
   Maximize2,
   Minimize2,
   X,
-  ChevronRight,
-  CheckCircle,
-  AlertCircle,
   ExternalLink,
   HardDrive,
+  ChevronDown,
+  ChevronRight,
+  ChevronRight as ChevronIcon,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 
 /* ============================
@@ -41,19 +44,22 @@ interface EmulatorInfo {
   icon: string;
   website: string;
   archive_type: string;
+  category: string;
 }
 
 interface RomFile {
   name: string;
   path: string;
   console: string;
-  emulator_id: string;
   extension: string;
+  size: number;
+  cover?: string;
 }
 
 interface AppConfig {
   roms_directory: string;
   emulators_directory: string;
+  covers_directory: string;
 }
 
 interface Toast {
@@ -68,15 +74,87 @@ type Page = "catalog" | "library" | "installed" | "settings";
    Console icon mapping
    ============================ */
 const CONSOLE_ICONS: Record<string, string> = {
+  "NES": "🔴",
+  "Super Nintendo": "🟣",
+  "Nintendo 64": "🟡",
   "Game Boy Advance": "🟢",
   "Nintendo DS": "📱",
+  "Nintendo Switch": "🎌",
+  "GameCube / Wii": "🐬",
+  "Wii U": "📽️",
+  "Virtual Boy": "🕶️",
   "PlayStation 1": "⚪",
   "PlayStation 2": "🔵",
+  "PlayStation 3": "💿",
   "PlayStation Portable": "⬛",
-  "Nintendo 64": "🟡",
-  "Super Nintendo": "🟣",
-  "GameCube / Wii": "🐬",
+  "Dreamcast": "🌀",
+  "Mega Drive": "🎮",
+  "Master System": "🕹️",
+  "Game Gear": "📟",
+  "Saturn": "🪐",
+  "Xbox": "❎",
+  "DOS / Win 3.x": "💾",
+  "Arcade": "🕹️",
+  "Neo-Geo": "🅰️",
+  "PC Engine": "🔶",
+  "Atari 2600": "🟤",
+  "WonderSwan": "🔲",
   "Multi-System": "🔄",
+};
+
+/* ============================
+   Components
+   ============================ */
+
+const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) => void }) => {
+  const [cover, setCover] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchCover = async () => {
+      try {
+        setLoading(true);
+        const path: string = await invoke("fetch_boxart", { 
+          gameName: rom.name, 
+          console: rom.console 
+        });
+        setCover(convertFileSrc(path));
+      } catch (e) {
+        // Fallback or silent fail
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchCover();
+  }, [rom.name, rom.console]);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="game-card"
+      onClick={() => onLaunch(rom)}
+    >
+      <div className="game-card__cover">
+        {cover ? (
+          <img src={cover} alt={rom.name} />
+        ) : (
+          <div className="game-card__placeholder">
+            <span className="game-card__placeholder-icon">🎮</span>
+            <div className="game-card__placeholder-title">{rom.name}</div>
+          </div>
+        )}
+        <div className="game-card__overlay">
+          <Play size={24} fill="currentColor" />
+        </div>
+      </div>
+      <div className="game-card__info">
+        <div className="game-card__name">{rom.name}</div>
+        <div className="game-card__meta">{rom.console} • {rom.extension.toUpperCase()}</div>
+      </div>
+    </motion.div>
+  );
 };
 
 /* ============================
@@ -90,9 +168,12 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig>({
     roms_directory: "",
     emulators_directory: "",
+    covers_directory: "",
   });
   const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [installing, setInstalling] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -176,11 +257,16 @@ export default function App() {
     }
   };
 
-  const handleLaunch = async (id: string, romPath?: string) => {
+  const handleLaunch = async (rom: RomFile) => {
     try {
+      const emulator = catalog.find(e => e.console === rom.console);
+      if (!emulator) {
+        showToast(`No emulator found for ${rom.console}`, "error");
+        return;
+      }
       await invoke("launch_emulator", {
-        emulatorId: id,
-        romPath: romPath || null,
+        emulatorId: emulator.id,
+        romPath: rom.path,
       });
       showToast("Emulator launched!", "success");
     } catch (err: any) {
@@ -199,7 +285,7 @@ export default function App() {
     }
   };
 
-  const handleBrowseFolder = async (field: "roms_directory" | "emulators_directory") => {
+  const handleBrowseFolder = async (field: keyof AppConfig) => {
     const selected = await open({ directory: true });
     if (selected) {
       const newConfig = { ...config, [field]: selected as string };
@@ -207,8 +293,24 @@ export default function App() {
     }
   };
 
+  const toggleCategory = (cat: string) => {
+    setExpandedCategories(prev =>
+      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
+    );
+    setCategoryFilter(cat);
+    setConsoleFilter(null);
+    if (page !== "catalog" && page !== "library") setPage("catalog");
+  };
+
   // ---- Derived data ----
-  const consoles = [...new Set(catalog.map((e) => e.console))];
+  const consolesByCategory = catalog.reduce((acc, emu) => {
+    if (!acc[emu.category]) acc[emu.category] = [];
+    if (!acc[emu.category].includes(emu.console)) {
+      acc[emu.category].push(emu.console);
+    }
+    return acc;
+  }, {} as Record<string, string[]>);
+
   const installedCount = installed.length;
 
   const filteredCatalog = catalog.filter((emu) => {
@@ -216,16 +318,33 @@ export default function App() {
       !search ||
       emu.name.toLowerCase().includes(search.toLowerCase()) ||
       emu.console.toLowerCase().includes(search.toLowerCase());
+    const matchesCategory = !categoryFilter || emu.category === categoryFilter;
     const matchesConsole = !consoleFilter || emu.console === consoleFilter;
-    return matchesSearch && matchesConsole;
+    return matchesSearch && matchesCategory && matchesConsole;
   });
 
-  const filteredRoms = roms.filter((rom) => {
-    const matchesSearch =
-      !search || rom.name.toLowerCase().includes(search.toLowerCase());
-    const matchesConsole = !consoleFilter || rom.console === consoleFilter;
-    return matchesSearch && matchesConsole;
-  });
+  const gamesByCategory = roms.reduce((acc, rom) => {
+    const emu = catalog.find(e => e.console === rom.console);
+    const category = emu ? emu.category : "Arcade & Retro";
+    if (!acc[category]) acc[category] = {};
+    if (!acc[category][rom.console]) acc[category][rom.console] = [];
+    acc[category][rom.console].push(rom);
+    return acc;
+  }, {} as Record<string, Record<string, RomFile[]>>);
+
+  const filteredGamesByCategory = Object.entries(gamesByCategory).reduce((acc, [cat, consoles]) => {
+    if (categoryFilter && cat !== categoryFilter) return acc;
+    
+    const filteredConsoles = Object.entries(consoles).reduce((cAcc, [con, games]) => {
+      if (consoleFilter && con !== consoleFilter) return cAcc;
+      const fg = games.filter(g => !search || g.name.toLowerCase().includes(search.toLowerCase()));
+      if (fg.length > 0) cAcc[con] = fg;
+      return cAcc;
+    }, {} as Record<string, RomFile[]>);
+
+    if (Object.keys(filteredConsoles).length > 0) acc[cat] = filteredConsoles;
+    return acc;
+  }, {} as Record<string, Record<string, RomFile[]>>);
 
   // ---- Window controls ----
   const [appWindow, setAppWindow] = useState<ReturnType<typeof getCurrentWindow> | null>(null);
@@ -260,41 +379,30 @@ export default function App() {
 
   return (
     <>
-      {/* ===== Custom Titlebar ===== */}
       <div className="titlebar" data-tauri-drag-region onDoubleClick={maximize}>
         <div className="titlebar__logo" data-tauri-drag-region>
           <div className="titlebar__logo-icon">🎮</div>
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <div className="titlebar__controls">
-          <button className="titlebar__btn" onClick={minimize} title="Réduire">
-            <Minus size={14} />
-          </button>
+          <button className="titlebar__btn" onClick={minimize} title="Réduire"><Minus size={14} /></button>
           <button className="titlebar__btn" onClick={maximize} title="Agrandir / Restaurer">
             {isMaximized ? <Minimize2 size={12} /> : <Square size={12} />}
           </button>
-          <button
-            className="titlebar__btn"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-          >
+          <button className="titlebar__btn" onClick={toggleFullscreen} title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}>
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button className="titlebar__btn titlebar__btn--close" onClick={close} title="Fermer">
-            <X size={14} />
-          </button>
+          <button className="titlebar__btn titlebar__btn--close" onClick={close} title="Fermer"><X size={14} /></button>
         </div>
       </div>
 
-      {/* ===== Main Layout ===== */}
       <div className="app">
-        {/* Sidebar */}
         <aside className="sidebar">
           <div className="sidebar__section">
             <div className="sidebar__label">Navigation</div>
             <button
-              className={`sidebar__item ${page === "catalog" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("catalog"); setConsoleFilter(null); }}
+              className={`sidebar__item ${page === "catalog" && !categoryFilter ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("catalog"); setConsoleFilter(null); setCategoryFilter(null); }}
             >
               <span className="sidebar__item-icon"><Grid3X3 size={16} /></span>
               Catalog
@@ -330,31 +438,54 @@ export default function App() {
           <div className="sidebar__section">
             <div className="sidebar__label">Consoles</div>
             <button
-              className={`sidebar__item ${!consoleFilter ? "sidebar__item--active" : ""}`}
-              onClick={() => setConsoleFilter(null)}
+              className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
+              onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
             >
               <span className="sidebar__item-icon">🎮</span>
               All Consoles
             </button>
-            {consoles.map((c) => (
-              <button
-                key={c}
-                className={`sidebar__item ${consoleFilter === c ? "sidebar__item--active" : ""}`}
-                onClick={() => {
-                  setConsoleFilter(c);
-                  if (page === "settings") setPage("catalog");
-                }}
-              >
-                <span className="sidebar__item-icon">
-                  {CONSOLE_ICONS[c] || "🎮"}
-                </span>
-                {c}
-              </button>
-            ))}
+            {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
+              const isExpanded = expandedCategories.includes(category);
+              const isCatActive = categoryFilter === category;
+              return (
+                <div key={category} className="sidebar__category">
+                  <button
+                    className={`sidebar__category-title ${isCatActive ? "sidebar__category-title--active" : ""}`}
+                    onClick={() => toggleCategory(category)}
+                  >
+                    {isExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}
+                    {category}
+                  </button>
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="sidebar__category-items"
+                      >
+                        {categoryConsoles.sort().map((c) => (
+                          <button
+                            key={c}
+                            className={`sidebar__item ${consoleFilter === c ? "sidebar__item--active" : ""}`}
+                            onClick={() => {
+                              setConsoleFilter(c);
+                              if (page === "settings") setPage("catalog");
+                            }}
+                          >
+                            <span className="sidebar__item-icon">{CONSOLE_ICONS[c] || "🎮"}</span>
+                            {c}
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
           </div>
         </aside>
 
-        {/* Main Content */}
         <main className="main-content">
           <AnimatePresence mode="wait">
             <motion.div
@@ -364,7 +495,6 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {/* Page Header */}
               <div className="main-content__header">
                 <div>
                   <h1 className="main-content__title">
@@ -374,13 +504,10 @@ export default function App() {
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
-                    {page === "catalog" &&
-                      `${filteredCatalog.length} emulators available`}
-                    {page === "library" &&
-                      `${filteredRoms.length} games detected`}
-                    {page === "installed" &&
-                      `${installedCount} emulator${installedCount !== 1 ? "s" : ""} installed`}
-                    {page === "settings" && "Configure your EmuWorld experience"}
+                    {page === "catalog" && `${filteredCatalog.length} emulators available`}
+                    {page === "library" && `${roms.length} games detected`}
+                    {page === "installed" && `${installedCount} installed`}
+                    {page === "settings" && "Configure your experience"}
                   </p>
                 </div>
                 <div className="main-content__actions">
@@ -397,307 +524,118 @@ export default function App() {
                   )}
                   {page === "library" && (
                     <button className="btn btn--ghost" onClick={() => loadData()}>
-                      <RefreshCw size={14} />
-                      Refresh
+                      <RefreshCw size={14} /> Refresh
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* ===== CATALOG PAGE ===== */}
               {page === "catalog" && (
-                <div className="emu-grid">
-                  {filteredCatalog.map((emu, index) => {
-                    const isInstalled = installed.includes(emu.id);
-                    const isInstalling = installing === emu.id;
+                <div className="catalog-blocks">
+                  {Object.entries(consolesByCategory).map(([catName]) => {
+                    const emusInCat = filteredCatalog.filter(e => e.category === catName);
+                    if (emusInCat.length === 0) return null;
                     return (
-                      <motion.div
-                        key={emu.id}
-                        className="emu-card"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                      >
-                        <div className="emu-card__header">
-                          <div className="emu-card__icon">{emu.icon}</div>
-                          <div className="emu-card__info">
-                            <div className="emu-card__name">{emu.name}</div>
-                            <div className="emu-card__console">{emu.console}</div>
-                          </div>
-                          <div
-                            className={`emu-card__status ${isInstalled
-                                ? "emu-card__status--installed"
-                                : "emu-card__status--not-installed"
-                              }`}
-                          >
-                            {isInstalled ? (
-                              <>
-                                <CheckCircle size={12} /> Installed
-                              </>
-                            ) : (
-                              <>
-                                <AlertCircle size={12} /> Not installed
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <p className="emu-card__desc">{emu.description}</p>
-
-                        <div className="emu-card__extensions">
-                          {emu.supported_extensions.map((ext) => (
-                            <span key={ext} className="emu-card__ext">
-                              .{ext}
-                            </span>
+                      <div key={catName} className="catalog-block">
+                        <h2 className="catalog-block__title">{catName}</h2>
+                        <div className="emu-grid">
+                          {emusInCat.map((emu) => (
+                            <motion.div key={emu.id} className="emu-card">
+                              <div className="emu-card__header">
+                                <div className="emu-card__icon">{emu.icon}</div>
+                                <div className="emu-card__info">
+                                  <div className="emu-card__name">{emu.name}</div>
+                                  <div className="emu-card__console">{emu.console}</div>
+                                </div>
+                                {installed.includes(emu.id) && (
+                                  <div className="emu-card__status emu-card__status--installed">
+                                    <CheckCircle size={12} /> Installed
+                                  </div>
+                                )}
+                              </div>
+                              <p className="emu-card__desc">{emu.description}</p>
+                              <div className="emu-card__actions">
+                                {installed.includes(emu.id) ? (
+                                  <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
+                                ) : (
+                                  <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
+                                    {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                                  </button>
+                                )}
+                                <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
+                              </div>
+                            </motion.div>
                           ))}
                         </div>
-
-                        {isInstalling && (
-                          <div className="progress-bar">
-                            <div
-                              className="progress-bar__fill"
-                              style={{ width: "60%" }}
-                            />
-                          </div>
-                        )}
-
-                        <div className="emu-card__actions">
-                          {isInstalled ? (
-                            <>
-                              <button
-                                className="btn btn--success btn--sm"
-                                onClick={() => handleLaunch(emu.id)}
-                              >
-                                <Play size={12} /> Launch
-                              </button>
-                              <button
-                                className="btn btn--danger btn--sm"
-                                onClick={() => handleUninstall(emu.id)}
-                              >
-                                <Trash2 size={12} /> Uninstall
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              className={`btn btn--primary btn--sm ${isInstalling ? "btn--disabled" : ""
-                                }`}
-                              onClick={() => handleInstall(emu.id)}
-                            >
-                              {isInstalling ? (
-                                <>
-                                  <span className="spinner" /> Installing...
-                                </>
-                              ) : (
-                                <>
-                                  <Download size={12} /> Install
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <a
-                            href={emu.website}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn btn--ghost btn--sm"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <ExternalLink size={12} /> Website
-                          </a>
-                        </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* ===== LIBRARY PAGE ===== */}
               {page === "library" && (
-                <>
-                  {roms.length === 0 ? (
+                <div className="catalog-blocks">
+                  {Object.entries(filteredGamesByCategory).map(([catName, consoles]) => (
+                    <div key={catName} className="catalog-block">
+                      <h2 className="catalog-block__title">{catName}</h2>
+                      {Object.entries(consoles).map(([conName, games]) => (
+                        <div key={conName} className="library-console-group">
+                          <h3 className="library-console-title">
+                            <span className="console-icon">{CONSOLE_ICONS[conName] || "🎮"}</span>
+                            {conName}
+                          </h3>
+                          <div className="emu-grid">
+                            {games.map(rom => <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {roms.length === 0 && (
                     <div className="empty-state">
                       <div className="empty-state__icon">📂</div>
                       <div className="empty-state__title">No games found</div>
-                      <div className="empty-state__desc">
-                        Set your ROMs directory in Settings, then click Refresh to
-                        scan for games.
-                      </div>
-                      <button
-                        className="btn btn--primary"
-                        onClick={() => setPage("settings")}
-                      >
-                        <FolderOpen size={14} /> Go to Settings
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="game-grid">
-                      {filteredRoms.map((rom, index) => (
-                        <motion.div
-                          key={rom.path}
-                          className="game-card"
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: index * 0.03 }}
-                          onClick={() => handleLaunch(rom.emulator_id, rom.path)}
-                        >
-                          <div className="game-card__cover">
-                            <div className="game-card__cover-text">
-                              {rom.name.slice(0, 20)}
-                            </div>
-                            <div className="game-card__play-overlay">
-                              <button className="game-card__play-btn">
-                                <Play size={20} fill="white" />
-                              </button>
-                            </div>
-                          </div>
-                          <div className="game-card__info">
-                            <div className="game-card__name">{rom.name}</div>
-                            <div className="game-card__console">
-                              {rom.console} &middot; .{rom.extension}
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
+                      <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
                     </div>
                   )}
-                </>
+                </div>
               )}
 
-              {/* ===== INSTALLED PAGE ===== */}
               {page === "installed" && (
-                <>
-                  {installed.length === 0 ? (
-                    <div className="empty-state">
-                      <div className="empty-state__icon">📦</div>
-                      <div className="empty-state__title">
-                        No emulators installed
+                <div className="emu-grid">
+                  {catalog.filter(e => installed.includes(e.id)).map(emu => (
+                    <motion.div key={emu.id} className="emu-card">
+                      <div className="emu-card__header">
+                        <div className="emu-card__icon">{emu.icon}</div>
+                        <div className="emu-card__info">
+                          <div className="emu-card__name">{emu.name}</div>
+                          <div className="emu-card__console">{emu.console}</div>
+                        </div>
                       </div>
-                      <div className="empty-state__desc">
-                        Browse the catalog to download and install emulators.
+                      <div className="emu-card__actions">
+                        <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
+                        <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> Uninstall</button>
                       </div>
-                      <button
-                        className="btn btn--primary"
-                        onClick={() => setPage("catalog")}
-                      >
-                        <Grid3X3 size={14} /> Go to Catalog
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="emu-grid">
-                      {catalog
-                        .filter((e) => installed.includes(e.id))
-                        .map((emu, index) => (
-                          <motion.div
-                            key={emu.id}
-                            className="emu-card"
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.05 }}
-                          >
-                            <div className="emu-card__header">
-                              <div className="emu-card__icon">{emu.icon}</div>
-                              <div className="emu-card__info">
-                                <div className="emu-card__name">{emu.name}</div>
-                                <div className="emu-card__console">
-                                  {emu.console}
-                                </div>
-                              </div>
-                              <div className="emu-card__status emu-card__status--installed">
-                                <CheckCircle size={12} /> Installed
-                              </div>
-                            </div>
-                            <p className="emu-card__desc">{emu.description}</p>
-                            <div className="emu-card__actions">
-                              <button
-                                className="btn btn--success btn--sm"
-                                onClick={() => handleLaunch(emu.id)}
-                              >
-                                <Play size={12} /> Launch
-                              </button>
-                              <button
-                                className="btn btn--danger btn--sm"
-                                onClick={() => handleUninstall(emu.id)}
-                              >
-                                <Trash2 size={12} /> Uninstall
-                              </button>
-                            </div>
-                          </motion.div>
-                        ))}
-                    </div>
-                  )}
-                </>
+                    </motion.div>
+                  ))}
+                </div>
               )}
 
-              {/* ===== SETTINGS PAGE ===== */}
               {page === "settings" && (
                 <div className="settings">
                   <div className="settings__group">
-                    <div className="settings__group-title">
-                      <FolderOpen size={16} /> Directories
-                    </div>
+                    <div className="settings__group-title"><FolderOpen size={16} /> Directories</div>
                     <div className="settings__field">
                       <label className="settings__field-label">ROMs Folder</label>
-                      <input
-                        className="settings__field-input"
-                        value={config.roms_directory}
-                        onChange={(e) =>
-                          setConfig({ ...config, roms_directory: e.target.value })
-                        }
-                        placeholder="Select ROMs directory..."
-                      />
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => handleBrowseFolder("roms_directory")}
-                      >
-                        Browse
-                      </button>
+                      <input className="settings__field-input" value={config.roms_directory} readOnly />
+                      <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("roms_directory")}>Browse</button>
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">
-                        Emulators Folder
-                      </label>
-                      <input
-                        className="settings__field-input"
-                        value={config.emulators_directory}
-                        onChange={(e) =>
-                          setConfig({
-                            ...config,
-                            emulators_directory: e.target.value,
-                          })
-                        }
-                        placeholder="Select emulators directory..."
-                      />
-                      <button
-                        className="btn btn--ghost btn--sm"
-                        onClick={() => handleBrowseFolder("emulators_directory")}
-                      >
-                        Browse
-                      </button>
+                      <label className="settings__field-label">Emulators Folder</label>
+                      <input className="settings__field-input" value={config.emulators_directory} readOnly />
+                      <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
                     </div>
                   </div>
-
-                  <div className="settings__group">
-                    <div className="settings__group-title">
-                      <Gamepad2 size={16} /> About EmuWorld
-                    </div>
-                    <p
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text-secondary)",
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      EmuWorld v0.1.0 — All-in-one emulator launcher.
-                      <br />
-                      Open source &middot; Built with Tauri + React
-                    </p>
-                  </div>
-
-                  <button
-                    className="btn btn--primary"
-                    onClick={() => handleSaveConfig(config)}
-                  >
-                    Save Settings
-                  </button>
                 </div>
               )}
             </motion.div>
@@ -705,22 +643,13 @@ export default function App() {
         </main>
       </div>
 
-      {/* ===== Toast Notifications ===== */}
-      <div className="toast-container">
+      <div className="toasts">
         <AnimatePresence>
-          {toasts.map((toast) => (
-            <motion.div
-              key={toast.id}
-              className={`toast toast--${toast.type}`}
-              initial={{ opacity: 0, x: 30, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 30, scale: 0.95 }}
-              transition={{ duration: 0.2 }}
-            >
-              {toast.type === "success" && <CheckCircle size={16} color="var(--accent-green)" />}
-              {toast.type === "error" && <AlertCircle size={16} color="var(--accent-red)" />}
-              {toast.type === "info" && <ChevronRight size={16} color="var(--accent-primary)" />}
-              {toast.message}
+          {toasts.map((t) => (
+            <motion.div key={t.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className={`toast toast--${t.type}`}>
+              {t.type === "success" && <CheckCircle size={14} />}
+              {t.type === "error" && <AlertCircle size={14} />}
+              {t.message}
             </motion.div>
           ))}
         </AnimatePresence>
