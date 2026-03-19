@@ -356,9 +356,13 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     let console_covers_dir = covers_dir.join(&console);
     let file_path = console_covers_dir.join(format!("{}.png", &safe_name));
     
-    // Return cached file if it exists
+    // Return cached file as base64 data URL if it exists
     if file_path.exists() {
-        return Ok(file_path.to_string_lossy().to_string());
+        if let Ok(data) = fs::read(&file_path) {
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+            return Ok(format!("data:image/png;base64,{}", b64));
+        }
     }
     
     // Build candidate names to try
@@ -401,8 +405,11 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
                         if let Ok(mut file) = fs::File::create(&file_path) {
                             use std::io::Write;
                             let _ = file.write_all(&bytes);
-                            return Ok(file_path.to_string_lossy().to_string());
                         }
+                        // Return as base64 data URL
+                        use base64::Engine;
+                        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                        return Ok(format!("data:image/png;base64,{}", b64));
                     }
                 }
             }

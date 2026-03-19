@@ -121,13 +121,13 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
     const fetchCover = async () => {
       try {
         setLoading(true);
-        const path: string = await invoke("fetch_boxart", { 
+        const dataUrl: string = await invoke("fetch_boxart", { 
           gameName: rom.name, 
           console: rom.console 
         });
-        setCover(convertFileSrc(path));
+        setCover(dataUrl);
       } catch (e) {
-        // Fallback or silent fail
+        // No cover available, placeholder will show
       } finally {
         setLoading(false);
       }
