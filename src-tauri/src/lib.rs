@@ -299,7 +299,7 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     let covers_dir = PathBuf::from(&config.covers_directory);
     
     // Libretro naming convention for files: replace forbidden characters with _
-    let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|'];
+    let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|', '"'];
     let safe_name: String = game_name.chars()
         .map(|c| if forbidden.contains(&c) { '_' } else { c })
         .collect();
@@ -330,19 +330,41 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         "Neo-Geo" => "SNK_-_Neo_Geo",
         _ => return Err("Unsupported console".to_string()),
     };
+
+    // Candidates for game titles on GitHub
+    let mut candidates = vec![game_name.clone()];
     
-    // URL MUST encode the sanitized name for GitHub
-    let encoded_name = urlencoding::encode(&safe_name);
-    let url = format!("https://raw.githubusercontent.com/libretro-thumbnails/{}/master/Named_Boxarts/{}.png", libretro_console, encoded_name);
+    // Remove region tags like (Japan), (Europe), (France), (SGB Enhanced)
+    if let Some(bracket_start) = game_name.find('(') {
+        candidates.push(game_name[..bracket_start].trim().to_string());
+    }
+    if let Some(bracket_start) = game_name.find('[') {
+        candidates.push(game_name[..bracket_start].trim().to_string());
+    }
+
+    for candidate in candidates {
+        // Sanitize for URL
+        let safe_candidate: String = candidate.chars()
+            .map(|c| if forbidden.contains(&c) { '_' } else { c })
+            .collect();
+        let encoded_name = urlencoding::encode(&safe_candidate);
+        let url = format!("https://raw.githubusercontent.com/libretro-thumbnails/{}/master/Named_Boxarts/{}.png", libretro_console, encoded_name);
+        
+        if let Ok(response) = reqwest::get(&url).await {
+            if response.status().is_success() {
+                if let Ok(bytes) = response.bytes().await {
+                    fs::create_dir_all(&covers_dir).ok();
+                    if let Ok(mut file) = fs::File::create(&file_path) {
+                        use std::io::Write;
+                        let _ = file.write_all(&bytes);
+                        return Ok(file_path.to_string_lossy().to_string());
+                    }
+                }
+            }
+        }
+    }
     
-    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() { return Err(format!("Boxart not found: {}", response.status())); }
-    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    fs::create_dir_all(&covers_dir).ok();
-    let mut file = fs::File::create(&file_path).map_err(|e| e.to_string())?;
-    use std::io::Write;
-    file.write_all(&bytes).map_err(|e| e.to_string())?;
-    Ok(file_path.to_string_lossy().to_string())
+    Err("Boxart not found after trying fallbacks".to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

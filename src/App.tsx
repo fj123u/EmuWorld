@@ -619,67 +619,42 @@ export default function App() {
               </div>
 
               {page === "catalog" && (
-                <div className="catalog-blocks">
-                  {Object.entries(consolesByCategory).map(([catName]) => {
-                    const emusInCat = filteredCatalog.filter(e => e.category === catName);
-                    if (emusInCat.length === 0) return null;
-                    const isExpanded = expandedLibraryCategories.includes(catName);
-                    return (
-                      <div key={catName} className="catalog-block">
-                        <button 
-                          className="catalog-block__header" 
-                          onClick={() => toggleLibraryCategory(catName)}
-                        >
-                          <h2 className="catalog-block__title">{catName}</h2>
-                          {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                        </button>
-
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: "auto", opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              transition={{ duration: 0.3, ease: "easeInOut" }}
-                              style={{ overflow: "hidden" }}
-                            >
-                              <div className="catalog-block__content">
-                                <div className="emu-grid">
-                                  {emusInCat.map((emu) => (
-                                    <motion.div key={emu.id} className="emu-card">
-                                      <div className="emu-card__header">
-                                        <div className="emu-card__icon">{emu.icon}</div>
-                                        <div className="emu-card__info">
-                                          <div className="emu-card__name">{emu.name}</div>
-                                          <div className="emu-card__console">{emu.console}</div>
-                                        </div>
-                                        {installed.includes(emu.id) && (
-                                          <div className="emu-card__status emu-card__status--installed">
-                                            <CheckCircle size={12} /> Installed
-                                          </div>
-                                        )}
-                                      </div>
-                                      <p className="emu-card__desc">{emu.description}</p>
-                                      <div className="emu-card__actions">
-                                        {installed.includes(emu.id) ? (
-                                          <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
-                                        ) : (
-                                          <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
-                                            {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
-                                          </button>
-                                        )}
-                                        <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
-                                      </div>
-                                    </motion.div>
-                                  ))}
-                                </div>
-                              </div>
-                            </motion.div>
+                <div className="catalog-content">
+                  <div className="emu-grid">
+                    {filteredCatalog.map((emu) => (
+                      <motion.div key={emu.id} className="emu-card">
+                        <div className="emu-card__header">
+                          <div className="emu-card__icon">{emu.icon}</div>
+                          <div className="emu-card__info">
+                            <div className="emu-card__name">{emu.name}</div>
+                            <div className="emu-card__console">{emu.console}</div>
+                          </div>
+                          {installed.includes(emu.id) && (
+                            <div className="emu-card__status emu-card__status--installed">
+                              <CheckCircle size={12} /> Installed
+                            </div>
                           )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })}
+                        </div>
+                        <p className="emu-card__desc">{emu.description}</p>
+                        <div className="emu-card__actions">
+                          {installed.includes(emu.id) ? (
+                            <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
+                          ) : (
+                            <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing === emu.id}>
+                              {installing === emu.id ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                            </button>
+                          )}
+                          <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                  {filteredCatalog.length === 0 && (
+                    <div className="empty-state">
+                      <div className="empty-state__icon">🔍</div>
+                      <div className="empty-state__title">No emulators found</div>
+                    </div>
+                  )}
                 </div>
               )}
 
