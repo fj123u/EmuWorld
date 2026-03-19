@@ -165,11 +165,6 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
     }
 
     fs::remove_file(&archive_path).ok();
-    let exe_found = find_executable(&install_dir, &emu.executable_name).is_some();
-    
-    let roms_dir = PathBuf::from(&config.roms_directory).join(&emu.console);
-    fs::create_dir_all(&roms_dir).ok();
-
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
         "status": "done",

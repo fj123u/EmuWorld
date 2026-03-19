@@ -192,8 +192,8 @@ export default function App() {
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "0.2.9", date: "2026-03-19", changes: ["Renamed 'Library' to 'Roms' in the UI", "Stopped automatic ROM folder creation during emulator installation"] },
     { version: "0.2.8", date: "2026-03-19", changes: ["Fixed Mesen 2 ROM loading (stripped UNC prefixes and normalized paths)", "Improved launch stability for all emulators"] },
-    { version: "0.2.7", date: "2026-03-19", changes: ["Nestopia replaced by Mesen 2 (64-bit) as default NES emulator", "Mesen 2 now handles NES/SNES/GB games at once"] },
     { version: "0.2.3", date: "2026-03-19", changes: ["Fixed Close button (added window control permissions)", "Switched NES emulator to Nestopia UE", "Updated Xbox (xemu), PS3 (RPCS3), and Switch (Ryujinx) links to stable mirrors"] },
     { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
     { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
@@ -443,8 +443,8 @@ export default function App() {
               className={`sidebar__item ${page === "library" ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("library"); setConsoleFilter(null); }}
             >
-              <span className="sidebar__item-icon"><Library size={16} /></span>
-              Library
+              <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
+              Roms
               <span className="sidebar__item-count">{roms.length}</span>
             </button>
             <button
@@ -523,7 +523,7 @@ export default function App() {
               </>
             ) : page === "library" ? (
               <>
-                <div className="sidebar__label">My Games</div>
+                <div className="sidebar__label">Library</div>
                 <button
                   className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
                   onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
@@ -622,7 +622,7 @@ export default function App() {
                 <div>
                   <h1 className="main-content__title">
                     {page === "catalog" && "Emulator Catalog"}
-                    {page === "library" && "Game Library"}
+                    {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
                     {page === "settings" && "Settings"}
                   </h1>
@@ -712,7 +712,7 @@ export default function App() {
                   {filteredGames.length === 0 && (
                     <div className="empty-state">
                       <div className="empty-state__icon">📂</div>
-                      <div className="empty-state__title">No games found</div>
+                      <div className="empty-state__title">No ROMs found</div>
                       <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
                     </div>
                   )}
