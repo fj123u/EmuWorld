@@ -5,6 +5,9 @@ use std::process::Command;
 use tauri::Emitter;
 use reqwest;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
 mod emulators;
 
 /// App configuration stored as JSON
@@ -234,10 +237,16 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
         if clean_rom.starts_with(r"\\?\") {
              clean_rom = clean_rom.trim_start_matches(r"\\?\").to_string();
         }
-        // Normalize slashes to backslashes for Windows emulators 
-        // while also handling potential forward slashes from JS
         let final_path = clean_rom.replace("/", "\\");
         cmd.arg(&final_path);
+    }
+    // Open in a new console window if requested (best for Ryujinx as per user request)
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+        // Use CREATE_NEW_CONSOLE to ensure a separate window opens
+        cmd.creation_flags(CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP);
     }
     cmd.spawn().map_err(|e| e.to_string())?;
     Ok(format!("Launched {}", emu.name))
@@ -291,6 +300,12 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                     let ext_str = ext.to_string_lossy().to_lowercase();
                     if let Some((console, emu_id)) = match_extension(&ext_str, &catalog) {
                         let name = e.path().file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        
+                        // Filter out updates and DLCs
+                        if is_update_or_dlc(&name, &ext_str) {
+                            continue;
+                        }
+                        
                         roms.push(RomFile {
                             name,
                             path: e.path().to_string_lossy().to_string(),
@@ -304,6 +319,121 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
         }
     }
     roms
+}
+
+/// Detect if a ROM file is a game update or DLC (should be hidden from the library)
+fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
+    let lower = name.to_lowercase();
+    
+    // Keyword-based detection (DLC, UPD, etc.)
+    if lower.contains("upd") || lower.contains("dlc") || lower.contains("patch") || lower.contains("update") {
+        return true;
+    }
+    
+    // Switch Title ID detection: Extract hex IDs from brackets
+    // Base game IDs MUST end in 000. 
+    // Updates end in 800, DLCs end in 001-7FF.
+    if let Some(id) = extract_title_id(name) {
+        // Switch check
+        if id.starts_with("010") && !id.ends_with("000") {
+            return true; 
+        }
+        // Wii U check: Base=00050000, Update=0005000E, DLC=0005000C
+        if id.starts_with("0005000E") || id.starts_with("0005000C") {
+            return true;
+        }
+    }
+    
+    // Additional Switch specific: Check for version strings in brackets like [v65536]
+    // Base games are usually [v0].
+    if lower.contains("[v0]") {
+        // Base game, don't filter
+    } else if lower.contains("[v") {
+        // likely an update like [v65536]
+        return true;
+    }
+    
+    // Folder-based: if path contains "update" or "dlc" folder (common in multi-folder dumps)
+    if (lower.contains("update") || lower.contains("dlc")) || (lower.contains("patch") && !lower.contains("game")) {
+        return true;
+    }
+    
+    false
+}
+
+/// Strip version tags like "(v1.01)" or "(Rev 1)" from a name
+fn regex_strip_version(name: &str) -> String {
+    let mut result = name.to_string();
+    // Remove (vX.XX) patterns
+    while let Some(start) = result.find("(v") {
+        if let Some(end) = result[start..].find(')') {
+            result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+        } else {
+            break;
+        }
+    }
+    // Remove (Rev X) patterns
+    while let Some(start) = result.find("(Rev ") {
+        if let Some(end) = result[start..].find(')') {
+            result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+        } else {
+            break;
+        }
+    }
+    result.trim().to_string()
+}
+
+/// Strip language code parentheses like "(En,Fr,De,Es,It)" — keeps region like "(Europe)"
+fn regex_strip_languages(name: &str) -> String {
+    let mut result = name.to_string();
+    let mut changed = true;
+    while changed {
+        changed = false;
+        if let Some(start) = result.rfind('(') {
+            if let Some(end) = result[start..].find(')') {
+                let content = &result[start + 1..start + end];
+                // Language codes are short comma-separated items like "En,Fr,De"
+                let is_lang = content.contains(',') && content.split(',').all(|s| {
+                    let trimmed = s.trim();
+                    trimmed.len() <= 4 && trimmed.chars().all(|c| c.is_alphabetic())
+                });
+                if is_lang {
+                    result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+                    changed = true;
+                }
+            }
+        }
+    }
+    result.trim().to_string()
+}
+
+/// Strip ALL parenthetical content to get the base game name
+fn regex_strip_all_parens(name: &str) -> String {
+    let mut result = name.to_string();
+    loop {
+        if let Some(start) = result.find('(') {
+            if let Some(end) = result[start..].find(')') {
+                result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    // Also strip brackets
+    loop {
+        if let Some(start) = result.find('[') {
+            if let Some(end) = result[start..].find(']') {
+                result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    }
+    result.trim().to_string()
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -358,7 +488,8 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         _ => return Err(format!("No cover source for console: {}", console)),
     };
     
-    // Libretro naming: replace characters forbidden in filenames with _
+    // Libretro naming: ONLY replace chars truly forbidden in URLs/filenames
+    // Keep apostrophes, parentheses, commas — libretro uses them!
     let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|', '"'];
     let safe_name: String = game_name.chars()
         .map(|c| if forbidden.contains(&c) { '_' } else { c })
@@ -377,21 +508,100 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         }
     }
     
-    // Build candidate names to try
-    let mut candidates = vec![game_name.clone(), safe_name.clone()];
+    // Build candidate names to try (order matters — most specific first)
+    let mut candidates = vec![safe_name.clone()];
     
-    // Add common libretro region tags as blind fallbacks
-    let regions = vec![" (USA)", " (Europe)", " (Japan)", " (World)", " (En)"];
-    for reg in regions {
-        candidates.push(format!("{}{}", &safe_name, reg));
+    // Wii U Specific mapping for common short names
+    if console == "Wii U" {
+        let lower_name = safe_name.to_lowercase();
+        if lower_name.contains("zelda") && lower_name.contains("twilight") && lower_name.contains("princess") {
+            candidates.push("The Legend of Zelda - Twilight Princess HD".to_string());
+            candidates.push("The Legend of Zelda - Twilight Princess HD (Europe)".to_string());
+            candidates.push("The Legend of Zelda - Twilight Princess HD (USA)".to_string());
+        }
+        if lower_name.contains("zelda") && lower_name.contains("wind") && lower_name.contains("waker") {
+            candidates.push("The Legend of Zelda - The Wind Waker HD".to_string());
+            candidates.push("The Legend of Zelda - The Wind Waker HD (Europe)".to_string());
+            candidates.push("The Legend of Zelda - The Wind Waker HD (USA)".to_string());
+        }
+    }
+    
+    // Strip version tags like (v1.01) but keep region/language
+    let no_version = regex_strip_version(&safe_name);
+    if no_version != safe_name {
+        candidates.push(no_version.clone());
+    }
+    
+    // Strip only the language suffix: "(Europe) (En,Fr,De,Es,It)" -> "(Europe)"
+    let no_lang = regex_strip_languages(&safe_name);
+    if no_lang != safe_name {
+        candidates.push(no_lang.clone());
+    }
+    
+    // Strip ALL parenthetical content to get the base name
+    let base_name = regex_strip_all_parens(&safe_name);
+    if !base_name.is_empty() && base_name != safe_name {
+        // Try with common region tags
+        let regions = ["(USA)", "(Europe)", "(Japan)", "(World)"];
+        for reg in regions {
+            candidates.push(format!("{} {}", &base_name, reg));
+        }
+        candidates.push(base_name);
     }
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
         .map_err(|e| e.to_string())?;
-    
-    // Try each system and each candidate name
+
+    // ===== SWITCH SPECIFIC: Try Title ID-based cover sources =====
+    if console == "Nintendo Switch" {
+        // Extract Title ID from filename (16 hex chars in brackets like [0100000000010000])
+        if let Some(title_id) = extract_title_id(&game_name) {
+            // Normalize: base game ID ends in 000
+            let base_id = format!("{}000", &title_id[..13]);
+            
+            // Try multiple CDNs for Switch
+            let mut switch_urls = vec![
+                format!("https://tinfoil.media/i/{}/0/0/0", &base_id),
+                format!("https://tinfoil.media/i/{}/0/0/0", &title_id),
+            ];
+            
+            // Fallback: nsdbe repo
+            switch_urls.push(format!("https://raw.githubusercontent.com/nsdbe/Nintendo-Switch-Icons/main/icons/{}.png", &base_id));
+            switch_urls.push(format!("https://raw.githubusercontent.com/nsdbe/Nintendo-Switch-Icons/main/icons/{}.png", &title_id));
+            
+            // Fallback: shawnshyguy Boxart repo (by game name)
+            let raw_name = game_name.split('[').next().unwrap_or(&game_name).trim();
+            let encoded_raw_name = urlencoding::encode(raw_name);
+            switch_urls.push(format!("https://raw.githubusercontent.com/shawnshyguy/Boxart/main/Nintendo%20-%20Switch/Boxart/Front-Boxart/{}.png", encoded_raw_name));
+
+            for url in &switch_urls {
+                match client.get(url).send().await {
+                    Ok(response) if response.status().is_success() => {
+                        if let Ok(bytes) = response.bytes().await {
+                            if bytes.len() > 500 {
+                                fs::create_dir_all(&console_covers_dir).ok();
+                                if let Ok(mut file) = fs::File::create(&file_path) {
+                                    use std::io::Write;
+                                    let _ = file.write_all(&bytes);
+                                }
+                                use base64::Engine;
+                                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                // Detect JPEG vs PNG
+                                let mime = if bytes.starts_with(&[0xFF, 0xD8]) { "image/jpeg" } else { "image/png" };
+                                return Ok(format!("data:{};base64,{}", mime, b64));
+                            }
+                        }
+                    }
+                    _ => continue,
+                }
+            }
+        }
+    }
+
+    // ===== LIBRETRO CDN: Try each system and each candidate name =====
     for system in &libretro_systems {
         let encoded_system = urlencoding::encode(system);
         
@@ -423,6 +633,29 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     }
     
     Err("Boxart not found".to_string())
+}
+
+/// Extract a 16-character hex Title ID from a filename (e.g. "[0100000000010000]")
+fn extract_title_id(name: &str) -> Option<String> {
+    // Split by brackets and look for hex patterns
+    for part in name.split('[') {
+        if let Some(bracket_end) = part.find(']') {
+            let content = part[..bracket_end].trim().to_uppercase();
+            // Character-safe way to find 16 hex digits
+            if content.len() >= 16 {
+                let chars: Vec<char> = content.chars().collect();
+                if chars.len() >= 16 {
+                    for i in 0..=(chars.len() - 16) {
+                        let potential: String = chars[i..i+16].iter().collect();
+                        if potential.chars().all(|c| c.is_ascii_hexdigit()) {
+                            return Some(potential);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 
