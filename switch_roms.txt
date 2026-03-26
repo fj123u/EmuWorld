@@ -1,0 +1,102 @@
+﻿Celeste [01002B30028F6000][v0](nsw2u).nsp
+Celeste [01002B30028F6800][v458752](nsw2u).nsp
+Donkey Kong Country Returns HD [01009D901BC56000][v0][US].nsp
+Donkey Kong Country Tropical Freeze [0100C1F0051B6000][v0].nsp
+Donkey Kong Country Tropical Freeze[0100C1F0051B6800][US][v131072].nsp
+DRAGON QUEST BUILDERS 2 [010042000A986000][v0].nsp
+DRAGON QUEST BUILDERS 2 [010042000A986800][v327680].nsp
+Dragon Quest Builders [010008900705C000][v0].nsp
+Forager [01001D200BCC4000][v0].nsp
+Forager[01001D200BCC4800][US][v131072][CR-22].nsp
+LEGO Horizon Adventures [010073C01AF34000][v0].nsp
+LEGO Horizon Adventures [010073C01AF34800][v65536].nsp
+Luigi's Mansion 2 HD [010048701995E000][v0][US](nsw2u.com).xci
+Luigis Mansion 3 [0100DCA0064A6000][v0](nsw2u.xyz).nsp
+Luigi’s Mansion 3 [Luigi’s Mansion 3 Multiplayer Pack 1][0100DCA0064A7001][US][v131072].nsp
+Luigi’s Mansion 3 [Luigi’s Mansion 3 Multiplayer Pack 2][0100DCA0064A7002][US][v65536].nsp
+Luigi’s Mansion 3[0100DCA0064A6800][US][v327680][CR-13].nsp
+Mario & Luigi Brothership.nsp
+Mario Kart 8 Deluxe [0100152000022000][v0][US](nsw2u.com).nsp
+Mario Kart 8 Deluxe [0100152000022800][v1245184][US](nsw2u.com).nsp
+Mario Kart 8 Deluxe [Wave 1 DLC][0100152000023001][v65536][US](nsw2u.com).nsp
+Mario Strikers Battle League [010019401051C000][v0][US].nsp
+Mario Strikers Battle League [010019401051C800][v393216].nsp
+Mario Tennis Aces[0100BDE00862A000][US][v0].nsp
+Mario Tennis Aces[0100BDE00862A800][US][v786432].nsp
+Mario vs. Donkey Kong [0100B99019412000][v0][US](nsw2u.com).xci
+Nintendo Switch Sports [0100D2F00D5C0000][v0].nsp
+Nintendo Switch Sports [0100D2F00D5C0800][v524288][US](nsw2u.com).nsp
+Pikmin 4 [0100B7C00933A000][v0][US](nsw2u.com).xci
+Pikmin 4 [0100B7C00933A800][v65536].nsp
+PixARK [0100CC700B2B4000][v0].nsp
+Pokemon Legends Arceus [01001F5010DFA000][v0](Download From nsw2u.xyz).nsp
+Pokemon Legends Arceus [01001F5010DFA800][v262144](nsw2u.xyz).nsp
+Pokemon Legends Z-A [DLC Mega Dimension] [0100F43008C45002][v0].nsp
+Pokemon Legends ZA [0100F43008C44000].nsp
+Pokemon Scarlet [0100A3D008C5C000].xci
+Pokemon Scarlet [0100A3D008C5C800][v655360].nsp
+Pokemon Scarlet [0100A3D008C5C800][v65536][US].nsp
+Pokemon Sword [0100ABF008968800][v0](nsw2u.com).nsp
+Pokemon Sword [0100ABF008968800][v458752](nsw2u).nsp
+Pokmon Legends ZA [0100F43008C44800][v65536][Update].nsp
+Pokmon Scarlet [DLC1][0100A3D008C5D001][v0].nsp
+Pok__mon Violet v0 (01008F6008C5F001) (DLC).nsp
+Pok__mon Violet v524288 (01008F6008C5E800) (UPD).nsp
+Pok__mon __carlate v0 (0100A3D008C5D001) (DLC).nsp
+Pok__mon __carlate v524288 (0100A3D008C5C800) (UPD).nsp
+Pokémon Scarlet [0100A3D008C5C800][v589824][US](nsw2u.com).nsp
+Pokémon Violet Update v1.0.1.nsp
+Pokémon Violet [01008F6008C5E000][V0].nsp
+Pokémon Violet [01008F6008C5E800][v589824][US](nsw2u.com).nsp
+Pokémon Violet [01008F6008C5E800][v655360][US](nsw2u.com).nsp
+Princess Peach Showtime! [01007A3009184000][v0][US](nsw2u.com).xci
+SONIC X SHADOW GENERATIONS [01005EA01C0FC000][v0] [NKA][NC][NT].xci
+Splatoon 3 [0100C2500FC20000][v65536].nsp
+Splatoon 3 [0100C2500FC20800][v1245184][5.0.1].nsp
+Splatoon 3[0100C2500FC21064][0][2.9.0][DLC].nsp
+Splatoon 3[0100C2500FC21065][196608][2.18.0][DLC].nsp
+Super Mario 3D World + Bowser's Fury [010028600EBDA800][v65536].nsp
+Super Mario 3D World + Bowser's Fury[010028600EBDA000][US][v0].nsp
+Super Mario Bros. Wonder [010015100B514000][v0].nsp
+Super Mario Bros. Wonder [010015100B514800][v65536][US](nsw2u.com).nsp
+Super Mario Bros. Wonder[010015100B514000][v0][US](nsw2u.com).nsp
+Super Mario Odyssey [0100000000010800][v262144].nsp
+Super Mario Odyssey[0100000000010000][V0][Switch-xci.xyz].nsp
+Super Mario Party Jamboree [0100965017338000][v0] [NKA][NC][NT].xci
+Super Mario Party Jamboree [0100965017338800][v65536].nsp
+Super Mario RPG [0100BC0018138000][v0].nsp
+The Legend of Zelda - Tears of the Kingdom [0100F2C0115B6000][v0].xci
+The Legend of Zelda Breath of the Wild [01007EF00011E000][v0](nsw2u.com).nsp
+The Legend of Zelda Breath of the Wild [01007EF00011E800][v786432](nsw2u).nsp
+The Legend of Zelda Breath of the Wild [The Legend of Zelda Breath of the Wild DLC Pack 1][01007EF00011F001][US][v196608].nsp
+The Legend of Zelda Breath of the Wild [The Legend of Zelda Breath of the Wild DLC Pack 2][01007EF00011F002][US][v196608].nsp
+The Legend of Zelda Echoes of Wisdom v1.0.1[01008CF01BAAC800][65536][UPD].nsp
+The Legend of Zelda Echoes of Wisdom.xci
+The Legend of Zelda Tears of the Kingdom [0100F2C0115B6800][v327680][US].nsp
+The Legend of Zelda Tears of the Kingdom [0100F2C0115B6800][v393216].nsp
+Tomb Raider I-III Remastered [010024601BB16000].nsp
+Tomb Raider I-III Remastered [010024601BB16800][v65536].nsp
+Watermelon game [0100800015926000][v0][JP](nsw2u.xyz).nsp
+Watermelon Game スイカゲーム [0100800015926800][v65536].nsp
+Dragon Quest Builders [DLC Pack] [010008900705D012][v0].nsp
+Dragon Quest Builders [DLC Slime light] [010008900705D011][v0].nsp
+Dragon Quest Builders [DLC Slimy eyes and mouth] [010008900705D010][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC 11][010042000a987011][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC 12][010042000a987012][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC 14][010042000a987014][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC 15][010042000a987015][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Aquarium Pack][010042000A987010][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Designer’s Sunglasses][010042000A98700E][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Dragon Quest logo][010042000A98700B][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Hotto Stuff Pack][010042000A987001][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Legendary line art][010042000A98700A][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Modernist Pack][010042000A987013][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Moon Sigil block][010042000A987007][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Ornamental Chimaera Wing][010042000A98700C][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Pixelated Protagonist, Pixelated Prince, Pixelated Princess][010042000A987003][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Purchase Bonus Items - Sigil Blocks][010042000A987009][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Purchase Bonus Items][010042000A98700D][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Stackable Slime][010042000A987002][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Star Sigil block][010042000A987006][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Sun Sigil block][010042000A987005][v0].nsp
+DRAGON QUEST BUILDERS 2 [DLC Water Sigil block][010042000A987008][v0].nsp

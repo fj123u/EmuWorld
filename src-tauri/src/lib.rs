@@ -562,20 +562,15 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
             // Normalize: base game ID ends in 000
             let base_id = format!("{}000", &title_id[..13]);
             
-            // Try multiple CDNs for Switch
+            // Primary: nlib.cc API (backed by TitleDB, returns JPEG icons)
             let mut switch_urls = vec![
-                format!("https://tinfoil.media/i/{}/0/0/0", &base_id),
-                format!("https://tinfoil.media/i/{}/0/0/0", &title_id),
+                format!("https://api.nlib.cc/nx/{}/icon/256/256", &base_id),
+                format!("https://api.nlib.cc/nx/{}/icon/256/256", &title_id),
             ];
             
-            // Fallback: nsdbe repo
-            switch_urls.push(format!("https://raw.githubusercontent.com/nsdbe/Nintendo-Switch-Icons/main/icons/{}.png", &base_id));
-            switch_urls.push(format!("https://raw.githubusercontent.com/nsdbe/Nintendo-Switch-Icons/main/icons/{}.png", &title_id));
-            
-            // Fallback: shawnshyguy Boxart repo (by game name)
-            let raw_name = game_name.split('[').next().unwrap_or(&game_name).trim();
-            let encoded_raw_name = urlencoding::encode(raw_name);
-            switch_urls.push(format!("https://raw.githubusercontent.com/shawnshyguy/Boxart/main/Nintendo%20-%20Switch/Boxart/Front-Boxart/{}.png", encoded_raw_name));
+            // Fallback: GameTDB (returns cover art images)
+            switch_urls.push(format!("https://art.gametdb.com/switch/coverM/{}.jpg", &base_id));
+            switch_urls.push(format!("https://art.gametdb.com/switch/coverM/{}.jpg", &title_id));
 
             for url in &switch_urls {
                 match client.get(url).send().await {
