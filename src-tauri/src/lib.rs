@@ -515,14 +515,15 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     if console == "Wii U" {
         let lower_name = safe_name.to_lowercase();
         if lower_name.contains("zelda") && lower_name.contains("twilight") && lower_name.contains("princess") {
-            candidates.push("The Legend of Zelda - Twilight Princess HD".to_string());
-            candidates.push("The Legend of Zelda - Twilight Princess HD (Europe)".to_string());
-            candidates.push("The Legend of Zelda - Twilight Princess HD (USA)".to_string());
+            // Libretro uses underscore for colon: "The Legend of Zelda_" not "The Legend of Zelda:"
+            candidates.push("The Legend of Zelda_ Twilight Princess HD (USA)".to_string());
+            candidates.push("The Legend of Zelda_ Twilight Princess HD (Europe)".to_string());
+            candidates.push("The Legend of Zelda_ Twilight Princess HD (Japan)".to_string());
         }
         if lower_name.contains("zelda") && lower_name.contains("wind") && lower_name.contains("waker") {
-            candidates.push("The Legend of Zelda - The Wind Waker HD".to_string());
-            candidates.push("The Legend of Zelda - The Wind Waker HD (Europe)".to_string());
-            candidates.push("The Legend of Zelda - The Wind Waker HD (USA)".to_string());
+            candidates.push("The Legend of Zelda_ The Wind Waker HD (USA)".to_string());
+            candidates.push("The Legend of Zelda_ The Wind Waker HD (Europe)".to_string());
+            candidates.push("The Legend of Zelda_ The Wind Waker HD (Japan)".to_string());
         }
     }
     
@@ -591,6 +592,44 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
                         }
                     }
                     _ => continue,
+                }
+            }
+        } else {
+            // No Title ID found in filename — try searching nlib.cc by name
+            let clean_name = game_name.split('[').next().unwrap_or(&game_name).trim();
+            let encoded = urlencoding::encode(clean_name);
+            let search_url = format!("https://api.nlib.cc/nx/search?query={}&limit=1", encoded);
+            if let Ok(resp) = client.get(&search_url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(text) = resp.text().await {
+                        // Try to extract a title ID from the JSON response
+                        if let Some(id_start) = text.find("\"id\":\"") {
+                            let after = &text[id_start + 6..];
+                            if let Some(id_end) = after.find('"') {
+                                let found_id = &after[..id_end];
+                                if found_id.len() == 16 {
+                                    let icon_url = format!("https://api.nlib.cc/nx/{}/icon/256/256", found_id);
+                                    if let Ok(icon_resp) = client.get(&icon_url).send().await {
+                                        if icon_resp.status().is_success() {
+                                            if let Ok(bytes) = icon_resp.bytes().await {
+                                                if bytes.len() > 500 {
+                                                    fs::create_dir_all(&console_covers_dir).ok();
+                                                    if let Ok(mut file) = fs::File::create(&file_path) {
+                                                        use std::io::Write;
+                                                        let _ = file.write_all(&bytes);
+                                                    }
+                                                    use base64::Engine;
+                                                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                                    let mime = if bytes.starts_with(&[0xFF, 0xD8]) { "image/jpeg" } else { "image/png" };
+                                                    return Ok(format!("data:{};base64,{}", mime, b64));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
