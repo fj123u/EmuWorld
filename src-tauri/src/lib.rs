@@ -512,18 +512,15 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     let mut candidates = vec![safe_name.clone()];
     
     // Wii U Specific mapping for common short names
+    // Note: libretro Wii U only has Japanese-named Zelda entries!
     if console == "Wii U" {
         let lower_name = safe_name.to_lowercase();
         if lower_name.contains("zelda") && lower_name.contains("twilight") && lower_name.contains("princess") {
-            // Libretro uses underscore for colon: "The Legend of Zelda_" not "The Legend of Zelda:"
-            candidates.push("The Legend of Zelda_ Twilight Princess HD (USA)".to_string());
-            candidates.push("The Legend of Zelda_ Twilight Princess HD (Europe)".to_string());
-            candidates.push("The Legend of Zelda_ Twilight Princess HD (Japan)".to_string());
+            candidates.push("Zelda no Densetsu - Twilight Princess HD (Japan) (Rev 1)".to_string());
+            candidates.push("Zelda no Densetsu - Twilight Princess HD (Japan)".to_string());
         }
         if lower_name.contains("zelda") && lower_name.contains("wind") && lower_name.contains("waker") {
-            candidates.push("The Legend of Zelda_ The Wind Waker HD (USA)".to_string());
-            candidates.push("The Legend of Zelda_ The Wind Waker HD (Europe)".to_string());
-            candidates.push("The Legend of Zelda_ The Wind Waker HD (Japan)".to_string());
+            candidates.push("Zelda no Densetsu - Kaze no Takuto HD (Japan)".to_string());
         }
     }
     
@@ -595,38 +592,45 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
                 }
             }
         } else {
-            // No Title ID found in filename — try searching nlib.cc by name
-            let clean_name = game_name.split('[').next().unwrap_or(&game_name).trim();
-            let encoded = urlencoding::encode(clean_name);
-            let search_url = format!("https://api.nlib.cc/nx/search?query={}&limit=1", encoded);
-            if let Ok(resp) = client.get(&search_url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(text) = resp.text().await {
-                        // Try to extract a title ID from the JSON response
-                        if let Some(id_start) = text.find("\"id\":\"") {
-                            let after = &text[id_start + 6..];
-                            if let Some(id_end) = after.find('"') {
-                                let found_id = &after[..id_end];
-                                if found_id.len() == 16 {
-                                    let icon_url = format!("https://api.nlib.cc/nx/{}/icon/256/256", found_id);
-                                    if let Ok(icon_resp) = client.get(&icon_url).send().await {
-                                        if icon_resp.status().is_success() {
-                                            if let Ok(bytes) = icon_resp.bytes().await {
-                                                if bytes.len() > 500 {
-                                                    fs::create_dir_all(&console_covers_dir).ok();
-                                                    if let Ok(mut file) = fs::File::create(&file_path) {
-                                                        use std::io::Write;
-                                                        let _ = file.write_all(&bytes);
-                                                    }
-                                                    use base64::Engine;
-                                                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                                                    let mime = if bytes.starts_with(&[0xFF, 0xD8]) { "image/jpeg" } else { "image/png" };
-                                                    return Ok(format!("data:{};base64,{}", mime, b64));
-                                                }
-                                            }
-                                        }
-                                    }
+            // No Title ID in filename — try a known games lookup table
+            let clean_name = game_name.split('[').next().unwrap_or(&game_name).trim().to_lowercase();
+            let known_id = match clean_name.as_str() {
+                s if s.contains("mario") && s.contains("luigi") && s.contains("brother") => Some("01002DA013484000"),
+                s if s.contains("zelda") && s.contains("echoes") && s.contains("wisdom") => Some("0100A9400C9C2000"),
+                s if s.contains("zelda") && s.contains("tears") && s.contains("kingdom") => Some("0100F2C0115B6000"),
+                s if s.contains("zelda") && s.contains("breath") && s.contains("wild") => Some("01007EF00011E000"),
+                s if s.contains("mario") && s.contains("odyssey") => Some("0100000000010000"),
+                s if s.contains("splatoon") && s.contains("3") => Some("0100C2500FC20000"),
+                s if s.contains("animal") && s.contains("crossing") => Some("01006F8002326000"),
+                s if s.contains("mario kart") && s.contains("8") => Some("0100152000022000"),
+                s if s.contains("smash") && s.contains("bros") => Some("01006A800016E000"),
+                s if s.contains("pokemon") && s.contains("scarlet") => Some("0100A3D008C5C000"),
+                s if s.contains("pokemon") && s.contains("violet") => Some("01008F6008C5E000"),
+                s if s.contains("pokemon") && s.contains("legends") && s.contains("arceus") => Some("01001F5010DFA000"),
+                s if s.contains("pokemon") && s.contains("sword") => Some("0100ABF008968000"),
+                s if s.contains("pokemon") && s.contains("shield") => Some("01008DB008C2C000"),
+                s if s.contains("metroid") && s.contains("dread") => Some("010093801237C000"),
+                s if s.contains("fire emblem") && s.contains("engage") => Some("0100A6301214E000"),
+                s if s.contains("xenoblade") && s.contains("3") => Some("010074F013262000"),
+                s if s.contains("bayonetta") && s.contains("3") => Some("01004A4010FEA000"),
+                s if s.contains("kirby") && s.contains("forgotten") => Some("01004D300C5AE000"),
+                _ => None,
+            };
+            if let Some(tid) = known_id {
+                let icon_url = format!("https://api.nlib.cc/nx/{}/icon/256/256", tid);
+                if let Ok(icon_resp) = client.get(&icon_url).send().await {
+                    if icon_resp.status().is_success() {
+                        if let Ok(bytes) = icon_resp.bytes().await {
+                            if bytes.len() > 500 {
+                                fs::create_dir_all(&console_covers_dir).ok();
+                                if let Ok(mut file) = fs::File::create(&file_path) {
+                                    use std::io::Write;
+                                    let _ = file.write_all(&bytes);
                                 }
+                                use base64::Engine;
+                                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                let mime = if bytes.starts_with(&[0xFF, 0xD8]) { "image/jpeg" } else { "image/png" };
+                                return Ok(format!("data:{};base64,{}", mime, b64));
                             }
                         }
                     }
