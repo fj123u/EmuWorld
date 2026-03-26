@@ -524,6 +524,15 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         }
     }
     
+    // GameCube / Wii: handle combo discs
+    if console == "GameCube / Wii" {
+        let lower_name = safe_name.to_lowercase();
+        if lower_name.contains("wii sports") && lower_name.contains("resort") {
+            candidates.push("Wii Sports + Wii Sports Resort (Europe) (En,Fr,De,Es,It,Nl,Pt)".to_string());
+            candidates.push("Wii Sports + Wii Sports Resort (USA) (En,Fr,Es)".to_string());
+        }
+    }
+    
     // Strip version tags like (v1.01) but keep region/language
     let no_version = regex_strip_version(&safe_name);
     if no_version != safe_name {
@@ -595,8 +604,8 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
             // No Title ID in filename — try a known games lookup table
             let clean_name = game_name.split('[').next().unwrap_or(&game_name).trim().to_lowercase();
             let known_id = match clean_name.as_str() {
-                s if s.contains("mario") && s.contains("luigi") && s.contains("brother") => Some("01002DA013484000"),
-                s if s.contains("zelda") && s.contains("echoes") && s.contains("wisdom") => Some("0100A9400C9C2000"),
+                s if s.contains("mario") && s.contains("luigi") && s.contains("brother") => Some("01006D0017F7A000"),
+                s if s.contains("zelda") && s.contains("echoes") && s.contains("wisdom") => Some("01008CF01BAAC000"),
                 s if s.contains("zelda") && s.contains("tears") && s.contains("kingdom") => Some("0100F2C0115B6000"),
                 s if s.contains("zelda") && s.contains("breath") && s.contains("wild") => Some("01007EF00011E000"),
                 s if s.contains("mario") && s.contains("odyssey") => Some("0100000000010000"),
