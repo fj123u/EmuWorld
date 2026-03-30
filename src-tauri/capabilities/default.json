@@ -24,6 +24,8 @@
     "core:image:default",
     "core:menu:default",
     "core:path:default",
-    "core:webview:default"
+    "core:webview:default",
+    "deep-link:default",
+    "shell:allow-open"
   ]
 }
