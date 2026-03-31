@@ -803,6 +803,14 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            println!("[EmuWorld] Second instance detected with args: {:?}", argv);
+            for arg in argv {
+                if arg.starts_with("emuworld://") {
+                    let _ = app.emit("oauth-callback", arg);
+                }
+            }
+        }))
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             #[cfg(desktop)]

@@ -49,6 +49,7 @@
   "plugins": {
     "deep-link": {
       "schemes": ["emuworld"]
-    }
+    },
+    "single-instance": null
   }
 }
