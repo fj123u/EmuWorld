@@ -41,6 +41,8 @@ import {
   Camera,
   ShieldCheck,
   Link2,
+  ShoppingBag,
+  Check,
 } from "lucide-react";
 
 /* ============================
@@ -86,8 +88,18 @@ interface ChangelogEntry {
   date: string;
   changes: string[];
 }
+interface RomStoreEntry {
+  id: string;
+  name: string;
+  console: string;
+  region: string;
+  size: string;
+  file_name: string;
+  download_url: string;
+  ia_id?: string;
+}
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account";
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
 
 /* ============================
    Console icon mapping
@@ -181,6 +193,79 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
   );
 };
 
+const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: { 
+  rom: RomStoreEntry, 
+  onDownload: (rom: RomStoreEntry) => void,
+  downloading: boolean,
+  downloaded: boolean,
+  progress?: number
+}) => {
+  const [cover, setCover] = useState<string | null>(null);
+  const [loadingCover, setLoadingCover] = useState(false);
+
+  useEffect(() => {
+    const fetchCover = async () => {
+      try {
+        setLoadingCover(true);
+        // We use the same fetch_boxart command as library games
+        const dataUrl: string = await invoke("fetch_boxart", { 
+          gameName: rom.name, 
+          console: rom.console 
+        });
+        setCover(dataUrl);
+      } catch (e) {
+        // No cover found
+      } finally {
+        setLoadingCover(false);
+      }
+    };
+    fetchCover();
+  }, [rom.name, rom.console]);
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="store-card"
+    >
+      <div className="store-card__cover">
+        {cover ? (
+          <img src={cover} alt={rom.name} className="store-card__img" />
+        ) : (
+          <div className="store-card__placeholder">
+            <span className="store-card__placeholder-icon">
+              {loadingCover ? <RefreshCw className="animate-spin" size={24} /> : (CONSOLE_ICONS[rom.console] || "🎮")}
+            </span>
+            {!loadingCover && <div className="store-card__placeholder-text">{rom.console}</div>}
+          </div>
+        )}
+        <div className="store-card__badge">{rom.region}</div>
+      </div>
+      <div className="store-card__info">
+        <div className="store-card__name" title={rom.name}>{rom.name}</div>
+        <div className="store-card__meta">
+          <span>{rom.console}</span>
+          <span className="store-card__size">{rom.size}</span>
+        </div>
+        <button 
+          className={`btn btn--full ${downloaded ? 'btn--success' : downloading ? 'btn--loading' : 'btn--primary'}`}
+          onClick={() => onDownload(rom)}
+          disabled={downloading || downloaded}
+        >
+          {downloaded ? (
+            <><Check size={14} /> Downloaded</>
+          ) : downloading ? (
+            <><RefreshCw size={14} className="animate-spin" /> {progress !== undefined ? `${progress}%` : 'Downloading...'}</>
+          ) : (
+            <><Download size={14} /> Download</>
+          )}
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
 /* ============================
    App Component
    ============================ */
@@ -203,6 +288,16 @@ export default function App() {
   const [installing, setInstalling] = useState<string[]>([]);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // ---- ROM Store state ----
+  const [storeRoms, setStoreRoms] = useState<RomStoreEntry[]>([]);
+  const [storeSearch, setStoreSearch] = useState("");
+  const [debouncedStoreSearch, setDebouncedStoreSearch] = useState("");
+  const [storeConsoleFilter, setStoreConsoleFilter] = useState<string | null>(null);
+  const [storeConsoles, setStoreConsoles] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState<string[]>([]);
+  const [downloaded, setDownloaded] = useState<string[]>([]);
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
   const [changelogs] = useState<ChangelogEntry[]>([
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
     { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
@@ -523,6 +618,64 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  // ---- ROM Store ----
+  const loadStoreData = useCallback(async () => {
+    try {
+      const consoles = await invoke<string[]>("get_store_consoles");
+      setStoreConsoles(consoles);
+    } catch (e) {
+      console.error("Failed to load store consoles:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadStoreData();
+  }, [loadStoreData]);
+
+  const searchStore = useCallback(async (query: string, consoleF: string | null) => {
+    try {
+      const results = await invoke<RomStoreEntry[]>("search_rom_store", { 
+        query, 
+        consoleFilter: consoleF 
+      });
+      setStoreRoms(results);
+    } catch (e) {
+      console.error("Store search failed:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedStoreSearch(storeSearch);
+    }, 600);
+    return () => clearTimeout(handler);
+  }, [storeSearch]);
+
+  useEffect(() => {
+    searchStore(debouncedStoreSearch, storeConsoleFilter);
+  }, [debouncedStoreSearch, storeConsoleFilter, searchStore]);
+
+  const handleDownloadRom = async (rom: RomStoreEntry) => {
+    if (downloading.includes(rom.id) || downloaded.includes(rom.id)) return;
+    setDownloading(prev => [...prev, rom.id]);
+    showToast(`Downloading ${rom.name}...`, "info");
+    try {
+      const result = await invoke<string>("download_rom", {
+        downloadUrl: rom.download_url,
+        console: rom.console,
+        fileName: rom.file_name,
+        iaId: rom.ia_id || null,
+      });
+      setDownloaded(prev => [...prev, rom.id]);
+      showToast(`${rom.name} downloaded! 🎮`, "success");
+      loadData(); // Refresh the ROM library
+    } catch (err: any) {
+      showToast(`Download failed: ${err}`, "error");
+    } finally {
+      setDownloading(prev => prev.filter(id => id !== rom.id));
+    }
+  };
+
   // ---- Listen for install progress events ----
   useEffect(() => {
     const unlisten = listen<{ emulator_id: string; status: string }>(
@@ -539,6 +692,23 @@ export default function App() {
       unlisten.then((fn) => fn());
     };
   }, [loadData, showToast]);
+
+  // ---- Listen for ROM download progress events ----
+  useEffect(() => {
+    const unlisten = listen<{ file_name?: string; file_id?: string; status: string; progress: number }>(
+      "rom-download-progress",
+      (event) => {
+        const { file_id, file_name, progress } = event.payload;
+        const id = file_id || file_name;
+        if (id) {
+          setDownloadProgress(prev => ({ ...prev, [id]: progress }));
+        }
+      }
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // ---- Actions ----
   const handleInstall = async (id: string) => {
@@ -738,6 +908,14 @@ export default function App() {
               <span className="sidebar__item-count">{installedCount}</span>
             </button>
             <button
+              className={`sidebar__item ${page === "store" ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("store"); setStoreConsoleFilter(null); }}
+            >
+              <span className="sidebar__item-icon"><ShoppingBag size={16} /></span>
+              Store
+              <span className="sidebar__item-count">{storeRoms.length}</span>
+            </button>
+            <button
               className={`sidebar__item ${page === "settings" ? "sidebar__item--active" : ""}`}
               onClick={() => setPage("settings")}
             >
@@ -802,6 +980,27 @@ export default function App() {
                     </div>
                   );
                 })}
+              </>
+            ) : page === "store" ? (
+              <>
+                <div className="sidebar__label">Store Systems</div>
+                <button
+                  className={`sidebar__item ${!storeConsoleFilter ? "sidebar__item--active" : ""}`}
+                  onClick={() => setStoreConsoleFilter(null)}
+                >
+                  <span className="sidebar__item-icon">🏪</span>
+                  All Systems
+                </button>
+                {storeConsoles.map((con) => (
+                  <button
+                    key={con}
+                    className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
+                    onClick={() => setStoreConsoleFilter(con)}
+                  >
+                    <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                    {con}
+                  </button>
+                ))}
               </>
             ) : page === "library" ? (
               <>
@@ -933,25 +1132,34 @@ export default function App() {
                     {page === "catalog" && "Emulator Catalog"}
                     {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
+                    {page === "store" && "ROM Store"}
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} emulators available`}
+                    {page === "store" && `${storeRoms.length} ROMs available`}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                   </p>
                 </div>
                 <div className="main-content__actions">
-                  {(page === "catalog" || page === "library") && (
+                  {(page === "catalog" || page === "library" || page === "store") && (
                     <>
                       <div className="search-bar">
-                        <Search size={16} className="search-bar__icon" />
+                        {page === "store" && storeSearch !== debouncedStoreSearch ? (
+                          <RefreshCw size={16} className="search-bar__icon animate-spin" />
+                        ) : (
+                          <Search size={16} className="search-bar__icon" />
+                        )}
                         <input
                           className="search-bar__input"
-                          placeholder="Search..."
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
+                          placeholder={page === "store" ? "Search in Store..." : "Search..."}
+                          value={page === "store" ? storeSearch : search}
+                          onChange={(e) => {
+                            if (page === "store") setStoreSearch(e.target.value);
+                            else setSearch(e.target.value);
+                          }}
                         />
                       </div>
                     </>
@@ -1008,6 +1216,31 @@ export default function App() {
                       <div className="empty-state__title">No emulators found</div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {page === "store" && (
+                <div className="store-page">
+                  <div className="grid grid--fixed">
+                    {storeRoms.length > 0 ? (
+                      storeRoms.map((rom) => (
+                        <RomStoreCard
+                          key={rom.id}
+                          rom={rom}
+                          onDownload={handleDownloadRom}
+                          downloading={downloading.includes(rom.id)}
+                          downloaded={downloaded.includes(rom.id)}
+                          progress={downloadProgress[rom.id] || downloadProgress[rom.file_name]}
+                        />
+                      ))
+                    ) : (
+                      <div className="empty-state">
+                        <div className="empty-state__icon">🕵️</div>
+                        <h3 className="empty-state__title">No ROMs found</h3>
+                        <p className="empty-state__text">Try adjusting your search or filters</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 

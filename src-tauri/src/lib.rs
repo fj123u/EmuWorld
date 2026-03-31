@@ -1,9 +1,11 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::Emitter;
 use reqwest;
+use urlencoding;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -488,10 +490,13 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         _ => return Err(format!("No cover source for console: {}", console)),
     };
     
+    // Normalize name for better matching: replace underscores with spaces, collapse spaces
+    let normalized_name = game_name.replace('_', " ").replace("  ", " ").trim().to_string();
+    
     // Libretro naming: ONLY replace chars truly forbidden in URLs/filenames
     // Keep apostrophes, parentheses, commas — libretro uses them!
     let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|', '"'];
-    let safe_name: String = game_name.chars()
+    let safe_name: String = normalized_name.chars()
         .map(|c| if forbidden.contains(&c) { '_' } else { c })
         .collect();
     
@@ -797,6 +802,299 @@ fn extract_title_id(name: &str) -> Option<String> {
 
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+// ═══════════════════════════════════════════════════════════════
+//  ROM STORE — Search and Download ROMs
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RomStoreEntry {
+    pub id: String,
+    pub name: String,
+    pub console: String,
+    pub region: String,
+    pub size: String,
+    pub file_name: String,
+    pub download_url: String,
+    pub ia_id: Option<String>,
+}
+
+fn get_ia_collection(console: &str) -> Option<&'static str> {
+    match console {
+        "NES" => Some("nintendo-nes-usa-redump"),
+        "Super Nintendo" => Some("nintendo-super-nintendo-usa-redump"),
+        "Nintendo 64" => Some("nintendo-n64-usa-redump"),
+        "Game Boy Advance" => Some("nintendo-game-boy-advance-usa-redump"),
+        "Nintendo DS" => Some("nintendo-ds-usa-redump"),
+        "GameCube / Wii" => Some("nintendo-wii-usa-redump"),
+        "Wii U" => Some("nintendo-wii-u-usa-redump"),
+        "Nintendo Switch" => Some("nintendo-switch-roms-collection-v2"),
+        "Virtual Boy" => Some("nintendo-virtual-boy-usa-redump"),
+        "PlayStation 1" => Some("sony-playstation-usa-redump"),
+        "PlayStation 2" => Some("sony-playstation-2-usa-redump"),
+        "PlayStation 3" => Some("sony-playstation-3-psn-r-set-1"),
+        "PlayStation Portable" => Some("sony-playstation-portable-usa-redump"),
+        "Dreamcast" => Some("sega-dreamcast-usa-redump"),
+        "Mega Drive" => Some("sega-mega-drive-genesis-usa-redump"),
+        "Master System" => Some("sega-master-system-mark-iii-usa-redump"),
+        "Saturn" => Some("sega-saturn-usa-redump"),
+        "Game Gear" => Some("sega-game-gear-usa-redump"),
+        "Xbox" => Some("microsoft-xbox-usa-redump"),
+        "Neo-Geo" => Some("snk-neo-geo-aes-usa-redump"),
+        "PC Engine" => Some("nec-pc-engine-turbografx-16-usa-redump"),
+        "Atari 2600" => Some("atari-2600-usa-redump"),
+        _ => None,
+    }
+}
+
+fn console_to_folder(console: &str) -> &str {
+    match console {
+        "NES" => "NES",
+        "Super Nintendo" => "SNES",
+        "Nintendo 64" => "N64",
+        "Game Boy Advance" => "GBA",
+        "Nintendo DS" => "NDS",
+        "GameCube / Wii" => "GameCube",
+        "Wii U" => "WiiU",
+        "Nintendo Switch" => "Switch",
+        "Virtual Boy" => "VirtualBoy",
+        "PlayStation 1" => "PS1",
+        "PlayStation 2" => "PS2",
+        "PlayStation 3" => "PS3",
+        "PlayStation Portable" => "PSP",
+        "Dreamcast" => "Dreamcast",
+        "Mega Drive" => "MegaDrive",
+        "Master System" => "MasterSystem",
+        "Saturn" => "Saturn",
+        "Game Gear" => "GameGear",
+        "Xbox" => "Xbox",
+        "Arcade" => "Arcade",
+        "Neo-Geo" => "NeoGeo",
+        "PC Engine" => "PCEngine",
+        "Atari 2600" => "Atari2600",
+        "WonderSwan" => "WonderSwan",
+        "DOS / Win 3.x" => "DOS",
+        _ => "Other",
+    }
+}
+
+fn get_rom_catalog() -> Vec<RomStoreEntry> {
+    vec![
+        RomStoreEntry { 
+            id: "smb-nes".to_string(), 
+            name: "Super Mario Bros.".to_string(), 
+            console: "NES".to_string(), 
+            region: "USA".to_string(), 
+            size: "40 KB".to_string(), 
+            file_name: "Super Mario Bros. (USA).nes".to_string(), 
+            download_url: "https://archive.org/download/nes-roms-collection/Super%20Mario%20Bros.%20%28USA%29.nes".to_string(), 
+            ia_id: None 
+        },
+        RomStoreEntry { 
+            id: "smw-snes".to_string(), 
+            name: "Super Mario World".to_string(), 
+            console: "Super Nintendo".to_string(), 
+            region: "USA".to_string(), 
+            size: "512 KB".to_string(), 
+            file_name: "Super Mario World (USA).sfc".to_string(), 
+            download_url: "https://archive.org/download/snes-roms-collection/Super%20Mario%20World%20%28USA%29.sfc".to_string(), 
+            ia_id: None 
+        },
+    ]
+}
+
+#[tauri::command]
+async fn search_rom_store(query: String, console_filter: Option<String>) -> Result<Vec<RomStoreEntry>, String> {
+    let mut results = Vec::new();
+    
+    // If we have a console filter, we search IA collections
+    if let Some(console) = console_filter {
+        if let Some(collection) = get_ia_collection(&console) {
+            let (q, sort_param) = if query.is_empty() {
+                // If query is empty, show most downloaded items in the collection
+                (format!("collection:({})", collection), "&sort[]=downloads%20desc")
+            } else {
+                (format!("collection:({}) AND title:(\"{}\")", collection, query), "")
+            };
+            
+            let url = format!(
+                "https://archive.org/advancedsearch.php?q={}&fl[]=identifier,title,description&rows=100{}&output=json",
+                urlencoding::encode(&q),
+                sort_param
+            );
+            
+            let client = reqwest::Client::new();
+            let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+            let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+            
+            if let Some(docs) = json["response"]["docs"].as_array() {
+                for doc in docs {
+                    results.push(RomStoreEntry {
+                        id: doc["identifier"].as_str().unwrap_or("").to_string(),
+                        name: doc["title"].as_str().unwrap_or("").to_string(),
+                        console: console.clone(),
+                        region: "World".to_string(), 
+                        size: "Varies".to_string(),
+                        file_name: "".to_string(), // Will be resolved during download
+                        download_url: "".to_string(), // Will be resolved during download
+                        ia_id: Some(doc["identifier"].as_str().unwrap_or("").to_string()),
+                    });
+                }
+            }
+        }
+    } else if query.is_empty() {
+        // Return a few featured items across consoles
+        results = get_rom_catalog();
+    }
+    
+    Ok(results)
+}
+
+#[tauri::command]
+fn get_store_consoles() -> Vec<String> {
+    vec![
+        "NES", "Super Nintendo", "Nintendo 64", "Game Boy Advance", "Nintendo DS",
+        "GameCube / Wii", "Wii U", "Nintendo Switch", "PlayStation 1", "PlayStation 2",
+        "PlayStation 3", "PlayStation Portable", "Dreamcast", "Mega Drive", "Master System",
+        "Saturn", "Xbox", "Neo-Geo", "PC Engine", "Atari 2600"
+    ].into_iter().map(|s| s.to_string()).collect()
+}
+
+#[tauri::command]
+async fn download_rom(
+    download_url: String,
+    console: String,
+    file_name: String,
+    ia_id: Option<String>,
+    app_handle: tauri::AppHandle,
+) -> Result<String, String> {
+    let config = get_config();
+    let folder = console_to_folder(&console);
+    let rom_dir = PathBuf::from(&config.roms_directory).join(folder);
+    
+    fs::create_dir_all(&rom_dir).map_err(|e| format!("Failed to create ROM directory: {}", e))?;
+    
+    let mut final_url = download_url;
+    let mut final_file_name = file_name;
+    
+    // If we have an ia_id, we need to resolve the best file first
+    if let Some(id) = ia_id {
+        let _ = app_handle.emit("rom-download-progress", serde_json::json!({
+            "file_id": id,
+            "status": "resolving",
+            "progress": 5
+        }));
+        
+        let meta_url = format!("https://archive.org/metadata/{}", id);
+        let client = reqwest::Client::new();
+        let response = client.get(&meta_url).send().await.map_err(|e| e.to_string())?;
+        let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        
+        if let Some(files) = json["files"].as_array() {
+            // Find best file based on extensions
+            let extensions = match console.as_str() {
+                "NES" => vec![".nes"],
+                "Super Nintendo" => vec![".sfc", ".smc"],
+                "Nintendo 64" => vec![".z64", ".v64", ".n64"],
+                "Game Boy Advance" => vec![".gba"],
+                "Nintendo DS" => vec![".nds"],
+                "GameCube / Wii" => vec![".rvz", ".wbfs", ".iso"],
+                "Wii U" => vec![".wua", ".wud", ".wux"],
+                "Nintendo Switch" => vec![".nsp", ".xci"],
+                "PlayStation 1" => vec![".chd", ".pbp", ".bin", ".iso"],
+                "PlayStation 2" => vec![".chd", ".iso"],
+                "PlayStation 3" => vec![".iso", ".pkg"],
+                "PlayStation Portable" => vec![".iso", ".cso"],
+                "Dreamcast" => vec![".chd", ".gdi", ".cdi"],
+                "Mega Drive" => vec![".md", ".gen", ".bin"],
+                _ => vec![".zip", ".7z", ".rom"],
+            };
+            
+            let mut best_file = None;
+            for file in files {
+                let name = file["name"].as_str().unwrap_or("");
+                if extensions.iter().any(|ext| name.to_lowercase().ends_with(ext)) {
+                    best_file = Some(name.to_string());
+                    break;
+                }
+            }
+            
+            if let Some(f) = best_file {
+                final_file_name = f.clone();
+                final_url = format!("https://archive.org/download/{}/{}", id, f);
+            } else {
+                return Err("Could not find a compatible ROM file in this collection".to_string());
+            }
+        }
+    }
+    
+    let dest = rom_dir.join(&final_file_name);
+    
+    // Check if already downloaded
+    if dest.exists() {
+        return Ok(format!("{} is already downloaded!", final_file_name));
+    }
+    
+    let _ = app_handle.emit("rom-download-progress", serde_json::json!({
+        "file_name": final_file_name,
+        "status": "downloading",
+        "progress": 10
+    }));
+    
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(3600)) // 1 hour for big games
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+    
+    let mut response = client
+        .get(&final_url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .send()
+        .await
+        .map_err(|e| format!("Download failed: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("Download failed with HTTP {}", response.status()));
+    }
+    
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded_size: u64 = 0;
+    let mut last_emit = std::time::Instant::now();
+    
+    let mut file = fs::File::create(&dest).map_err(|e| format!("Failed to create file: {}", e))?;
+    use std::io::Write;
+    
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded_size += chunk.len() as u64;
+        
+        if last_emit.elapsed().as_millis() > 500 {
+            let progress = if total_size > 0 {
+                (downloaded_size as f64 / total_size as f64 * 100.0) as u32
+            } else {
+                50
+            };
+            
+            let _ = app_handle.emit("rom-download-progress", serde_json::json!({
+                "file_name": final_file_name,
+                "status": "downloading",
+                "progress": progress,
+                "downloaded": downloaded_size,
+                "total": total_size
+            }));
+            last_emit = std::time::Instant::now();
+        }
+    }
+    
+    let _ = app_handle.emit("rom-download-progress", serde_json::json!({
+        "file_name": final_file_name,
+        "status": "done",
+        "progress": 100
+    }));
+    
+    Ok(format!("{} downloaded successfully to {}", final_file_name, rom_dir.display()))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -843,6 +1141,9 @@ pub fn run() {
             launch_emulator,
             scan_roms,
             fetch_boxart,
+            search_rom_store,
+            get_store_consoles,
+            download_rom,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
