@@ -1205,7 +1205,8 @@ export default function App() {
                   onClick={async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session) return;
-                    const url = `https://emuworld.alwaysdata.net/#access_token=${session.access_token}&refresh_token=${session.refresh_token}`;
+                    // Format plus standard pour Supabase
+                    const url = `https://emuworld.alwaysdata.net/#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&type=recovery`;
                     await openUrl(url);
                   }}
                 >

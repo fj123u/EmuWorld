@@ -298,6 +298,22 @@
             background: var(--border);
         }
 
+        #debug-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #1e1e26;
+            border-bottom: 2px solid var(--neon-purple);
+            padding: 8px 16px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #a855f7;
+            z-index: 9999;
+            display: none;
+            justify-content: space-between;
+        }
+
         @keyframes spin {
             to {
                 transform: rotate(360deg);
@@ -307,6 +323,11 @@
 </head>
 
 <body>
+    <div id="debug-banner">
+        <span id="debug-status">Initializing...</span>
+        <span id="debug-tokens"></span>
+    </div>
+
     <div id="loading" class="loading-overlay">
         <div class="spinner"></div>
     </div>
@@ -395,42 +416,48 @@
         const appContainer = document.getElementById('app-container');
         const statusMsg = document.getElementById('status-msg');
 
+        const debugBanner = document.getElementById('debug-banner');
+        const debugStatus = document.getElementById('debug-status');
+        const debugTokens = document.getElementById('debug-tokens');
+
+        function setDebug(msg, tokensFound = false) {
+            debugBanner.style.display = 'flex';
+            debugStatus.textContent = "[EmuWorld] " + msg;
+            if (tokensFound) debugTokens.textContent = "✅ Tokens found!";
+            console.log("[EmuWorld-Debug] " + msg);
+        }
+
         // 1. Setup Auth Listener FIRST
         if (supabaseClient) {
             supabaseClient.auth.onAuthStateChange((event, session) => {
-                console.log("[EmuWorld] Auth event:", event, !!session ? "User Logged In" : "No Session");
+                setDebug("Auth Event: " + event + (session ? " (Logged In)" : " (No Session)"));
+                loading.style.display = 'none';
                 
-                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
-                    loading.style.display = 'none';
-                    if (session) {
-                        showApp(session.user);
-                        setupRealtime(session.user.id);
-                    } else {
-                        showAuth();
-                    }
-                } else if (event === 'SIGNED_OUT') {
-                    loading.style.display = 'none';
-                    cleanupRealtime();
+                if (session) {
+                    showApp(session.user);
+                    setupRealtime(session.user.id);
+                } else {
                     showAuth();
+                    cleanupRealtime();
                 }
             });
         }
 
         // 2. Handshake Logic (Check for tokens from App)
         async function checkAutoLogin() {
+            setDebug("Checking for App Tokens...");
             const hash = window.location.hash.substring(1);
             if (!hash) {
-                console.log("[EmuWorld] No login hash found.");
+                setDebug("No tokens in URL hash.");
                 return;
             }
             
-            console.log("[EmuWorld] Hash detected, checking tokens...");
             const params = new URLSearchParams(hash);
             const access_token = params.get('access_token');
             const refresh_token = params.get('refresh_token');
 
             if (access_token && refresh_token) {
-                console.log("[EmuWorld] Handshake tokens found! Restoring session...");
+                setDebug("Handshake detecting! Syncing session...", true);
                 loading.style.display = 'flex';
                 
                 try {
@@ -440,17 +467,18 @@
                     });
 
                     if (!error) {
-                        console.log("[EmuWorld] Session restored successfully! ✨");
-                        // Clear hash for security
+                        setDebug("Session Sync Success! ✨", true);
                         window.history.replaceState(null, null, window.location.pathname);
                     } else {
-                        console.error("[EmuWorld] Restore failed:", error.message);
+                        setDebug("Sync Error: " + error.message, true);
                         loading.style.display = 'none';
                     }
                 } catch (e) {
-                    console.error("[EmuWorld] Crash during handshake:", e);
+                    setDebug("Handshake Crash: " + e.message, true);
                     loading.style.display = 'none';
                 }
+            } else {
+                setDebug("Hash found but tokens missing.");
             }
         }
 
@@ -459,19 +487,19 @@
         function setupRealtime(userId) {
             if (profileChannel) cleanupRealtime();
             
-            console.log("[EmuWorld] Subscribing to Realtime for user:", userId);
+            setDebug("Realtime: Subscribing for " + userId);
             profileChannel = supabaseClient
-                .channel(`public:profiles:id=eq.${userId}`)
+                .channel(`realtime_profile_${userId}`)
                 .on(
                     'postgres_changes',
                     { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
                     (payload) => {
-                        console.log("[EmuWorld] Realtime update received:", payload.new);
+                        setDebug("Realtime: CHANGE DETECTED! ⚡");
                         updateUI(payload.new);
                     }
                 )
                 .subscribe((status) => {
-                    console.log("[EmuWorld] Realtime status:", status);
+                    setDebug("Realtime Channel: " + status);
                 });
         }
 
