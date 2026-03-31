@@ -389,80 +389,104 @@
             console.error("Failed to initialize Supabase:", e);
         }
 
-        // Elements
+        // --- INITIALIZATION ---
         const loading = document.getElementById('loading');
         const authContainer = document.getElementById('auth-container');
         const appContainer = document.getElementById('app-container');
         const statusMsg = document.getElementById('status-msg');
 
-        // --- SEAMLESS LOGIN HANDOFF ---
-        async function checkAutoLogin() {
-            const hash = window.location.hash.substring(1);
-            if (!hash) return;
-            
-            const params = new URLSearchParams(hash);
-            const access_token = params.get('access_token');
-            const refresh_token = params.get('refresh_token');
-
-            if (access_token && refresh_token) {
-                console.log("Handshake detected! Syncing session...");
-                loading.style.display = 'flex';
-                
-                const { error } = await supabaseClient.auth.setSession({
-                    access_token,
-                    refresh_token
-                });
-
-                if (!error) {
-                    window.history.replaceState(null, null, window.location.pathname);
-                } else {
-                    console.error("Handshake failed:", error.message);
-                    loading.style.display = 'none';
-                }
-            }
-        }
-        checkAutoLogin();
-
-        // Auth Change Listener
-        let profileChannel;
+        // 1. Setup Auth Listener FIRST
         if (supabaseClient) {
             supabaseClient.auth.onAuthStateChange((event, session) => {
-                console.log("Auth event received:", event);
-                loading.style.display = 'none';
-
-                if (event === 'SIGNED_OUT') {
-                    if (profileChannel) {
-                        supabaseClient.removeChannel(profileChannel);
-                        profileChannel = null;
+                console.log("[EmuWorld] Auth event:", event, !!session ? "User Logged In" : "No Session");
+                
+                if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+                    loading.style.display = 'none';
+                    if (session) {
+                        showApp(session.user);
+                        setupRealtime(session.user.id);
+                    } else {
+                        showAuth();
                     }
-                    showAuth();
-                    return;
-                }
-
-                if (session) {
-                    showApp(session.user);
-                    
-                    // --- REALTIME SYNC ---
-                    if (!profileChannel) {
-                        profileChannel = supabaseClient
-                            .channel(`public:profiles:id=eq.${session.user.id}`)
-                            .on(
-                                'postgres_changes',
-                                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
-                                (payload) => {
-                                    console.log("Web: Realtime profile update received:", payload.new);
-                                    updateUI(payload.new);
-                                }
-                            )
-                            .subscribe();
-                    }
-                } else {
+                } else if (event === 'SIGNED_OUT') {
+                    loading.style.display = 'none';
+                    cleanupRealtime();
                     showAuth();
                 }
             });
         }
 
+        // 2. Handshake Logic (Check for tokens from App)
+        async function checkAutoLogin() {
+            const hash = window.location.hash.substring(1);
+            if (!hash) {
+                console.log("[EmuWorld] No login hash found.");
+                return;
+            }
+            
+            console.log("[EmuWorld] Hash detected, checking tokens...");
+            const params = new URLSearchParams(hash);
+            const access_token = params.get('access_token');
+            const refresh_token = params.get('refresh_token');
+
+            if (access_token && refresh_token) {
+                console.log("[EmuWorld] Handshake tokens found! Restoring session...");
+                loading.style.display = 'flex';
+                
+                try {
+                    const { error } = await supabaseClient.auth.setSession({
+                        access_token,
+                        refresh_token
+                    });
+
+                    if (!error) {
+                        console.log("[EmuWorld] Session restored successfully! ✨");
+                        // Clear hash for security
+                        window.history.replaceState(null, null, window.location.pathname);
+                    } else {
+                        console.error("[EmuWorld] Restore failed:", error.message);
+                        loading.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error("[EmuWorld] Crash during handshake:", e);
+                    loading.style.display = 'none';
+                }
+            }
+        }
+
+        // --- REALTIME SYNC ---
+        let profileChannel = null;
+        function setupRealtime(userId) {
+            if (profileChannel) cleanupRealtime();
+            
+            console.log("[EmuWorld] Subscribing to Realtime for user:", userId);
+            profileChannel = supabaseClient
+                .channel(`public:profiles:id=eq.${userId}`)
+                .on(
+                    'postgres_changes',
+                    { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+                    (payload) => {
+                        console.log("[EmuWorld] Realtime update received:", payload.new);
+                        updateUI(payload.new);
+                    }
+                )
+                .subscribe((status) => {
+                    console.log("[EmuWorld] Realtime status:", status);
+                });
+        }
+
+        function cleanupRealtime() {
+            if (profileChannel) {
+                supabaseClient.removeChannel(profileChannel);
+                profileChannel = null;
+            }
+        }
+
+        // Trigger Handshake
+        checkAutoLogin();
+
         function showAuth() {
+            console.log("[EmuWorld] Rendering Auth View");
             authContainer.classList.remove('hidden');
             appContainer.classList.add('hidden');
         }
