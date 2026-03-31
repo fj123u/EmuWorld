@@ -378,6 +378,8 @@
         const SUPABASE_URL = "https://yizxrntlerzfniqkdvfg.supabase.co";
         const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpenhybnRsZXJ6Zm5pcWtkdmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTU1NjcsImV4cCI6MjA5MDQ3MTU2N30.cfZhqeB8IntRnefIS3DirXzwIJ3-u5XZPPXr7g1rO-w";
 
+        const REDIRECT_URL = window.location.origin; // Dynamically use emuworld.alwaysdata.net
+
         // Initialisation sécurisée
         let supabaseClient;
         try {
@@ -479,7 +481,7 @@
             supabaseClient.auth.signInWithOAuth({
                 provider,
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: REDIRECT_URL
                 }
             });
         };
