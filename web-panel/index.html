@@ -424,12 +424,38 @@
         checkAutoLogin();
 
         // Auth Change Listener
+        let profileChannel;
         if (supabaseClient) {
             supabaseClient.auth.onAuthStateChange((event, session) => {
                 console.log("Auth event received:", event);
                 loading.style.display = 'none';
+
+                if (event === 'SIGNED_OUT') {
+                    if (profileChannel) {
+                        supabaseClient.removeChannel(profileChannel);
+                        profileChannel = null;
+                    }
+                    showAuth();
+                    return;
+                }
+
                 if (session) {
                     showApp(session.user);
+                    
+                    // --- REALTIME SYNC ---
+                    if (!profileChannel) {
+                        profileChannel = supabaseClient
+                            .channel(`public:profiles:id=eq.${session.user.id}`)
+                            .on(
+                                'postgres_changes',
+                                { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
+                                (payload) => {
+                                    console.log("Web: Realtime profile update received:", payload.new);
+                                    updateUI(payload.new);
+                                }
+                            )
+                            .subscribe();
+                    }
                 } else {
                     showAuth();
                 }
@@ -441,12 +467,21 @@
             appContainer.classList.add('hidden');
         }
 
+        function updateUI(profile) {
+            if (profile.username) {
+                document.getElementById('username-input').value = profile.username;
+            }
+            if (profile.avatar_url) {
+                document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
+            }
+        }
+
         async function showApp(user) {
             authContainer.classList.add('hidden');
             appContainer.classList.remove('hidden');
             document.getElementById('user-email').textContent = user.email;
 
-            // Fetch profile
+            // Fetch initial profile
             try {
                 const { data: profile, error } = await supabaseClient
                     .from('profiles')
@@ -454,12 +489,7 @@
                     .eq('id', user.id)
                     .single();
 
-                if (profile) {
-                    document.getElementById('username-input').value = profile.username || "";
-                    if (profile.avatar_url) {
-                        document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
-                    }
-                }
+                if (profile) updateUI(profile);
                 if (error && error.code !== 'PGRST116') console.error("Profile fetch error:", error);
             } catch (e) {
                 console.error("Unexpected error fetching profile:", e);

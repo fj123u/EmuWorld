@@ -260,22 +260,48 @@ export default function App() {
     }
   }, []);
 
-  // Check session on mount
+  // Check session and setup real-time sync
   useEffect(() => {
+    let profileChannel: any = null;
+
+    const setupRealtime = (userId: string) => {
+      if (profileChannel) supabase.removeChannel(profileChannel);
+      profileChannel = supabase
+        .channel(`public:profiles:id=eq.${userId}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+          (payload) => {
+            console.log("[EmuWorld] Realtime profile update:", payload.new);
+            setProfile(payload.new as Profile);
+          }
+        )
+        .subscribe();
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
         fetchProfile(session.user.id);
+        setupRealtime(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        setupRealtime(session.user.id);
+      } else {
+        setProfile(null);
+        if (profileChannel) supabase.removeChannel(profileChannel);
+      }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      if (profileChannel) supabase.removeChannel(profileChannel);
+    };
   }, [fetchProfile]);
 
   // Listen for deep-link OAuth callbacks
