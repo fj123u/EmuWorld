@@ -1164,14 +1164,28 @@ export default function App() {
               </div>
 
               <div className="account-modal__footer">
-                <button className="account-modal__logout" onClick={() => { supabase.auth.signOut(); setShowAccountModal(false); }}>
+                <button 
+                  className="account-modal__logout" 
+                  onClick={async () => { 
+                    await supabase.auth.signOut(); 
+                    setShowAccountModal(false); 
+                  }}
+                >
                   <LogOut size={16} />
                   Sign Out
                 </button>
-                <div className="account-modal__external">
-                  <Link2 size={14} />
-                  <span>Full panel on <a href="#" target="_blank" rel="noopener noreferrer">emuworld.com</a></span>
-                </div>
+                <button 
+                  className="account-modal__web-btn" 
+                  onClick={async () => {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    if (!session) return;
+                    const url = `https://emuworld.alwaysdata.net/#access_token=${session.access_token}&refresh_token=${session.refresh_token}`;
+                    await openUrl(url);
+                  }}
+                >
+                  <ExternalLink size={14} />
+                  Manage account on Web
+                </button>
               </div>
             </motion.div>
           </motion.div>

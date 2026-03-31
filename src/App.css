@@ -1503,14 +1503,58 @@ body::before {
   color: var(--text-muted);
 }
 
-.account-modal__external a {
-  color: var(--neon-cyan);
-  text-decoration: none;
-  font-weight: 600;
+.account-modal__footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.account-modal__external a:hover {
-  text-decoration: underline;
+.account-modal__logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--neon-red);
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-modal__logout:hover {
+  background: var(--neon-red);
+  color: white;
+  transform: translateY(-2px);
+}
+
+.account-modal__web-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--neon-purple);
+  padding: 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-modal__web-btn:hover {
+  background: var(--neon-purple);
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px var(--neon-purple-glow);
 }
 
 .animate-spin {
