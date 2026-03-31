@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -45,7 +46,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: 
+            background:
                 radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 40%),
                 radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 40%);
             z-index: -1;
@@ -128,7 +129,7 @@
             align-items: center;
             justify-content: center;
             cursor: pointer;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
             transition: var(--transition);
         }
 
@@ -154,7 +155,7 @@
         input {
             width: 100%;
             padding: 12px 16px;
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border);
             border-radius: 12px;
             color: white;
@@ -212,11 +213,21 @@
             height: 20px;
         }
 
-        .success { color: #10b981; }
-        .error { color: #ef4444; }
+        .success {
+            color: #10b981;
+        }
 
-        #auth-container.hidden { display: none; }
-        #app-container.hidden { display: none; }
+        .error {
+            color: #ef4444;
+        }
+
+        #auth-container.hidden {
+            display: none;
+        }
+
+        #app-container.hidden {
+            display: none;
+        }
 
         .loading-overlay {
             position: fixed;
@@ -237,12 +248,18 @@
             animation: spin 0.8s linear infinite;
         }
 
-        @keyframes spin { to { transform: rotate(360deg); } }
-
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
 </head>
+
 <body>
-    <div id="loading" class="loading-overlay"><div class="spinner"></div></div>
+    <div id="loading" class="loading-overlay">
+        <div class="spinner"></div>
+    </div>
 
     <div class="container">
         <!-- Auth View -->
@@ -273,7 +290,8 @@
 
             <div class="profile-section">
                 <div class="avatar-container">
-                    <img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=1e1e26&color=a855f7" alt="Avatar">
+                    <img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=1e1e26&color=a855f7"
+                        alt="Avatar">
                     <label class="avatar-edit" for="avatar-input">
                         📸
                         <input type="file" id="avatar-input" hidden accept="image/*">
@@ -294,26 +312,36 @@
     </div>
 
     <script>
-        const SUPABASE_URL = "https://yizxrntlerzfniqkdvfg.supabase.co"; 
-        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpenhybnRsZXJ6Zm5pcWtkdmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzg1MzYsImV4cCI6MjA1ODYxNDUzNn0.V7_p-p0_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_V7"; // Minimal placeholder
+        const SUPABASE_URL = "https://yizxrntlerzfniqkdvfg.supabase.co";
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpenhybnRsZXJ6Zm5pcWtkdmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTU1NjcsImV4cCI6MjA5MDQ3MTU2N30.cfZhqeB8IntRnefIS3DirXzwIJ3-u5XZPPXr7g1rO-w";
 
-        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // Initialisation sécurisée
+        let supabaseClient;
+        try {
+            supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            console.log("Supabase Client initialized successfully.");
+        } catch (e) {
+            console.error("Failed to initialize Supabase:", e);
+        }
 
         // Elements
         const loading = document.getElementById('loading');
         const authContainer = document.getElementById('auth-container');
         const appContainer = document.getElementById('app-container');
         const statusMsg = document.getElementById('status-msg');
-        
+
         // Auth Change Listener
-        supabase.auth.onAuthStateChange((event, session) => {
-            loading.style.display = 'none';
-            if (session) {
-                showApp(session.user);
-            } else {
-                showAuth();
-            }
-        });
+        if (supabaseClient) {
+            supabaseClient.auth.onAuthStateChange((event, session) => {
+                console.log("Auth event received:", event);
+                loading.style.display = 'none';
+                if (session) {
+                    showApp(session.user);
+                } else {
+                    showAuth();
+                }
+            });
+        }
 
         function showAuth() {
             authContainer.classList.remove('hidden');
@@ -326,17 +354,22 @@
             document.getElementById('user-email').textContent = user.email;
 
             // Fetch profile
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single();
+            try {
+                const { data: profile, error } = await supabaseClient
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', user.id)
+                    .single();
 
-            if (profile) {
-                document.getElementById('username-input').value = profile.username || "";
-                if (profile.avatar_url) {
-                    document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
+                if (profile) {
+                    document.getElementById('username-input').value = profile.username || "";
+                    if (profile.avatar_url) {
+                        document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
+                    }
                 }
+                if (error && error.code !== 'PGRST116') console.error("Profile fetch error:", error);
+            } catch (e) {
+                console.error("Unexpected error fetching profile:", e);
             }
         }
 
@@ -344,20 +377,22 @@
         document.getElementById('btn-login').onclick = async () => {
             const email = document.getElementById('auth-email').value;
             const password = document.getElementById('auth-password').value;
-            const { error } = await supabase.auth.signInWithPassword({ email, password });
-            if (error) document.getElementById('auth-error').textContent = error.message;
+            const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+            if (error) {
+                document.getElementById('auth-error').textContent = error.message;
+            }
         };
 
         // Save Logic
         document.getElementById('btn-save').onclick = async () => {
-            const user = (await supabase.auth.getUser()).data.user;
+            const { data: { user } } = await supabaseClient.auth.getUser();
             if (!user) return;
 
             const username = document.getElementById('username-input').value;
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('profiles')
-                .upsert({ 
-                    id: user.id, 
+                .upsert({
+                    id: user.id,
                     username,
                     updated_at: new Date().toISOString()
                 });
@@ -375,7 +410,7 @@
         // Avatar Upload Logic
         document.getElementById('avatar-input').onchange = async (e) => {
             const file = e.target.files[0];
-            const user = (await supabase.auth.getUser()).data.user;
+            const { data: { user } } = await supabaseClient.auth.getUser();
             if (!file || !user) return;
 
             statusMsg.textContent = "Uploading... ⏳";
@@ -385,18 +420,18 @@
                 const fileExt = file.name.split('.').pop();
                 const filePath = `${user.id}-${Math.random()}.${fileExt}`;
 
-                const { error: uploadError } = await supabase.storage
+                const { error: uploadError } = await supabaseClient.storage
                     .from('avatars')
                     .upload(filePath, file);
 
                 if (uploadError) throw uploadError;
 
-                const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+                const { data } = supabaseClient.storage.from('avatars').getPublicUrl(filePath);
                 const publicUrl = `${data.publicUrl}?t=${new Date().getTime()}`;
-                
-                await supabase.from('profiles')
-                    .upsert({ 
-                        id: user.id, 
+
+                await supabaseClient.from('profiles')
+                    .upsert({
+                        id: user.id,
                         avatar_url: data.publicUrl,
                         updated_at: new Date().toISOString()
                     });
@@ -411,8 +446,9 @@
         };
 
         // Logout
-        document.getElementById('btn-logout').onclick = () => supabase.auth.signOut();
+        document.getElementById('btn-logout').onclick = () => supabaseClient.auth.signOut();
 
     </script>
 </body>
+
 </html>
