@@ -1135,12 +1135,12 @@ body::before {
   animation: cover-shimmer 1.5s infinite;
 }
 
-/* ================================================
+/* =========================/* ================================================
    SIDEBAR USER CARD
    ================================================ */
 .sidebar__user-card {
   margin-top: auto;
-  padding: 12px 16px;
+  padding: 12px 14px;
   border-top: 1px solid var(--border);
 }
 
@@ -1148,6 +1148,15 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.sidebar__user-info:hover {
+  background: var(--bg-hover);
 }
 
 .sidebar__user-avatar {
@@ -1192,20 +1201,26 @@ body::before {
   text-overflow: ellipsis;
 }
 
-.sidebar__user-logout {
+.sidebar__user-settings {
   background: none;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 6px;
+  padding: 4px;
   border-radius: 6px;
   transition: all var(--transition-fast);
-  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(5px);
 }
 
-.sidebar__user-logout:hover {
-  color: var(--neon-red);
-  background: var(--neon-red-glow);
+.sidebar__user-info:hover .sidebar__user-settings {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar__user-settings:hover {
+  color: var(--neon-purple);
+  background: var(--neon-purple-glow);
 }
 
 .sidebar__login-btn {
@@ -1230,51 +1245,292 @@ body::before {
 }
 
 /* ================================================
-   LOGIN MODAL
+   LOGIN & ACCOUNT MODALS
    ================================================ */
-.login-overlay {
+.login-overlay, .account-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10000;
 }
 
-.login-modal {
+.login-modal, .account-modal {
   background: var(--bg-secondary);
   border: 1px solid var(--border-hover);
   border-radius: 20px;
-  padding: 36px 32px;
+  padding: 32px;
   width: 420px;
   max-width: 95vw;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 60px var(--neon-purple-glow);
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.7), 0 0 80px rgba(168, 85, 247, 0.15);
+  position: relative;
 }
 
-.login-modal__header {
-  text-align: center;
+/* --- Account Modal Specific --- */
+.account-modal {
+  width: 450px;
+}
+
+.account-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 24px;
 }
 
-.login-modal__logo {
-  font-size: 2.5rem;
-  margin-bottom: 8px;
-}
-
-.login-modal__title {
-  font-size: 1.4rem;
+.account-modal__title {
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 4px;
+  margin: 0;
 }
 
-.login-modal__subtitle {
+.account-modal__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 10px;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-modal__close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.account-modal__content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.account-modal__label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.account-modal__avatar-container {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px;
+  background: var(--bg-primary);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.account-modal__avatar-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+
+.account-modal__avatar, .account-modal__avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 20px;
+  object-fit: cover;
+  background: var(--bg-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neon-purple);
+  border: 2px solid var(--neon-purple-glow);
+}
+
+.account-modal__avatar-edit {
+  position: absolute;
+  bottom: -6px;
+  right: -6px;
+  width: 30px;
+  height: 30px;
+  background: var(--neon-purple);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  transition: all var(--transition-fast);
+}
+
+.account-modal__avatar-edit:hover {
+  transform: scale(1.1);
+  background: var(--neon-purple-soft);
+}
+
+.account-modal__avatar-info .account-modal__text {
   font-size: 0.85rem;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+}
+
+.account-modal__avatar-info .account-modal__hint {
+  font-size: 0.75rem;
   color: var(--text-muted);
   margin: 0;
 }
+
+.account-modal__field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.account-modal__field-icon {
+  position: absolute;
+  left: 14px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.account-modal__input {
+  flex: 1;
+  padding: 12px 14px 12px 42px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.account-modal__input:focus {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 0 3px var(--neon-purple-glow);
+}
+
+.account-modal__save {
+  padding: 10px 16px;
+  background: var(--neon-purple);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-modal__save:hover:not(:disabled) {
+  background: var(--neon-purple-soft);
+  box-shadow: 0 4px 12px var(--neon-purple-glow);
+}
+
+.account-modal__save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.account-modal__identities {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-modal__identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-primary);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.account-modal__identity-check {
+  margin-left: auto;
+  color: var(--neon-cyan);
+}
+
+.account-modal__footer {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.account-modal__logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: var(--neon-red-glow);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 12px;
+  color: var(--neon-red);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.account-modal__logout:hover {
+  background: var(--neon-red);
+  color: white;
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.3);
+}
+
+.account-modal__external {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.account-modal__external a {
+  color: var(--neon-cyan);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.account-modal__external a:hover {
+  text-decoration: underline;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* --- Rest of Modal Styles --- */
+.login-modal {
+  text-align: center;
+}
+
+.login-modal__header { margin-bottom: 24px; }
+.login-modal__logo { font-size: 2.5rem; margin-bottom: 8px; }
+.login-modal__title { font-size: 1.4rem; font-weight: 700; color: var(--text-primary); margin: 0 0 4px; }
+.login-modal__subtitle { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
 
 .login-modal__error {
   display: flex;
@@ -1289,12 +1545,7 @@ body::before {
   margin-bottom: 16px;
 }
 
-.login-modal__socials {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
+.login-modal__socials { display: flex; gap: 10px; margin-bottom: 20px; }
 .login-modal__social-btn {
   flex: 1;
   display: flex;
@@ -1312,32 +1563,11 @@ body::before {
   transition: all var(--transition-fast);
 }
 
-.login-modal__social-btn:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-hover);
-}
-
-.login-modal__social-btn--discord:hover {
-  background: rgba(88, 101, 242, 0.15);
-  border-color: rgba(88, 101, 242, 0.4);
-  color: #7289da;
-}
-
-.login-modal__social-btn--google:hover {
-  background: rgba(66, 133, 244, 0.1);
-  border-color: rgba(66, 133, 244, 0.3);
-}
-
-.login-modal__social-btn--github:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.login-modal__social-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  transform: none;
-}
+.login-modal__social-btn:hover { transform: translateY(-2px); border-color: var(--border-hover); }
+.login-modal__social-btn--discord:hover { background: rgba(88, 101, 242, 0.15); border-color: rgba(88, 101, 242, 0.4); color: #7289da; }
+.login-modal__social-btn--google:hover { background: rgba(66, 133, 244, 0.1); border-color: rgba(66, 133, 244, 0.3); }
+.login-modal__social-btn--github:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
+.login-modal__social-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .login-modal__divider {
   display: flex;
@@ -1347,36 +1577,11 @@ body::before {
   color: var(--text-muted);
   font-size: 0.75rem;
 }
+.login-modal__divider::before, .login-modal__divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-.login-modal__divider::before,
-.login-modal__divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-.login-modal__form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.login-modal__field {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.login-modal__field-icon {
-  position: absolute;
-  left: 14px;
-  color: var(--text-muted);
-  pointer-events: none;
-  z-index: 1;
-}
-
+.login-modal__form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.login-modal__field { position: relative; display: flex; align-items: center; }
+.login-modal__field-icon { position: absolute; left: 14px; color: var(--text-muted); pointer-events: none; z-index: 1; }
 .login-modal__input {
   width: 100%;
   padding: 12px 14px 12px 42px;
@@ -1389,15 +1594,8 @@ body::before {
   outline: none;
   transition: all var(--transition-fast);
 }
-
-.login-modal__input:focus {
-  border-color: var(--neon-purple);
-  box-shadow: 0 0 0 3px var(--neon-purple-glow);
-}
-
-.login-modal__input::placeholder {
-  color: var(--text-muted);
-}
+.login-modal__input:focus { border-color: var(--neon-purple); box-shadow: 0 0 0 3px var(--neon-purple-glow); }
+.login-modal__input::placeholder { color: var(--text-muted); }
 
 .login-modal__eye {
   position: absolute;
@@ -1411,10 +1609,7 @@ body::before {
   display: flex;
   align-items: center;
 }
-
-.login-modal__eye:hover {
-  color: var(--text-secondary);
-}
+.login-modal__eye:hover { color: var(--text-secondary); }
 
 .login-modal__submit {
   padding: 13px;
@@ -1429,22 +1624,10 @@ body::before {
   transition: all var(--transition-fast);
   margin-top: 4px;
 }
+.login-modal__submit:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--neon-purple-glow); }
+.login-modal__submit:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
-.login-modal__submit:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 24px var(--neon-purple-glow);
-}
-
-.login-modal__submit:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.login-modal__footer {
-  text-align: center;
-}
-
+.login-modal__footer { text-align: center; }
 .login-modal__switch {
   background: none;
   border: none;
@@ -1454,7 +1637,5 @@ body::before {
   font-family: var(--font-family);
   transition: color var(--transition-fast);
 }
-
-.login-modal__switch:hover {
-  color: var(--text-primary);
-}
+.login-modal__switch:hover { color: var(--text-primary); }
+.login-modal__switch:hover { color: var(--text-primary); }

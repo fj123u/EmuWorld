@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmuWorld | Account Management</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0c;
+            --bg-secondary: #121217;
+            --text-primary: #ffffff;
+            --text-muted: #94a3b8;
+            --neon-purple: #a855f7;
+            --neon-cyan: #06b6d4;
+            --neon-red: #ef4444;
+            --border: rgba(255, 255, 255, 0.1);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 20%, rgba(168, 85, 247, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 40%);
+            z-index: -1;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 40px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .logo {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin: 0;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff, #94a3b8);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+            margin: 8px 0 0;
+        }
+
+        .profile-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .avatar-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+        }
+
+        #avatar-preview {
+            width: 100%;
+            height: 100%;
+            border-radius: 28px;
+            object-fit: cover;
+            border: 3px solid var(--neon-purple);
+            background: #1e1e26;
+        }
+
+        .avatar-edit {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            background: var(--neon-purple);
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: var(--transition);
+        }
+
+        .avatar-edit:hover {
+            transform: scale(1.1);
+            filter: brightness(1.1);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: white;
+            font-family: inherit;
+            font-size: 15px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        input:focus {
+            border-color: var(--neon-purple);
+            background: rgba(168, 85, 247, 0.05);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 14px;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--neon-purple), #7e22ce);
+            color: white;
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3);
+            margin-top: 10px;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(168, 85, 247, 0.4);
+        }
+
+        .btn-logout {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--neon-red);
+            margin-top: 24px;
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .btn-logout:hover {
+            background: var(--neon-red);
+            color: white;
+        }
+
+        #status-msg {
+            text-align: center;
+            font-size: 14px;
+            margin-top: 16px;
+            height: 20px;
+        }
+
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+
+        #auth-container.hidden { display: none; }
+        #app-container.hidden { display: none; }
+
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: var(--bg-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .spinner {
+            width: 30px;
+            height: 30px;
+            border: 3px solid rgba(168, 85, 247, 0.2);
+            border-top-color: var(--neon-purple);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+    <div id="loading" class="loading-overlay"><div class="spinner"></div></div>
+
+    <div class="container">
+        <!-- Auth View -->
+        <div id="auth-container" class="card hidden">
+            <div class="header">
+                <div class="logo">🎮</div>
+                <h1>EmuWorld Web</h1>
+                <p class="subtitle">Please sign in to manage your account</p>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="auth-email" placeholder="email@example.com">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="auth-password" placeholder="••••••••">
+            </div>
+            <button class="btn btn-primary" id="btn-login">Sign In</button>
+            <p id="auth-error" class="error" style="text-align: center; margin-top: 15px; font-size: 14px;"></p>
+        </div>
+
+        <!-- App View -->
+        <div id="app-container" class="card hidden">
+            <div class="header">
+                <h1>My Account</h1>
+                <p class="subtitle">Update your profile information</p>
+            </div>
+
+            <div class="profile-section">
+                <div class="avatar-container">
+                    <img id="avatar-preview" src="https://ui-avatars.com/api/?name=User&background=1e1e26&color=a855f7" alt="Avatar">
+                    <label class="avatar-edit" for="avatar-input">
+                        📸
+                        <input type="file" id="avatar-input" hidden accept="image/*">
+                    </label>
+                </div>
+                <div id="user-email" style="font-size: 14px; color: var(--text-muted);"></div>
+            </div>
+
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username-input" placeholder="Display Name">
+            </div>
+
+            <button class="btn btn-primary" id="btn-save">Save Changes</button>
+            <button class="btn btn-logout" id="btn-logout">Logout</button>
+            <div id="status-msg"></div>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://yizxrntlerzfniqkdvfg.supabase.co"; 
+        const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpenhybnRsZXJ6Zm5pcWtkdmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzg1MzYsImV4cCI6MjA1ODYxNDUzNn0.V7_p-p0_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_p_V7"; // Minimal placeholder
+
+        const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Elements
+        const loading = document.getElementById('loading');
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const statusMsg = document.getElementById('status-msg');
+        
+        // Auth Change Listener
+        supabase.auth.onAuthStateChange((event, session) => {
+            loading.style.display = 'none';
+            if (session) {
+                showApp(session.user);
+            } else {
+                showAuth();
+            }
+        });
+
+        function showAuth() {
+            authContainer.classList.remove('hidden');
+            appContainer.classList.add('hidden');
+        }
+
+        async function showApp(user) {
+            authContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            document.getElementById('user-email').textContent = user.email;
+
+            // Fetch profile
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single();
+
+            if (profile) {
+                document.getElementById('username-input').value = profile.username || "";
+                if (profile.avatar_url) {
+                    document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
+                }
+            }
+        }
+
+        // Login Logic
+        document.getElementById('btn-login').onclick = async () => {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const { error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) document.getElementById('auth-error').textContent = error.message;
+        };
+
+        // Save Logic
+        document.getElementById('btn-save').onclick = async () => {
+            const user = (await supabase.auth.getUser()).data.user;
+            if (!user) return;
+
+            const username = document.getElementById('username-input').value;
+            const { error } = await supabase
+                .from('profiles')
+                .upsert({ 
+                    id: user.id, 
+                    username,
+                    updated_at: new Date().toISOString()
+                });
+
+            if (error) {
+                statusMsg.textContent = "Error: " + error.message;
+                statusMsg.className = "error";
+            } else {
+                statusMsg.textContent = "Profile updated! ✨";
+                statusMsg.className = "success";
+                setTimeout(() => { statusMsg.textContent = ""; }, 3000);
+            }
+        };
+
+        // Avatar Upload Logic
+        document.getElementById('avatar-input').onchange = async (e) => {
+            const file = e.target.files[0];
+            const user = (await supabase.auth.getUser()).data.user;
+            if (!file || !user) return;
+
+            statusMsg.textContent = "Uploading... ⏳";
+            statusMsg.className = "";
+
+            try {
+                const fileExt = file.name.split('.').pop();
+                const filePath = `${user.id}-${Math.random()}.${fileExt}`;
+
+                const { error: uploadError } = await supabase.storage
+                    .from('avatars')
+                    .upload(filePath, file);
+
+                if (uploadError) throw uploadError;
+
+                const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+                const publicUrl = `${data.publicUrl}?t=${new Date().getTime()}`;
+                
+                await supabase.from('profiles')
+                    .upsert({ 
+                        id: user.id, 
+                        avatar_url: data.publicUrl,
+                        updated_at: new Date().toISOString()
+                    });
+
+                document.getElementById('avatar-preview').src = publicUrl;
+                statusMsg.textContent = "Avatar updated! 📸";
+                statusMsg.className = "success";
+            } catch (err) {
+                statusMsg.textContent = "Upload failed: " + err.message;
+                statusMsg.className = "error";
+            }
+        };
+
+        // Logout
+        document.getElementById('btn-logout').onclick = () => supabase.auth.signOut();
+
+    </script>
+</body>
+</html>

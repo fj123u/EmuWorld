@@ -38,6 +38,9 @@ import {
   Mail,
   Eye,
   EyeOff,
+  Camera,
+  ShieldCheck,
+  Link2,
 } from "lucide-react";
 
 /* ============================
@@ -233,17 +236,28 @@ export default function App() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  
+  // Account settings
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [newPseudo, setNewPseudo] = useState("");
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   // Fetch profile from Supabase
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
+      if (error) {
+        console.error("[EmuWorld] Error fetching profile:", error.message);
+        return;
+      }
       if (data) setProfile(data);
-    } catch {}
+    } catch (e) {
+      console.error("[EmuWorld] Unexpected fetch error:", e);
+    }
   }, []);
 
   // Check session on mount
@@ -309,6 +323,74 @@ export default function App() {
     };
   }, [showToast]);
 
+  // Update profile
+  const handleUpdateProfile = async () => {
+    if (!user || !newPseudo.trim()) return;
+    setIsUpdatingProfile(true);
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .upsert({ 
+          id: user.id, 
+          username: newPseudo,
+          updated_at: new Date().toISOString()
+        });
+      
+      if (error) throw error;
+      await fetchProfile(user.id);
+      showToast('Username updated! ✨', 'success');
+    } catch (e: any) {
+      showToast(`Update error: ${e.message}`, 'error');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
+  // Upload avatar
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    setIsUpdatingProfile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Math.random()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      // 1. Upload to Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // 2. Get Public URL
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      // 3. Upsert Profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .upsert({ 
+          id: user.id, 
+          avatar_url: data.publicUrl,
+          updated_at: new Date().toISOString()
+        });
+
+      if (updateError) throw updateError;
+      
+      // Force refresh with a slight delay and add cache buster to URL if needed
+      await fetchProfile(user.id);
+      showToast('Avatar updated! 📸', 'success');
+    } catch (e: any) {
+      console.error("[EmuWorld] Avatar upload error:", e);
+      showToast(`Upload error: ${e.message}`, 'error');
+    } finally {
+      setIsUpdatingProfile(false);
+    }
+  };
+
   // Social login
   const handleSocialLogin = async (provider: Provider) => {
     setAuthLoading(true);
@@ -329,6 +411,17 @@ export default function App() {
       setAuthError(e.message);
     } finally {
       setAuthLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setProfile(null);
+      showToast('Signed out successfully', 'info');
+    } catch (e: any) {
+      showToast(`Logout error: ${e.message}`, 'error');
     }
   };
 
@@ -372,14 +465,6 @@ export default function App() {
       setAuthLoading(false);
     }
   };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setProfile(null);
-    showToast('Logged out', 'info');
-  };
-
 
   // ---- Data loading ----
   const loadData = useCallback(async () => {
@@ -782,10 +867,10 @@ export default function App() {
           {/* User card at the bottom of the sidebar */}
           <div className="sidebar__user-card">
             {user ? (
-              <div className="sidebar__user-info">
+              <div className="sidebar__user-info" onClick={() => { setNewPseudo(profile?.username || ""); setShowAccountModal(true); }}>
                 <div className="sidebar__user-avatar">
                   {profile?.avatar_url ? (
-                    <img src={profile.avatar_url} alt="avatar" />
+                    <img src={`${profile.avatar_url}?t=${new Date().getTime()}`} alt="avatar" />
                   ) : (
                     <UserIcon size={20} />
                   )}
@@ -794,8 +879,8 @@ export default function App() {
                   <div className="sidebar__user-name">{profile?.username || user.email?.split('@')[0] || 'User'}</div>
                   <div className="sidebar__user-email">{user.email}</div>
                 </div>
-                <button className="sidebar__user-logout" onClick={handleLogout} title="Déconnexion">
-                  <LogOut size={14} />
+                <button className="sidebar__user-settings" title="Settings">
+                  <Settings size={14} />
                 </button>
               </div>
             ) : (
@@ -988,6 +1073,110 @@ export default function App() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* ===== ACCOUNT MODAL (RESTRICTED) ===== */}
+      <AnimatePresence>
+        {showAccountModal && user && (
+          <motion.div
+            className="account-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowAccountModal(false)}
+          >
+            <motion.div
+              className="account-modal"
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="account-modal__header">
+                <h2 className="account-modal__title">Account Settings</h2>
+                <button className="account-modal__close" onClick={() => setShowAccountModal(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="account-modal__content">
+                {/* Avatar Section */}
+                <div className="account-modal__section">
+                  <label className="account-modal__label">Profile Picture</label>
+                  <div className="account-modal__avatar-container">
+                    <div className="account-modal__avatar-wrapper">
+                      {profile?.avatar_url ? (
+                        <img src={`${profile.avatar_url}?t=${new Date().getTime()}`} alt="Avatar" className="account-modal__avatar" />
+                      ) : (
+                        <div className="account-modal__avatar-placeholder">
+                          <UserIcon size={32} />
+                        </div>
+                      )}
+                      <label className="account-modal__avatar-edit">
+                        <Camera size={16} />
+                        <input type="file" accept="image/*" onChange={handleAvatarUpload} hidden />
+                      </label>
+                    </div>
+                    <div className="account-modal__avatar-info">
+                      <p className="account-modal__text">Click the camera to upload a new photo.</p>
+                      <p className="account-modal__hint">Maximum size: 2MB</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Username Section */}
+                <div className="account-modal__section">
+                  <label className="account-modal__label">Display Name</label>
+                  <div className="account-modal__field">
+                    <UserIcon size={16} className="account-modal__field-icon" />
+                    <input
+                      type="text"
+                      className="account-modal__input"
+                      value={newPseudo || profile?.username || ""}
+                      onChange={(e) => setNewPseudo(e.target.value)}
+                      placeholder="Enter new pseudo"
+                    />
+                    <button 
+                      className="account-modal__save" 
+                      onClick={handleUpdateProfile}
+                      disabled={isUpdatingProfile || !newPseudo || newPseudo === profile?.username}
+                    >
+                      {isUpdatingProfile ? <RefreshCw size={14} className="animate-spin" /> : "Save"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Linked Accounts Section */}
+                <div className="account-modal__section">
+                  <label className="account-modal__label">Linked Connections</label>
+                  <div className="account-modal__identities">
+                    {user.identities?.map((id) => (
+                      <div key={id.id} className="account-modal__identity">
+                        {id.provider === 'discord' && <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>}
+                        {id.provider === 'google' && <svg viewBox="0 0 24 24" width="16" height="16"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>}
+                        {id.provider === 'github' && <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>}
+                        {id.provider === 'email' && <Mail size={16} />}
+                        <span className="capitalize">{id.provider}</span>
+                        <ShieldCheck size={14} className="account-modal__identity-check" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="account-modal__footer">
+                <button className="account-modal__logout" onClick={() => { supabase.auth.signOut(); setShowAccountModal(false); }}>
+                  <LogOut size={16} />
+                  Sign Out
+                </button>
+                <div className="account-modal__external">
+                  <Link2 size={14} />
+                  <span>Full panel on <a href="#" target="_blank" rel="noopener noreferrer">emuworld.com</a></span>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ===== LOGIN MODAL ===== */}
       <AnimatePresence>

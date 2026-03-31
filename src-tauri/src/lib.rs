@@ -805,9 +805,12 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             println!("[EmuWorld] Signal reçu d'une autre instance: {:?}", argv);
-            for arg in argv {
-                // On n'écoute que les liens emuworld:// et on ignore le "%1" qui est parfois envoyé par erreur par Windows
-                if arg.starts_with("emuworld://") && arg != "%1" {
+            for mut arg in argv {
+                // Nettoyage rapide au cas où Windows envoie des guillemets
+                arg = arg.trim_matches('"').to_string();
+                
+                if arg.starts_with("emuworld://") {
+                    println!("[EmuWorld] Redirection du lien vers la fenêtre principale: {}", arg);
                     let _ = app.emit("oauth-callback", arg);
                 }
             }
