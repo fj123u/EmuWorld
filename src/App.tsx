@@ -266,44 +266,47 @@ export default function App() {
 
   // Listen for deep-link OAuth callbacks
   useEffect(() => {
-    const unlisten = listen<string>('oauth-callback', async (event) => {
+    const unlistenPromise = listen<string>('oauth-callback', async (event) => {
       console.log('[Auth] OAuth callback received:', event.payload);
       try {
-        // Extract code from URL: emuworld://auth-callback#access_token=...&refresh_token=...
-        const url = event.payload;
-        const hashPart = url.split('#')[1] || url.split('?')[1] || '';
-        const params = new URLSearchParams(hashPart);
+        const urlStr = event.payload;
+        // Robust parsing of parameters from both query string (?) and hash fragment (#)
+        // We replace "emuworld://" with "http://localhost/" so the URL constructor can parse it on all systems
+        const urlObj = new URL(urlStr.replace('emuworld://', 'http://localhost/'));
+        const params = new URLSearchParams(urlObj.search || urlObj.hash.substring(1));
+        
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
+        const code = params.get('code');
         
         if (accessToken && refreshToken) {
+          console.log('[Auth] Detected Implicit Flow (tokens)');
           const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken
           });
-          if (error) {
-            showToast(`Auth error: ${error.message}`, 'error');
-          } else {
-            showToast('Connected successfully! 🎉', 'success');
-            setShowLoginModal(false);
-          }
+          if (error) throw error;
+          showToast('Connected successfully! 🎉', 'success');
+          setShowLoginModal(false);
+        } else if (code) {
+          console.log('[Auth] Detected PKCE Flow (code)');
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          showToast('Connected successfully! 🎉', 'success');
+          setShowLoginModal(false);
         } else {
-          // Try PKCE code exchange
-          const code = params.get('code');
-          if (code) {
-            const { error } = await supabase.auth.exchangeCodeForSession(code);
-            if (error) showToast(`Auth error: ${error.message}`, 'error');
-            else {
-              showToast('Connected successfully! 🎉', 'success');
-              setShowLoginModal(false);
-            }
-          }
+          console.warn('[Auth] No session data found in callback URL');
         }
       } catch (e: any) {
-        showToast(`Auth callback failed: ${e.message}`, 'error');
+        console.error('[Auth] Callback error:', e);
+        showToast(`Auth error: ${e.message}`, 'error');
+        setAuthError(e.message);
       }
     });
-    return () => { unlisten.then(fn => fn()); };
+
+    return () => {
+      unlistenPromise.then(fn => fn());
+    };
   }, [showToast]);
 
   // Social login

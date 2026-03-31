@@ -804,9 +804,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            println!("[EmuWorld] Second instance detected with args: {:?}", argv);
+            println!("[EmuWorld] Signal reçu d'une autre instance: {:?}", argv);
             for arg in argv {
-                if arg.starts_with("emuworld://") {
+                // On n'écoute que les liens emuworld:// et on ignore le "%1" qui est parfois envoyé par erreur par Windows
+                if arg.starts_with("emuworld://") && arg != "%1" {
                     let _ = app.emit("oauth-callback", arg);
                 }
             }
