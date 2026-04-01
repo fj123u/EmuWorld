@@ -298,6 +298,7 @@ export default function App() {
   const [downloading, setDownloading] = useState<string[]>([]);
   const [downloaded, setDownloaded] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [isSearchingStore, setIsSearchingStore] = useState(false);
   const [changelogs] = useState<ChangelogEntry[]>([
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
     { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
@@ -633,6 +634,7 @@ export default function App() {
   }, [loadStoreData]);
 
   const searchStore = useCallback(async (query: string, consoleF: string | null) => {
+    setIsSearchingStore(true);
     try {
       const results = await invoke<RomStoreEntry[]>("search_rom_store", { 
         query, 
@@ -641,8 +643,11 @@ export default function App() {
       setStoreRoms(results);
     } catch (e) {
       console.error("Store search failed:", e);
+      showToast("Store search failed. Check your internet connection.", "error");
+    } finally {
+      setIsSearchingStore(false);
     }
-  }, []);
+  }, [showToast]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -657,13 +662,13 @@ export default function App() {
 
   const handleDownloadRom = async (rom: RomStoreEntry) => {
     if (downloading.includes(rom.id) || downloaded.includes(rom.id)) return;
+    showToast(`Preparing download for ${rom.name}...`, "info");
     setDownloading(prev => [...prev, rom.id]);
-    showToast(`Downloading ${rom.name}...`, "info");
     try {
       const result = await invoke<string>("download_rom", {
-        downloadUrl: rom.download_url,
+        downloadUrlArg: rom.download_url,
         console: rom.console,
-        fileName: rom.file_name,
+        fileNameArg: rom.file_name,
         iaId: rom.ia_id || null,
       });
       setDownloaded(prev => [...prev, rom.id]);
@@ -1222,7 +1227,13 @@ export default function App() {
               {page === "store" && (
                 <div className="store-page">
                   <div className="grid grid--fixed">
-                    {storeRoms.length > 0 ? (
+                    {isSearchingStore ? (
+                      <div className="empty-state">
+                        <RefreshCw size={48} className="animate-spin mb-4 text-primary" />
+                        <h3 className="empty-state__title">Searching Archive.org...</h3>
+                        <p className="empty-state__text">Fetching the best classics for you.</p>
+                      </div>
+                    ) : storeRoms.length > 0 ? (
                       storeRoms.map((rom) => (
                         <RomStoreCard
                           key={rom.id}

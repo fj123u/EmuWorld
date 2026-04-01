@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
@@ -487,6 +486,17 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         "Arcade" => vec!["FBNeo - Arcade Games", "MAME"],
         "PC Engine" => vec!["NEC - PC Engine - TurboGrafx 16"],
         "Atari 2600" => vec!["Atari - 2600"],
+        "Mixed" | "Multiple" => vec![
+            "Nintendo - Nintendo Entertainment System",
+            "Nintendo - Super Nintendo Entertainment System",
+            "Sega - Mega Drive - Genesis",
+            "Sony - PlayStation",
+            "Nintendo - Nintendo 64",
+            "Nintendo - Game Boy Advance",
+            "Nintendo - Nintendo DS",
+            "Sega - Dreamcast",
+            "Nintendo - Game Boy",
+        ],
         _ => return Err(format!("No cover source for console: {}", console)),
     };
     
@@ -902,47 +912,157 @@ fn get_rom_catalog() -> Vec<RomStoreEntry> {
     ]
 }
 
+fn detect_console_from_title(title: &str) -> Option<String> {
+    let t = title.to_lowercase();
+    
+    // 1. Precise strings
+    if t.contains("wii u") || t.contains("(wiiu)") || t.contains("wii-u") { return Some("Wii U".to_string()); }
+    if t.contains("nintendo switch") || t.contains("(switch)") || t.contains(" nx ") { return Some("Nintendo Switch".to_string()); }
+    if t.contains("playstation 3") || t.contains("ps3") { return Some("PlayStation 3".to_string()); }
+    if t.contains("playstation 2") || t.contains("ps2") { return Some("PlayStation 2".to_string()); }
+    if t.contains("playstation 1") || t.contains(" ps1 ") || t.contains("psx") { return Some("PlayStation 1".to_string()); }
+    if t.contains("nintendo 64") || t.contains("n64") || t.ends_with(" 64") || t.contains(" 64 ") { return Some("Nintendo 64".to_string()); }
+    if t.contains("nes") || t.contains("nintendo entertainment system") { return Some("NES".to_string()); }
+    if t.contains("snes") || t.contains("super nintendo") { return Some("Super Nintendo".to_string()); }
+    if t.contains("game boy advance") || t.contains("gba") { return Some("Game Boy Advance".to_string()); }
+    if t.contains("game boy color") || t.contains("gbc") { return Some("Game Boy Color".to_string()); }
+    if t.contains("game boy") || t.contains(" gb ") && !t.contains("gba") { return Some("Game Boy".to_string()); }
+    if t.contains("gamegear") || t.contains("game gear") { return Some("Game Gear".to_string()); }
+    if t.contains("nintendo ds") || t.contains("nds") || t.contains(" ds") { return Some("Nintendo DS".to_string()); }
+    if t.contains("psp") || t.contains("playstation portable") { return Some("PlayStation Portable".to_string()); }
+    if t.contains("dreamcast") || t.contains("dc") { return Some("Dreamcast".to_string()); }
+    if t.contains("mega drive") || t.contains("genesis") || t.contains("megadrive") { return Some("Sega Genesis".to_string()); }
+    if t.contains("saturn") { return Some("Saturn".to_string()); }
+    if t.contains("gamecube") || (t.contains("wii") && !t.contains("wii u")) { return Some("GameCube / Wii".to_string()); }
+
+    // 2. Franchise Fallback (Cult names that are usually on specific systems)
+    if t.contains("super mario bros") && !t.contains("wii") && !t.contains("switch") { 
+        if t.contains(" 3") || t.contains(" 2") || t.contains("lost levels") { return Some("NES".to_string()); }
+        if t.contains("world") { return Some("Super Nintendo".to_string()); }
+        return Some("NES".to_string()); 
+    }
+    if t.contains("sonic the hedgehog") && !t.contains("adv") && !t.contains("2006") { return Some("Sega Genesis".to_string()); }
+    if t.contains("legend of zelda") {
+        if t.contains("ocarina") || t.contains("majora") { return Some("Nintendo 64".to_string()); }
+        if t.contains("link to the past") { return Some("Super Nintendo".to_string()); }
+        return Some("NES".to_string());
+    }
+    if t.contains("pokemon") || t.contains("pokémon") {
+        if t.contains("ruby") || t.contains("sapphire") || t.contains("emerald") || t.contains("firered") { return Some("Game Boy Advance".to_string()); }
+        if t.contains("red") || t.contains("blue") || t.contains("yellow") || t.contains("gold") || t.contains("silver") { return Some("Game Boy".to_string()); }
+    }
+
+    None
+}
+
 #[tauri::command]
 async fn search_rom_store(query: String, console_filter: Option<String>) -> Result<Vec<RomStoreEntry>, String> {
     let mut results = Vec::new();
-    
-    // If we have a console filter, we search IA collections
-    if let Some(console) = console_filter {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    println!("[Store] Search triggered - Query: '{}', Console: {:?}", query, console_filter);
+
+    let (q, sort_param, final_console) = if let Some(console) = console_filter {
         if let Some(collection) = get_ia_collection(&console) {
-            let (q, sort_param) = if query.is_empty() {
-                // If query is empty, show most downloaded items in the collection
-                (format!("collection:({})", collection), "&sort[]=downloads%20desc")
+            if query.is_empty() {
+                (format!("collection:({})", collection), "&sort[]=downloads%20desc", console)
             } else {
-                (format!("collection:({}) AND title:(\"{}\")", collection, query), "")
+                (format!("collection:({}) AND title:(\"{}\")", collection, query), "", console)
+            }
+        } else {
+            return Err(format!("Unknown console: {}", console));
+        }
+    } else {
+        // GLOBAL SEARCH - empty filter
+        if query.is_empty() {
+            // New robust query excluding packs and collections to get individual games
+            let q_str = "mediatype:software AND (subject:rom OR subject:redump OR subject:no-intro) AND (subject:nintendo OR subject:sony OR subject:sega) AND downloads:[1000 TO *] AND NOT title:(part OR bios OR set OR merged OR pack OR collection OR bundle OR \"rom pack\" OR \"rom set\" OR roms OR \"iso set\" OR \"romset\")";
+            (q_str.to_string(), "&sort[]=downloads%20desc", "Multiple".to_string())
+        } else {
+            // General ROM search across IA excluding bundles
+            (format!("(rom OR emulator OR game) AND mediatype:software AND title:(\"{}\") AND NOT title:(pack OR bundle OR collection OR romset OR roms)", query), "&sort[]=downloads%20desc", "Mixed".to_string())
+        }
+    };
+    
+    let url = format!(
+        "https://archive.org/advancedsearch.php?q={}&fl[]=identifier,title,description,collection,subject&rows=150{}&output=json",
+        urlencoding::encode(&q),
+        sort_param
+    );
+    
+    println!("[Store] IA Request: {}", url);
+    
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        println!("[Store] IA Error: {}", response.status());
+        return Err(format!("Archive.org API error: {}", response.status()));
+    }
+    
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    
+    if let Some(docs) = json["response"]["docs"].as_array() {
+        println!("[Store] Found {} items", docs.len());
+        for doc in docs {
+            let title = doc["title"].as_str().unwrap_or("Unknown").to_string();
+            // Determine console from collection or subject
+            let mut entry_console = if final_console == "Mixed" || final_console == "Multiple" {
+                let collection_str = doc["collection"].as_array().and_then(|a| a.first()).and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+                let subject_str = doc["subject"].as_array()
+                    .map(|a| a.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join(" "))
+                    .unwrap_or_else(|| doc["subject"].as_str().unwrap_or("").to_string())
+                    .to_lowercase();
+                
+                let combined_meta = format!("{} {}", collection_str, subject_str);
+                
+                match combined_meta.as_str() {
+                    c if c.contains("nes") && !c.contains("snes") => "NES".to_string(),
+                    c if c.contains("snes") || c.contains("super-nintendo") => "Super Nintendo".to_string(),
+                    c if c.contains("n64") => "Nintendo 64".to_string(),
+                    c if c.contains("game-boy-advance") || c.contains("gba") => "Game Boy Advance".to_string(),
+                    c if c.contains("gbc") || c.contains("game-boy-color") => "Game Boy Color".to_string(),
+                    c if c.contains("gb") || c.contains("game-boy") => "Game Boy".to_string(),
+                    c if c.contains("playstation-2") || c.contains("ps2") => "PlayStation 2".to_string(),
+                    c if c.contains("playstation-3") || c.contains("ps3") => "PlayStation 3".to_string(),
+                    c if c.contains("portable") || c.contains("psp") => "PlayStation Portable".to_string(),
+                    c if c.contains("playstation") && !c.contains("2") && !c.contains("portable") => "PlayStation 1".to_string(),
+                    c if c.contains("nintendo-ds") || c.contains("-ds") => "Nintendo DS".to_string(),
+                    c if c.contains("wii") && !c.contains("wii-u") => "GameCube / Wii".to_string(),
+                    c if (c.contains("megadrive") || c.contains("genesis")) && !c.contains("dreamcast") => "Sega Genesis".to_string(),
+                    _ => final_console.clone()
+                }
+            } else {
+                final_console.clone()
             };
-            
-            let url = format!(
-                "https://archive.org/advancedsearch.php?q={}&fl[]=identifier,title,description&rows=100{}&output=json",
-                urlencoding::encode(&q),
-                sort_param
-            );
-            
-            let client = reqwest::Client::new();
-            let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
-            let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
-            
-            if let Some(docs) = json["response"]["docs"].as_array() {
-                for doc in docs {
-                    results.push(RomStoreEntry {
-                        id: doc["identifier"].as_str().unwrap_or("").to_string(),
-                        name: doc["title"].as_str().unwrap_or("").to_string(),
-                        console: console.clone(),
-                        region: "World".to_string(), 
-                        size: "Varies".to_string(),
-                        file_name: "".to_string(), // Will be resolved during download
-                        download_url: "".to_string(), // Will be resolved during download
-                        ia_id: Some(doc["identifier"].as_str().unwrap_or("").to_string()),
-                    });
+
+            // Fallback: Detect from title if still "Mixed" or "Multiple"
+            if entry_console == "Mixed" || entry_console == "Multiple" {
+                if let Some(detected) = detect_console_from_title(&title) {
+                    entry_console = detected;
                 }
             }
+
+            results.push(RomStoreEntry {
+                id: doc["identifier"].as_str().unwrap_or("").to_string(),
+                name: title,
+                console: entry_console,
+                region: "World".to_string(), 
+                size: "Varies".to_string(),
+                file_name: "".to_string(), 
+                download_url: "".to_string(), 
+                ia_id: Some(doc["identifier"].as_str().unwrap_or("").to_string()),
+            });
         }
-    } else if query.is_empty() {
-        // Return a few featured items across consoles
+    } else {
+        println!("[Store] No docs found in response");
+    }
+    
+    // Final fallback if IA fails us entirely
+    if results.is_empty() && query.is_empty() {
         results = get_rom_catalog();
     }
     
@@ -961,23 +1081,29 @@ fn get_store_consoles() -> Vec<String> {
 
 #[tauri::command]
 async fn download_rom(
-    download_url: String,
+    download_url_arg: String, // Might be empty for IA
     console: String,
-    file_name: String,
+    file_name_arg: String,   // Might be empty for IA
     ia_id: Option<String>,
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
+    println!("[Download] Starting - Console: {}, IA ID: {:?}", console, ia_id);
     let config = get_config();
-    let folder = console_to_folder(&console);
+    let folder = if console == "Mixed" || console == "Multiple" || console.is_empty() {
+        "Downloads".to_string()
+    } else {
+        console_to_folder(&console).to_string()
+    };
     let rom_dir = PathBuf::from(&config.roms_directory).join(folder);
     
     fs::create_dir_all(&rom_dir).map_err(|e| format!("Failed to create ROM directory: {}", e))?;
     
-    let mut final_url = download_url;
-    let mut final_file_name = file_name;
+    let mut final_url = if download_url_arg.is_empty() { "".to_string() } else { download_url_arg };
+    let mut final_file_name = if file_name_arg.is_empty() { "game.bin".to_string() } else { file_name_arg };
     
     // If we have an ia_id, we need to resolve the best file first
-    if let Some(id) = ia_id {
+    if let Some(ref id) = ia_id {
+        println!("[Download] Resolving IA files for item: {}", id);
         let _ = app_handle.emit("rom-download-progress", serde_json::json!({
             "file_id": id,
             "status": "resolving",
@@ -985,7 +1111,11 @@ async fn download_rom(
         }));
         
         let meta_url = format!("https://archive.org/metadata/{}", id);
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .build()
+            .map_err(|e| e.to_string())?;
+        
         let response = client.get(&meta_url).send().await.map_err(|e| e.to_string())?;
         let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
         
@@ -997,6 +1127,7 @@ async fn download_rom(
                 "Nintendo 64" => vec![".z64", ".v64", ".n64"],
                 "Game Boy Advance" => vec![".gba"],
                 "Nintendo DS" => vec![".nds"],
+                "Game Boy" => vec![".gb", ".gbc"],
                 "GameCube / Wii" => vec![".rvz", ".wbfs", ".iso"],
                 "Wii U" => vec![".wua", ".wud", ".wux"],
                 "Nintendo Switch" => vec![".nsp", ".xci"],
@@ -1005,25 +1136,38 @@ async fn download_rom(
                 "PlayStation 3" => vec![".iso", ".pkg"],
                 "PlayStation Portable" => vec![".iso", ".cso"],
                 "Dreamcast" => vec![".chd", ".gdi", ".cdi"],
-                "Mega Drive" => vec![".md", ".gen", ".bin"],
-                _ => vec![".zip", ".7z", ".rom"],
+                "Sega Genesis" => vec![".md", ".gen", ".bin"],
+                _ => vec![".zip", ".7z", ".rom", ".bin"],
             };
             
             let mut best_file = None;
             for file in files {
                 let name = file["name"].as_str().unwrap_or("");
+                let size = file["size"].as_str().unwrap_or("0").parse::<u64>().unwrap_or(0);
+                
+                // Skip small files (nfo, txt, xml) - ROMs are usually > 10KB
+                if size < 10000 && !name.ends_with(".nes") && !name.ends_with(".gba") {
+                    continue;
+                }
+
                 if extensions.iter().any(|ext| name.to_lowercase().ends_with(ext)) {
                     best_file = Some(name.to_string());
+                    println!("[Download] Selected file: {} (Size: {} bytes)", name, size);
                     break;
                 }
             }
             
             if let Some(f) = best_file {
                 final_file_name = f.clone();
-                final_url = format!("https://archive.org/download/{}/{}", id, f);
+                // CRITICAL FIX: URL Encode the filename part to handle spaces and brackets
+                let encoded_f = urlencoding::encode(&f);
+                final_url = format!("https://archive.org/download/{}/{}", id, encoded_f);
+                println!("[Download] Resolved to encoded URL: {}", final_url);
             } else {
-                return Err("Could not find a compatible ROM file in this collection".to_string());
+                return Err("Could not find a compatible ROM file in this collection. Try another result.".to_string());
             }
+        } else {
+            return Err("No files found in IA metadata.".to_string());
         }
     }
     
