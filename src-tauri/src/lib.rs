@@ -6,9 +6,6 @@ use tauri::Emitter;
 use reqwest;
 use urlencoding;
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-
 mod emulators;
 
 /// App configuration stored as JSON
@@ -234,23 +231,29 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
     if let Some(rom) = rom_path {
-        let mut clean_rom = rom.replace(r"\\?\", "");
-        if clean_rom.starts_with(r"\\?\") {
-             clean_rom = clean_rom.trim_start_matches(r"\\?\").to_string();
-        }
-        let final_path = clean_rom.replace("/", "\\");
+        let final_path = rom.replace(r"\\?\", "").replace("/", "\\");
+        println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
         cmd.arg(&final_path);
     }
-    // Open in a new console window if requested (best for Ryujinx as per user request)
+    
+    // Use DETACHED_PROCESS (0x00000008) to separate the emulator from the app's console window
     #[cfg(target_os = "windows")]
     {
-        const CREATE_NEW_CONSOLE: u32 = 0x00000010;
-        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
-        // Use CREATE_NEW_CONSOLE to ensure a separate window opens
-        cmd.creation_flags(CREATE_NEW_CONSOLE | CREATE_NEW_PROCESS_GROUP);
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x00000008;
+        cmd.creation_flags(DETACHED_PROCESS);
     }
-    cmd.spawn().map_err(|e| e.to_string())?;
-    Ok(format!("Launched {}", emu.name))
+
+    match cmd.spawn() {
+        Ok(_) => {
+            println!("[Launch] Success!");
+            Ok(format!("Launched {}", emu.name))
+        },
+        Err(e) => {
+            println!("[Launch] ERROR spawning process: {}", e);
+            Err(format!("Could not start emulator: {}", e))
+        }
+    }
 }
 
 fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
@@ -826,6 +829,17 @@ pub struct RomStoreEntry {
     pub file_name: String,
     pub download_url: String,
     pub ia_id: Option<String>,
+    pub thumbnail_url: Option<String>,
+}
+
+fn sanitize_filename(name: &str) -> String {
+    let mut s = name.to_string();
+    let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+    for &c in &invalid_chars {
+        s = s.replace(c, "");
+    }
+    // Windows filenames cannot end in a space or a dot
+    s.trim().trim_matches(|c: char| c == '.').to_string()
 }
 
 fn get_ia_collection(console: &str) -> Option<&'static str> {
@@ -897,7 +911,8 @@ fn get_rom_catalog() -> Vec<RomStoreEntry> {
             size: "40 KB".to_string(), 
             file_name: "Super Mario Bros. (USA).nes".to_string(), 
             download_url: "https://archive.org/download/nes-roms-collection/Super%20Mario%20Bros.%20%28USA%29.nes".to_string(), 
-            ia_id: None 
+            ia_id: None,
+            thumbnail_url: None 
         },
         RomStoreEntry { 
             id: "smw-snes".to_string(), 
@@ -907,7 +922,8 @@ fn get_rom_catalog() -> Vec<RomStoreEntry> {
             size: "512 KB".to_string(), 
             file_name: "Super Mario World (USA).sfc".to_string(), 
             download_url: "https://archive.org/download/snes-roms-collection/Super%20Mario%20World%20%28USA%29.sfc".to_string(), 
-            ia_id: None 
+            ia_id: None,
+            thumbnail_url: None 
         },
     ]
 }
@@ -1046,15 +1062,20 @@ async fn search_rom_store(query: String, console_filter: Option<String>) -> Resu
                 }
             }
 
+            let entry_id = doc["identifier"].as_str().unwrap_or("").to_string();
+            // Try to find a better thumbnail url (preview image)
+            let thumb = format!("https://archive.org/services/img/{}?&height=320", entry_id);
+            
             results.push(RomStoreEntry {
-                id: doc["identifier"].as_str().unwrap_or("").to_string(),
+                id: entry_id.clone(),
                 name: title,
                 console: entry_console,
                 region: "World".to_string(), 
                 size: "Varies".to_string(),
                 file_name: "".to_string(), 
                 download_url: "".to_string(), 
-                ia_id: Some(doc["identifier"].as_str().unwrap_or("").to_string()),
+                ia_id: Some(entry_id.clone()),
+                thumbnail_url: Some(thumb),
             });
         }
     } else {
@@ -1067,6 +1088,133 @@ async fn search_rom_store(query: String, console_filter: Option<String>) -> Resu
     }
     
     Ok(results)
+}
+
+#[tauri::command]
+fn get_featured_games() -> Vec<RomStoreEntry> {
+    vec![
+        RomStoreEntry {
+            id: "loz-oot".to_string(),
+            name: "The Legend of Zelda: Ocarina of Time".to_string(),
+            console: "Nintendo 64".to_string(),
+            region: "World".to_string(),
+            size: "32 MB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("super-mario-64_n64".to_string()), 
+            thumbnail_url: Some("https://archive.org/services/img/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "sm64".to_string(),
+            name: "Super Mario 64".to_string(),
+            console: "Nintendo 64".to_string(),
+            region: "World".to_string(),
+            size: "8 MB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("super-mario-64_n64".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/super-mario-64_n64?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "sonic-adv".to_string(),
+            name: "Sonic Adventure".to_string(),
+            console: "Dreamcast".to_string(),
+            region: "World".to_string(),
+            size: "1 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("Sonic_Adventure_1999_U".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/Sonic_Adventure_1999_U?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "m-kart-wii".to_string(),
+            name: "Mario Kart Wii".to_string(),
+            console: "GameCube / Wii".to_string(),
+            region: "World".to_string(),
+            size: "4.3 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("mario-kart_202107".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/mario-kart_202107?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "pkmn-em".to_string(),
+            name: "Pokémon Emerald Version".to_string(),
+            console: "Game Boy Advance".to_string(),
+            region: "World".to_string(),
+            size: "16 MB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("pokemon-emerald-version_202308".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/pokemon-emerald-version_202308?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "halo-ce".to_string(),
+            name: "Halo: Combat Evolved".to_string(),
+            console: "Xbox".to_string(),
+            region: "World".to_string(),
+            size: "3.5 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("halo-combat-evolved_202101".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/halo-combat-evolved_202101?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "gta-sa".to_string(),
+            name: "Grand Theft Auto: San Andreas".to_string(),
+            console: "PlayStation 2".to_string(),
+            region: "World".to_string(),
+            size: "4 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("grand-theft-auto-san-andreas-utilities".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/grand-theft-auto-san-andreas-utilities?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "pkmn-plt".to_string(),
+            name: "Pokémon Platinum Version".to_string(),
+            console: "Nintendo DS".to_string(),
+            region: "World".to_string(),
+            size: "128 MB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("pokemon-platinum-version-nintendods-hiresscans".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/pokemon-platinum-version-nintendods-hiresscans?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "metroid-pr".to_string(),
+            name: "Metroid Prime".to_string(),
+            console: "GameCube / Wii".to_string(),
+            region: "World".to_string(),
+            size: "1.4 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("metroid-prime-remastered".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/metroid-prime-remastered?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "crash-3".to_string(),
+            name: "Crash Bandicoot 3: Warped".to_string(),
+            console: "PlayStation 1".to_string(),
+            region: "World".to_string(),
+            size: "500 MB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("psx_crash3".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/psx_crash3?&height=320".to_string()),
+        },
+        RomStoreEntry {
+            id: "nsmbw".to_string(),
+            name: "New Super Mario Bros. Wii".to_string(),
+            console: "GameCube / Wii".to_string(),
+            region: "World".to_string(),
+            size: "4 GB".to_string(),
+            file_name: "".to_string(),
+            download_url: "".to_string(),
+            ia_id: Some("new-super-mario-bros.-wii".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/new-super-mario-bros.-wii?&height=320".to_string()),
+        }
+    ]
 }
 
 #[tauri::command]
@@ -1083,6 +1231,7 @@ fn get_store_consoles() -> Vec<String> {
 async fn download_rom(
     download_url_arg: String, // Might be empty for IA
     console: String,
+    rom_name: String,        // NEW: Used for human-readable filenames
     file_name_arg: String,   // Might be empty for IA
     ia_id: Option<String>,
     app_handle: tauri::AppHandle,
@@ -1158,11 +1307,20 @@ async fn download_rom(
             }
             
             if let Some(f) = best_file {
-                final_file_name = f.clone();
+                // Determine original extension
+                let ext = std::path::Path::new(&f)
+                    .extension()
+                    .and_then(|ex| ex.to_str())
+                    .unwrap_or("bin");
+                
+                // Smart Renaming: "New Super Mario Bros. Wii.wbfs" instead of "SMNE01.wbfs"
+                let safe_base = sanitize_filename(&rom_name);
+                final_file_name = format!("{}.{}", safe_base, ext);
+                
                 // CRITICAL FIX: URL Encode the filename part to handle spaces and brackets
                 let encoded_f = urlencoding::encode(&f);
                 final_url = format!("https://archive.org/download/{}/{}", id, encoded_f);
-                println!("[Download] Resolved to encoded URL: {}", final_url);
+                println!("[Download] Resolved to human-readable: {} (Encoded source: {})", final_file_name, final_url);
             } else {
                 return Err("Could not find a compatible ROM file in this collection. Try another result.".to_string());
             }
@@ -1172,6 +1330,7 @@ async fn download_rom(
     }
     
     let dest = rom_dir.join(&final_file_name);
+    println!("[Download] Full target path: {:?}", dest);
     
     // Check if already downloaded
     if dest.exists() {
@@ -1236,7 +1395,7 @@ async fn download_rom(
         "progress": 100
     }));
     
-    Ok(format!("{} downloaded successfully to {}", final_file_name, rom_dir.display()))
+    Ok(format!("{} downloaded successfully to {}", final_file_name, dest.display()))
 }
 
 pub fn run() {
@@ -1287,6 +1446,7 @@ pub fn run() {
             fetch_boxart,
             search_rom_store,
             get_store_consoles,
+            get_featured_games,
             download_rom,
         ])
         .run(tauri::generate_context!())

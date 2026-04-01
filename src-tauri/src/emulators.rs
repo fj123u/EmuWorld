@@ -139,20 +139,6 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
         },
-        EmulatorInfo {
-            id: "mesen".to_string(),
-            name: "Mesen 2".to_string(),
-            console: "NES".to_string(),
-            description: "Industry-leading accuracy for NES, SNES, and Game Boy. High-performance 64-bit emulator.".to_string(),
-            download_url: "https://github.com/SourMesen/Mesen2/releases/download/2.1.1/Mesen_2.1.1_Windows.zip".to_string(),
-            executable_name: "Mesen.exe".to_string(),
-            supported_extensions: vec!["nes".to_string(), "fds".to_string(), "nsf".to_string()],
-            icon: "🧬".to_string(),
-            website: "https://www.mesen.ca/".to_string(),
-            archive_type: "zip".to_string(),
-            category: "Nintendo".to_string(),
-        },
-
         // ═══════════════════════════════════════════════════════════
         //  SONY
         // ═══════════════════════════════════════════════════════════
