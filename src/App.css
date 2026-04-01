@@ -312,6 +312,36 @@ body::before {
   opacity: 1;
 }
 
+.game-card__delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(220, 38, 38, 0.9);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.game-card:hover .game-card__delete {
+  opacity: 1;
+}
+
+.game-card__delete:hover {
+  background: #ef4444;
+  transform: scale(1.1);
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.5);
+}
+
 .game-card__info {
   padding: 10px 12px;
   border-top: 1px solid var(--border);

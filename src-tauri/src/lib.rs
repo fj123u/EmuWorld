@@ -450,6 +450,34 @@ pub struct RomFile {
     pub extension: String,
 }
 
+#[tauri::command]
+fn delete_rom(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err("File not found".to_string());
+    }
+    
+    // Delete the ROM file
+    fs::remove_file(&p).map_err(|e| format!("Failed to delete ROM: {}", e))?;
+    
+    // Attempt to delete cached cover if any
+    let config = get_config();
+    let name = p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let console_dir = p.parent()
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
+    
+    let cover_path = PathBuf::from(&config.covers_directory)
+        .join(&console_dir)
+        .join(format!("{}.png", name));
+    if cover_path.exists() {
+        let _ = fs::remove_file(cover_path);
+    }
+    
+    Ok(format!("Deleted {}", name))
+}
+
 fn match_extension(ext: &str, catalog: &[emulators::EmulatorInfo]) -> Option<(String, String)> {
     for emu in catalog {
         for supported_ext in &emu.supported_extensions {
@@ -572,7 +600,21 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         for reg in regions {
             candidates.push(format!("{} {}", &base_name, reg));
         }
-        candidates.push(base_name);
+        candidates.push(base_name.clone());
+        
+        // Handle "The " prefix swap: "Legend of Zelda, The" vs "The Legend of Zelda"
+        if base_name.to_lowercase().starts_with("the ") {
+            let stripped = &base_name[4..];
+            candidates.push(format!("{}, The", stripped));
+            for reg in regions {
+                candidates.push(format!("{}, The {}", stripped, reg));
+            }
+        } else {
+            candidates.push(format!("The {}", &base_name));
+            for reg in regions {
+                candidates.push(format!("The {} {}", &base_name, reg));
+            }
+        }
     }
 
     let client = reqwest::Client::builder()
@@ -1100,10 +1142,10 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo 64".to_string(),
             region: "World".to_string(),
             size: "32 MB".to_string(),
-            file_name: "Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De.zip".to_string(),
+            file_name: "The Legend of Zelda - Ocarina of Time (USA).zip".to_string(),
             download_url: "https://archive.org/download/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De.zip".to_string(),
             ia_id: Some("Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De".to_string()), 
-            thumbnail_url: Some("https://archive.org/services/img/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De?&height=320".to_string()),
+            thumbnail_url: Some("https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/The%20Legend%20of%20Zelda%20-%20Ocarina%20of%20Time%20(USA).png".to_string()),
         },
         RomStoreEntry {
             id: "sm64".to_string(),
@@ -1111,10 +1153,10 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo 64".to_string(),
             region: "World".to_string(),
             size: "8 MB".to_string(),
-            file_name: "super-mario-64_n64.zip".to_string(),
+            file_name: "Super Mario 64 (USA).zip".to_string(),
             download_url: "https://archive.org/download/super-mario-64_n64/super-mario-64_n64.zip".to_string(),
             ia_id: Some("super-mario-64_n64".to_string()),
-            thumbnail_url: Some("https://archive.org/services/img/super-mario-64_n64?&height=320".to_string()),
+            thumbnail_url: Some("https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/Super%20Mario%2064%20(USA).png".to_string()),
         },
         RomStoreEntry {
             id: "sonic-adv".to_string(),
@@ -1449,6 +1491,7 @@ pub fn run() {
             get_store_consoles,
             get_featured_games,
             download_rom,
+            delete_rom,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

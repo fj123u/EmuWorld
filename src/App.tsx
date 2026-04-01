@@ -138,7 +138,11 @@ const CONSOLE_ICONS: Record<string, string> = {
    Components
    ============================ */
 
-const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) => void }) => {
+const GameCard = ({ rom, onLaunch, onDelete }: { 
+  rom: RomFile, 
+  onLaunch: (rom: RomFile) => void,
+  onDelete: (rom: RomFile) => void 
+}) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -168,12 +172,8 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
       whileHover={{ scale: 1.02, y: -4 }}
       whileTap={{ scale: 0.98 }}
       className="game-card"
-      onClick={() => {
-        console.log("GameCard click detected:", rom.name);
-        onLaunch(rom);
-      }}
     >
-      <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`}>
+      <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
           <img src={cover} alt={rom.name} />
         ) : !loading ? (
@@ -186,7 +186,22 @@ const GameCard = ({ rom, onLaunch }: { rom: RomFile, onLaunch: (rom: RomFile) =>
           <Play size={24} fill="currentColor" />
         </div>
       </div>
-      <div className="game-card__info">
+
+      {/* Delete Button */}
+      <button 
+        className="game-card__delete" 
+        onClick={(e) => {
+          e.stopPropagation();
+          if (confirm(`Delete ${rom.name}?`)) {
+            onDelete(rom);
+          }
+        }}
+        title="Delete ROM"
+      >
+        <Trash2 size={14} />
+      </button>
+
+      <div className="game-card__info" onClick={() => onLaunch(rom)}>
         <div className="game-card__name">{rom.name}</div>
         <div className="game-card__meta">{rom.console} • {rom.extension.toUpperCase()}</div>
       </div>
@@ -747,6 +762,16 @@ export default function App() {
     }
   };
 
+  const handleDeleteRom = async (rom: RomFile) => {
+    try {
+      await invoke("delete_rom", { path: rom.path });
+      showToast(`Deleted ${rom.name}`, "success");
+      loadData();
+    } catch (err: any) {
+      showToast(`Delete failed: ${err}`, "error");
+    }
+  };
+
   const handleLaunch = async (rom: RomFile) => {
     try {
       console.log("handleLaunch triggered for ROM:", rom);
@@ -1278,7 +1303,12 @@ export default function App() {
                 <div className="library-content">
                   <div className="game-grid">
                     {filteredGames.map(rom => (
-                      <GameCard key={rom.path} rom={rom} onLaunch={handleLaunch} />
+                      <GameCard 
+                        key={rom.path} 
+                        rom={rom} 
+                        onLaunch={handleLaunch} 
+                        onDelete={handleDeleteRom}
+                      />
                     ))}
                   </div>
                   {filteredGames.length === 0 && (
