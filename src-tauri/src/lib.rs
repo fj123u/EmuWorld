@@ -504,10 +504,10 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
         "Wii U" => vec!["Nintendo - Wii U"],
         "Nintendo Switch" => vec!["Nintendo - Nintendo Switch"],
         "Virtual Boy" => vec!["Nintendo - Virtual Boy"],
-        "PlayStation 1" => vec!["Sony - PlayStation"],
-        "PlayStation 2" => vec!["Sony - PlayStation 2"],
-        "PlayStation 3" => vec!["Sony - PlayStation 3"],
-        "PlayStation Portable" => vec!["Sony - PlayStation Portable"],
+        "PlayStation 1" | "PS1" | "PSX" => vec!["Sony - PlayStation"],
+        "PlayStation 2" | "PS2" => vec!["Sony - PlayStation 2"],
+        "PlayStation 3" | "PS3" => vec!["Sony - PlayStation 3"],
+        "PlayStation Portable" | "PSP" => vec!["Sony - PlayStation Portable"],
         "Dreamcast" => vec!["Sega - Dreamcast"],
         "Mega Drive" => vec!["Sega - Mega Drive - Genesis"],
         "Master System" => vec!["Sega - Master System - Mark III"],
@@ -533,10 +533,14 @@ async fn fetch_boxart(game_name: String, console: String) -> Result<String, Stri
     };
     
     // Normalize name for better matching: replace underscores with spaces, collapse spaces
-    let normalized_name = game_name.replace('_', " ").replace("  ", " ").trim().to_string();
-    
+    // Strip common extensions if they were accidentally included in the stem
+    let mut normalized_name = game_name.replace('_', " ").replace("  ", " ").trim().to_string();
+    let lower_name = normalized_name.to_lowercase();
+    if lower_name.ends_with(".chd") || lower_name.ends_with(".iso") || lower_name.ends_with(".rvz") {
+        normalized_name = normalized_name[..normalized_name.len()-4].to_string();
+    }
+
     // Libretro naming: ONLY replace chars truly forbidden in URLs/filenames
-    // Keep apostrophes, parentheses, commas — libretro uses them!
     let forbidden = ['&', '*', '/', ':', '<', '>', '?', '\\', '|', '"'];
     let safe_name: String = normalized_name.chars()
         .map(|c| if forbidden.contains(&c) { '_' } else { c })
@@ -1142,10 +1146,10 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo 64".to_string(),
             region: "World".to_string(),
             size: "32 MB".to_string(),
-            file_name: "The Legend of Zelda - Ocarina of Time (USA).zip".to_string(),
+            file_name: "The Legend of Zelda - Ocarina of Time (USA).n64".to_string(),
             download_url: "https://archive.org/download/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De.zip".to_string(),
             ia_id: Some("Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De".to_string()), 
-            thumbnail_url: Some("https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%2064/Named_Boxarts/The%20Legend%20of%20Zelda%20-%20Ocarina%20of%20Time%20(USA).png".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De?&height=320".to_string()),
         },
         RomStoreEntry {
             id: "sm64".to_string(),
@@ -1214,15 +1218,15 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             thumbnail_url: Some("https://archive.org/services/img/grand-theft-auto-san-andreas-utilities?&height=320".to_string()),
         },
         RomStoreEntry {
-            id: "pkmn-plt".to_string(),
+            id: "pkmn-plat".to_string(),
             name: "Pokémon Platinum Version".to_string(),
             console: "Nintendo DS".to_string(),
-            region: "World".to_string(),
+            region: "USA".to_string(),
             size: "128 MB".to_string(),
-            file_name: "pokemon-platinum-version-nintendods-hiresscans.zip".to_string(),
-            download_url: "https://archive.org/download/pokemon-platinum-version-nintendods-hiresscans/pokemon-platinum-version-nintendods-hiresscans.zip".to_string(),
-            ia_id: Some("pokemon-platinum-version-nintendods-hiresscans".to_string()),
-            thumbnail_url: Some("https://archive.org/services/img/pokemon-platinum-version-nintendods-hiresscans?&height=320".to_string()),
+            file_name: "Pokemon - Platinum Version (USA).nds".to_string(),
+            download_url: "https://archive.org/download/platinum-version-u-v01-rom/Pokemon%20-%20Platinum%20Version%20%28USA%29%20%28Rev%201%29.zip".to_string(),
+            ia_id: Some("platinum-version-u-v01-rom".to_string()),
+            thumbnail_url: Some("https://archive.org/services/img/platinum-version-u-v01-rom?&height=320".to_string()),
         },
         RomStoreEntry {
             id: "metroid-pr".to_string(),
@@ -1292,6 +1296,7 @@ async fn download_rom(
     
     let mut final_url = if download_url_arg.is_empty() { "".to_string() } else { download_url_arg };
     let mut final_file_name = if file_name_arg.is_empty() { "game.bin".to_string() } else { file_name_arg };
+    let ia_id_clone = ia_id.clone();
     
     // If we have an ia_id, we need to resolve the best file first
     if let Some(ref id) = ia_id {
@@ -1323,7 +1328,7 @@ async fn download_rom(
                 "GameCube / Wii" => vec![".rvz", ".wbfs", ".iso"],
                 "Wii U" => vec![".wua", ".wud", ".wux"],
                 "Nintendo Switch" => vec![".nsp", ".xci"],
-                "PlayStation 1" => vec![".chd", ".pbp", ".bin", ".iso"],
+                "PlayStation 1" => vec![".chd", ".pbp", ".bin", ".iso", ".cue"],
                 "PlayStation 2" => vec![".chd", ".iso"],
                 "PlayStation 3" => vec![".iso", ".pkg"],
                 "PlayStation Portable" => vec![".iso", ".cso"],
@@ -1394,7 +1399,7 @@ async fn download_rom(
     
     let mut response = client
         .get(&final_url)
-        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/120.0.0.0")
         .send()
         .await
         .map_err(|e| format!("Download failed: {}", e))?;
@@ -1404,29 +1409,44 @@ async fn download_rom(
     }
     
     let total_size = response.content_length().unwrap_or(0);
-    let mut downloaded_size: u64 = 0;
+    let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
     
     let mut file = fs::File::create(&dest).map_err(|e| format!("Failed to create file: {}", e))?;
     use std::io::Write;
     
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         file.write_all(&chunk).map_err(|e| e.to_string())?;
-        downloaded_size += chunk.len() as u64;
+        downloaded_bytes += chunk.len() as u64;
         
-        if last_emit.elapsed().as_millis() > 500 {
+        if last_emit.elapsed().as_millis() >= 400 {
             let progress = if total_size > 0 {
-                (downloaded_size as f64 / total_size as f64 * 100.0) as u32
+                (downloaded_bytes as f64 / total_size as f64 * 100.0) as u32
             } else {
-                50
+                0
             };
             
+            // Speed calculation
+            let elapsed_sec = start_time.elapsed().as_secs_f64();
+            let speed_bps = if elapsed_sec > 0.0 { downloaded_bytes as f64 / elapsed_sec } else { 0.0 };
+            
+            // ETA calculation
+            let eta = if speed_bps > 0.0 && total_size > 0 {
+                ((total_size - downloaded_bytes) as f64 / speed_bps) as u64
+            } else {
+                0
+            };
+
             let _ = app_handle.emit("rom-download-progress", serde_json::json!({
                 "file_name": final_file_name,
+                "file_id": ia_id_clone,
                 "status": "downloading",
                 "progress": progress,
-                "downloaded": downloaded_size,
-                "total": total_size
+                "downloaded_bytes": downloaded_bytes,
+                "total_bytes": total_size,
+                "speed_bps": speed_bps as u64,
+                "eta": eta
             }));
             last_emit = std::time::Instant::now();
         }

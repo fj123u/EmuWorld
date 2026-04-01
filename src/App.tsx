@@ -77,6 +77,14 @@ interface AppConfig {
   covers_directory: string;
 }
 
+interface DownloadStats {
+  progress: number;
+  downloaded_bytes: number;
+  total_bytes: number;
+  speed_bps: number;
+  eta: number;
+}
+
 interface Toast {
   id: number;
   message: string;
@@ -209,15 +217,31 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
   );
 };
 
-const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: { 
+const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: { 
   rom: RomStoreEntry, 
   onDownload: (rom: RomStoreEntry) => void,
   downloading: boolean,
   downloaded: boolean,
-  progress?: number
+  stats?: DownloadStats
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loadingCover, setLoadingCover] = useState(false);
+
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const formatTime = (seconds: number) => {
+    if (seconds <= 0) return 'calculating...';
+    if (seconds < 60) return `${seconds}s left`;
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}m ${secs}s left`;
+  };
 
   useEffect(() => {
     const fetchCover = async () => {
@@ -274,7 +298,18 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: {
           {downloaded ? (
             <><Check size={14} /> Downloaded</>
           ) : downloading ? (
-            <><RefreshCw size={14} className="animate-spin" /> {progress !== undefined ? `${progress}%` : 'Downloading...'}</>
+            <div className="download-stats-container">
+              <div className="download-stats-row">
+                <RefreshCw size={12} className="animate-spin" />
+                <span>{stats?.progress || 0}%</span>
+                <span className="download-stats-divider">•</span>
+                <span>{formatTime(stats?.eta || 0)}</span>
+              </div>
+              <div className="download-stats-subtext">
+                {formatBytes(stats?.downloaded_bytes || 0)} / {formatBytes(stats?.total_bytes || 0)} 
+                {stats?.speed_bps ? ` • ${formatBytes(stats.speed_bps)}/s` : ""}
+              </div>
+            </div>
           ) : (
             <><Download size={14} /> Download</>
           )}
@@ -315,7 +350,7 @@ export default function App() {
   const [storeConsoles, setStoreConsoles] = useState<string[]>([]);
   const [downloading, setDownloading] = useState<string[]>([]);
   const [downloaded, setDownloaded] = useState<string[]>([]);
-  const [downloadProgress, setDownloadProgress] = useState<Record<string, number>>({});
+  const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadStats>>({});
   const [isSearchingStore, setIsSearchingStore] = useState(false);
   const [changelogs] = useState<ChangelogEntry[]>([
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
@@ -723,15 +758,14 @@ export default function App() {
     };
   }, [loadData, showToast]);
 
-  // ---- Listen for ROM download progress events ----
   useEffect(() => {
-    const unlisten = listen<{ file_name?: string; file_id?: string; status: string; progress: number }>(
+    const unlisten = listen<DownloadStats & { file_name?: string; file_id?: string; status: string }>(
       "rom-download-progress",
       (event) => {
-        const { file_id, file_name, progress } = event.payload;
+        const { file_id, file_name } = event.payload;
         const id = file_id || file_name;
         if (id) {
-          setDownloadProgress(prev => ({ ...prev, [id]: progress }));
+          setDownloadProgress(prev => ({ ...prev, [id]: event.payload }));
         }
       }
     );
@@ -1285,7 +1319,7 @@ export default function App() {
                           onDownload={handleDownloadRom}
                           downloading={downloading.includes(rom.id)}
                           downloaded={downloaded.includes(rom.id)}
-                          progress={downloadProgress[rom.id] || downloadProgress[rom.file_name]}
+                          stats={downloadProgress[rom.id] || downloadProgress[rom.file_name]}
                         />
                       ))
                     ) : (

@@ -1842,6 +1842,40 @@ body::before {
   border-color: var(--neon-amber) !important;
   color: var(--neon-amber) !important;
   cursor: wait;
+  height: auto !important;
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
+.download-stats-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+}
+
+.download-stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.download-stats-divider {
+  opacity: 0.4;
+  font-weight: 300;
+}
+
+.download-stats-subtext {
+  font-size: 0.6rem;
+  opacity: 0.7;
+  font-weight: 400;
+  font-family: var(--font-pixel);
+  letter-spacing: -0.3px;
+  text-transform: uppercase;
 }
 
 .btn--success {
