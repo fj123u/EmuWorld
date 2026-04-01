@@ -97,6 +97,7 @@ interface RomStoreEntry {
   file_name: string;
   download_url: string;
   ia_id?: string;
+  thumbnail_url?: string;
 }
 
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
@@ -205,9 +206,11 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: {
 
   useEffect(() => {
     const fetchCover = async () => {
+      // If we already have a direct site thumbnail from IA, use it immediately
+      if (rom.thumbnail_url) return;
+
       try {
         setLoadingCover(true);
-        // We use the same fetch_boxart command as library games
         const dataUrl: string = await invoke("fetch_boxart", { 
           gameName: rom.name, 
           console: rom.console 
@@ -220,7 +223,7 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: {
       }
     };
     fetchCover();
-  }, [rom.name, rom.console]);
+  }, [rom.name, rom.console, rom.thumbnail_url]);
 
   return (
     <motion.div
@@ -230,8 +233,8 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, progress }: {
       className="store-card"
     >
       <div className="store-card__cover">
-        {cover ? (
-          <img src={cover} alt={rom.name} className="store-card__img" />
+        {cover || rom.thumbnail_url ? (
+          <img src={cover || rom.thumbnail_url} alt={rom.name} className="store-card__img" />
         ) : (
           <div className="store-card__placeholder">
             <span className="store-card__placeholder-icon">
@@ -636,11 +639,17 @@ export default function App() {
   const searchStore = useCallback(async (query: string, consoleF: string | null) => {
     setIsSearchingStore(true);
     try {
-      const results = await invoke<RomStoreEntry[]>("search_rom_store", { 
-        query, 
-        consoleFilter: consoleF 
-      });
-      setStoreRoms(results);
+      if (!query && !consoleF) {
+        // Load featured/popular games when store is first opened or search cleared
+        const results = await invoke<RomStoreEntry[]>("get_featured_games");
+        setStoreRoms(results);
+      } else {
+        const results = await invoke<RomStoreEntry[]>("search_rom_store", { 
+          query, 
+          consoleFilter: consoleF 
+        });
+        setStoreRoms(results);
+      }
     } catch (e) {
       console.error("Store search failed:", e);
       showToast("Store search failed. Check your internet connection.", "error");
@@ -668,6 +677,7 @@ export default function App() {
       const result = await invoke<string>("download_rom", {
         downloadUrlArg: rom.download_url,
         console: rom.console,
+        romName: rom.name,
         fileNameArg: rom.file_name,
         iaId: rom.ia_id || null,
       });
@@ -742,10 +752,19 @@ export default function App() {
       console.log("handleLaunch triggered for ROM:", rom);
       const emulator = catalog.find(e => e.console === rom.console);
       if (!emulator) {
-        console.error("Emulator discovery failure. ROM console:", rom.console, "Catalog consoles:", catalog.map(e => e.console));
         showToast(`No emulator found for ${rom.console}. Check if it's supported!`, "error");
         return;
       }
+
+      // Check if installed
+      if (!installed.includes(emulator.id)) {
+        showToast(`Please install the ${rom.console} emulator first!`, "info");
+        setPage("catalog");
+        setConsoleFilter(rom.console);
+        setCategoryFilter(null); // Clear category filter to show the console
+        return;
+      }
+
       console.log("Found Emulator:", emulator.name, "(ID:", emulator.id, ") for console:", rom.console);
       const res: string = await invoke("launch_emulator", {
         emulatorId: emulator.id,
@@ -893,7 +912,7 @@ export default function App() {
               onClick={() => { setPage("catalog"); setConsoleFilter(null); setCategoryFilter(null); }}
             >
               <span className="sidebar__item-icon"><Grid3X3 size={16} /></span>
-              Catalog
+              Console
               <span className="sidebar__item-count">{catalog.length}</span>
             </button>
             <button
@@ -941,7 +960,7 @@ export default function App() {
           <div className="sidebar__section">
             {page === "catalog" ? (
               <>
-                <div className="sidebar__label">Emulators</div>
+                <div className="sidebar__label">Consoles</div>
                 <button
                   className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
                   onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
@@ -1134,14 +1153,14 @@ export default function App() {
               <div className="main-content__header">
                 <div>
                   <h1 className="main-content__title">
-                    {page === "catalog" && "Emulator Catalog"}
+                    {page === "catalog" && "Emulator Console"}
                     {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
                     {page === "store" && "ROM Store"}
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
-                    {page === "catalog" && `${filteredCatalog.length} emulators available`}
+                    {page === "catalog" && `${filteredCatalog.length} consoles available`}
                     {page === "store" && `${storeRoms.length} ROMs available`}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}

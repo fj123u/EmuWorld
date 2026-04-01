@@ -236,12 +236,13 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
         cmd.arg(&final_path);
     }
     
-    // Use DETACHED_PROCESS (0x00000008) to separate the emulator from the app's console window
+    // Use CREATE_NO_WINDOW (0x08000000) to separate the emulator but keep console handles
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        const DETACHED_PROCESS: u32 = 0x00000008;
-        cmd.creation_flags(DETACHED_PROCESS);
+        // CREATE_NO_WINDOW (0x08000000) provides a console but no window,
+        // preventing "Invalid Handle" crashes in apps like Ryujinx.
+        cmd.creation_flags(0x08000000);
     }
 
     match cmd.spawn() {
@@ -1099,9 +1100,9 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo 64".to_string(),
             region: "World".to_string(),
             size: "32 MB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
-            ia_id: Some("super-mario-64_n64".to_string()), 
+            file_name: "Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De.zip".to_string(),
+            download_url: "https://archive.org/download/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De.zip".to_string(),
+            ia_id: Some("Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De".to_string()), 
             thumbnail_url: Some("https://archive.org/services/img/Legend_of_Zelda_The_Ocarina_of_Time_USA_En_Fr_De?&height=320".to_string()),
         },
         RomStoreEntry {
@@ -1110,8 +1111,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo 64".to_string(),
             region: "World".to_string(),
             size: "8 MB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "super-mario-64_n64.zip".to_string(),
+            download_url: "https://archive.org/download/super-mario-64_n64/super-mario-64_n64.zip".to_string(),
             ia_id: Some("super-mario-64_n64".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/super-mario-64_n64?&height=320".to_string()),
         },
@@ -1121,8 +1122,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Dreamcast".to_string(),
             region: "World".to_string(),
             size: "1 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "Sonic_Adventure_1999_U.zip".to_string(),
+            download_url: "https://archive.org/download/Sonic_Adventure_1999_U/Sonic_Adventure_1999_U.zip".to_string(),
             ia_id: Some("Sonic_Adventure_1999_U".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/Sonic_Adventure_1999_U?&height=320".to_string()),
         },
@@ -1132,8 +1133,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "GameCube / Wii".to_string(),
             region: "World".to_string(),
             size: "4.3 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "mario-kart_202107.zip".to_string(),
+            download_url: "https://archive.org/download/mario-kart_202107/mario-kart_202107.zip".to_string(),
             ia_id: Some("mario-kart_202107".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/mario-kart_202107?&height=320".to_string()),
         },
@@ -1143,8 +1144,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Game Boy Advance".to_string(),
             region: "World".to_string(),
             size: "16 MB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "pokemon-emerald-version_202308.zip".to_string(),
+            download_url: "https://archive.org/download/pokemon-emerald-version_202308/pokemon-emerald-version_202308.zip".to_string(),
             ia_id: Some("pokemon-emerald-version_202308".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/pokemon-emerald-version_202308?&height=320".to_string()),
         },
@@ -1154,8 +1155,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Xbox".to_string(),
             region: "World".to_string(),
             size: "3.5 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "halo-combat-evolved_202101.zip".to_string(),
+            download_url: "https://archive.org/download/halo-combat-evolved_202101/halo-combat-evolved_202101.zip".to_string(),
             ia_id: Some("halo-combat-evolved_202101".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/halo-combat-evolved_202101?&height=320".to_string()),
         },
@@ -1165,8 +1166,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "PlayStation 2".to_string(),
             region: "World".to_string(),
             size: "4 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "grand-theft-auto-san-andreas-utilities.zip".to_string(),
+            download_url: "https://archive.org/download/grand-theft-auto-san-andreas-utilities/grand-theft-auto-san-andreas-utilities.zip".to_string(),
             ia_id: Some("grand-theft-auto-san-andreas-utilities".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/grand-theft-auto-san-andreas-utilities?&height=320".to_string()),
         },
@@ -1176,8 +1177,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "Nintendo DS".to_string(),
             region: "World".to_string(),
             size: "128 MB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "pokemon-platinum-version-nintendods-hiresscans.zip".to_string(),
+            download_url: "https://archive.org/download/pokemon-platinum-version-nintendods-hiresscans/pokemon-platinum-version-nintendods-hiresscans.zip".to_string(),
             ia_id: Some("pokemon-platinum-version-nintendods-hiresscans".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/pokemon-platinum-version-nintendods-hiresscans?&height=320".to_string()),
         },
@@ -1187,8 +1188,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "GameCube / Wii".to_string(),
             region: "World".to_string(),
             size: "1.4 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "metroid-prime-remastered.zip".to_string(),
+            download_url: "https://archive.org/download/metroid-prime-remastered/metroid-prime-remastered.zip".to_string(),
             ia_id: Some("metroid-prime-remastered".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/metroid-prime-remastered?&height=320".to_string()),
         },
@@ -1198,8 +1199,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "PlayStation 1".to_string(),
             region: "World".to_string(),
             size: "500 MB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "psx_crash3.zip".to_string(),
+            download_url: "https://archive.org/download/psx_crash3/psx_crash3.zip".to_string(),
             ia_id: Some("psx_crash3".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/psx_crash3?&height=320".to_string()),
         },
@@ -1209,8 +1210,8 @@ fn get_featured_games() -> Vec<RomStoreEntry> {
             console: "GameCube / Wii".to_string(),
             region: "World".to_string(),
             size: "4 GB".to_string(),
-            file_name: "".to_string(),
-            download_url: "".to_string(),
+            file_name: "new-super-mario-bros.-wii.zip".to_string(),
+            download_url: "https://archive.org/download/new-super-mario-bros.-wii/new-super-mario-bros.-wii.zip".to_string(),
             ia_id: Some("new-super-mario-bros.-wii".to_string()),
             thumbnail_url: Some("https://archive.org/services/img/new-super-mario-bros.-wii?&height=320".to_string()),
         }
