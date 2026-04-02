@@ -364,6 +364,30 @@ export default function App() {
     { version: "0.1.0", date: "2026-03-10", changes: ["Initial Beta Launch", "Support for 20+ retro consoles", "Automatic ROM scanning"] }
   ]);
 
+  // Synchronize 'downloaded' state with locally scanned 'roms'
+  useEffect(() => {
+    if (roms.length === 0 && storeRoms.length === 0) return;
+    
+    // Efficiently identify which Store ROMs are present locally
+    const downloadedIds = storeRoms
+      .filter(sr => {
+        // Standardize names for comparison
+        const srNameLower = sr.name.toLowerCase();
+        return roms.some(local => {
+          const localNameLower = local.name.toLowerCase();
+          const localPathLower = local.path.toLowerCase();
+          const srFileLower = sr.file_name.toLowerCase();
+          
+          return localNameLower === srNameLower || 
+                 (srFileLower && localPathLower.includes(srFileLower)) ||
+                 (localNameLower.includes(srNameLower) && local.console === sr.console);
+        });
+      })
+      .map(sr => sr.id);
+    
+    setDownloaded(downloadedIds);
+  }, [roms, storeRoms]);
+
   // ---- Toast helpers ----
   const showToast = useCallback(
     (message: string, type: Toast["type"] = "info") => {
@@ -414,18 +438,28 @@ export default function App() {
     let profileChannel: any = null;
 
     const setupRealtime = (userId: string) => {
-      if (profileChannel) supabase.removeChannel(profileChannel);
+      if (profileChannel) {
+        supabase.removeChannel(profileChannel);
+      }
+      
+      const channelName = `profiles-updates-${userId}`;
       profileChannel = supabase
-        .channel(`public:profiles:id=eq.${userId}`)
+        .channel(channelName)
         .on(
           'postgres_changes',
-          { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${userId}` },
+          { 
+            event: 'UPDATE', 
+            schema: 'public', 
+            table: 'profiles', 
+            filter: `id=eq.${userId}` 
+          },
           (payload) => {
             console.log("[EmuWorld] Realtime profile update:", payload.new);
             setProfile(payload.new as Profile);
           }
-        )
-        .subscribe();
+        );
+      
+      profileChannel.subscribe();
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -437,13 +471,18 @@ export default function App() {
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        setupRealtime(session.user.id);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      
+      if (currentUser) {
+        fetchProfile(currentUser.id);
+        setupRealtime(currentUser.id);
       } else {
         setProfile(null);
-        if (profileChannel) supabase.removeChannel(profileChannel);
+        if (profileChannel) {
+          supabase.removeChannel(profileChannel);
+          profileChannel = null;
+        }
       }
     });
 
@@ -730,10 +769,10 @@ export default function App() {
         romName: rom.name,
         fileNameArg: rom.file_name,
         iaId: rom.ia_id || null,
+        storeId: rom.id,
       });
-      setDownloaded(prev => [...prev, rom.id]);
       showToast(`${rom.name} downloaded! 🎮`, "success");
-      loadData(); // Refresh the ROM library
+      loadData(); // This will trigger the reactive useEffect to update 'downloaded' state
     } catch (err: any) {
       showToast(`Download failed: ${err}`, "error");
     } finally {
@@ -759,13 +798,22 @@ export default function App() {
   }, [loadData, showToast]);
 
   useEffect(() => {
-    const unlisten = listen<DownloadStats & { file_name?: string; file_id?: string; status: string }>(
+    const unlisten = listen<DownloadStats & { file_name?: string; file_id?: string; store_id?: string; status: string }>(
       "rom-download-progress",
       (event) => {
-        const { file_id, file_name } = event.payload;
-        const id = file_id || file_name;
+        const { store_id, file_id, file_name } = event.payload;
+        const id = store_id || file_id || file_name;
         if (id) {
-          setDownloadProgress(prev => ({ ...prev, [id]: event.payload }));
+          setDownloadProgress(prev => {
+            const current = prev[id] || { progress: 0, downloaded_bytes: 0, total_bytes: 0, speed_bps: 0, eta: 0 };
+            return { 
+              ...prev, 
+              [id]: {
+                ...current,
+                ...event.payload
+              } 
+            };
+          });
         }
       }
     );
@@ -800,7 +848,7 @@ export default function App() {
     try {
       await invoke("delete_rom", { path: rom.path });
       showToast(`Deleted ${rom.name}`, "success");
-      loadData();
+      loadData(); // This will trigger the reactive useEffect to update 'downloaded' state
     } catch (err: any) {
       showToast(`Delete failed: ${err}`, "error");
     }

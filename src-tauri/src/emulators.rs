@@ -14,6 +14,8 @@ pub struct EmulatorInfo {
     /// "zip" or "7z" — determines extraction method
     pub archive_type: String,
     pub category: String,
+    /// Optional: libretro core filename (e.g., "mame_libretro.dll")
+    pub core_name: Option<String>,
 }
 
 /// Returns the built-in catalog of supported emulators.
@@ -34,6 +36,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.mesen.ca/".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "mgba".to_string(),
@@ -47,6 +50,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://mgba.io".to_string(),
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "snes9x".to_string(),
@@ -60,6 +64,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.snes9x.com".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "project64".to_string(),
@@ -73,6 +78,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.pj64-emu.com".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "dolphin".to_string(),
@@ -86,6 +92,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://dolphin-emu.org".to_string(),
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "melonds".to_string(),
@@ -99,6 +106,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://melonds.kuribo64.net".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "cemu".to_string(),
@@ -112,6 +120,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://cemu.info".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "ryubing".to_string(),
@@ -125,6 +134,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://git.ryujinx.app/ryubing/ryujinx".to_string(),
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "retroarch-vb".to_string(),
@@ -138,6 +148,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
+            core_name: Some("beetle_vb_libretro.dll".to_string()),
         },
         // ═══════════════════════════════════════════════════════════
         //  SONY
@@ -154,6 +165,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.duckstation.org".to_string(),
             archive_type: "zip".to_string(),
             category: "Sony".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "pcsx2".to_string(),
@@ -167,6 +179,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://pcsx2.net".to_string(),
             archive_type: "7z".to_string(),
             category: "Sony".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "rpcs3".to_string(),
@@ -180,6 +193,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://rpcs3.net".to_string(),
             archive_type: "7z".to_string(),
             category: "Sony".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "ppsspp".to_string(),
@@ -193,6 +207,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.ppsspp.org".to_string(),
             archive_type: "zip".to_string(),
             category: "Sony".to_string(),
+            core_name: None,
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -210,6 +225,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://github.com/flyinghead/flycast".to_string(),
             archive_type: "zip".to_string(),
             category: "Sega".to_string(),
+            core_name: None,
         },
         EmulatorInfo {
             id: "retroarch-md".to_string(),
@@ -223,6 +239,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
+            core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-sms".to_string(),
@@ -236,6 +253,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
+            core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-gg".to_string(),
@@ -249,6 +267,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
+            core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-saturn".to_string(),
@@ -262,6 +281,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
+            core_name: Some("beetle_saturn_libretro.dll".to_string()),
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -279,6 +299,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://xemu.app".to_string(),
             archive_type: "zip".to_string(),
             category: "Microsoft".to_string(),
+            core_name: None,
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -296,6 +317,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
+            core_name: Some("mame_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-neogeo".to_string(),
@@ -309,6 +331,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
+            core_name: Some("fbneo_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-pce".to_string(),
@@ -322,6 +345,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
+            core_name: Some("mednafen_pce_fast_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-atari2600".to_string(),
@@ -335,6 +359,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
+            core_name: Some("stella_libretro.dll".to_string()),
         },
         EmulatorInfo {
             id: "retroarch-wswan".to_string(),
@@ -348,6 +373,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
+            core_name: Some("mednafen_wswan_libretro.dll".to_string()),
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -365,6 +391,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Multi-System".to_string(),
+            core_name: None,
         },
     ]
 }
