@@ -1716,23 +1716,7 @@ export default function App() {
                           </motion.div>
                         ))}
                       </div>
-                    </div>
-                  ) : !selectedConstructeur ? (
-                    /* ---- Constructeur Grid ---- */
-                    <div className="rgs-constructeur-grid">
-                      {rgsConstructeurs.map((c) => (
-                        <motion.div
-                          key={c.id}
-                          className="rgs-constructeur-card"
-                          whileHover={{ scale: 1.03, y: -4 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => handleSelectConstructeur(c.id, c.nom)}
-                        >
-                          <div className="rgs-constructeur-card__icon">{c.icon}</div>
-                          <div className="rgs-constructeur-card__name">{c.nom}</div>
-                        </motion.div>
-                      ))}
-                    </div>
+                    )}
                   ) : !selectedRgsConsole ? (
                     /* ---- Console Grid ---- */
                     <div className="rgs-console-grid">
@@ -1756,7 +1740,10 @@ export default function App() {
                             <div className="rgs-console-card__count">
                               <Package size={12} /> {c.nb_liens} pack{c.nb_liens > 1 ? 's' : ''}
                             </div>
-                  {rgsConsoles.length === 0 && (
+                          </div>
+                        </motion.div>
+                      ))}
+                      {rgsConsoles.length === 0 && (
                         <div className="empty-state">
                           <div className="empty-state__icon">📦</div>
                           <h3 className="empty-state__title">No consoles with downloads</h3>
