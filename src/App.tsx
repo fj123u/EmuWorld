@@ -1346,6 +1346,7 @@ export default function App() {
                     </div>
                   );
                 })}
+              </>
             ) : page === "store" ? (
               <>
                 <div className="sidebar__divider" />
@@ -1360,7 +1361,6 @@ export default function App() {
                     {c.nom}
                   </button>
                 ))}
-              </>
               </>
             ) : page === "library" ? (
               <>
