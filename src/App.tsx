@@ -412,12 +412,13 @@ export default function App() {
   const [isSearchingRgs, setIsSearchingRgs] = useState(false);
   const [selectedRgsLien, setSelectedRgsLien] = useState<RgsLien | null>(null);
   const [rgsFolderSearch, setRgsFolderSearch] = useState("");
-  const [internalWebViewUrl, setInternalWebViewUrl] = useState<string | null>(null);
   const [selectedConstructeur, setSelectedConstructeur] = useState<string | null>(null);
   const [selectedConstructeurName, setSelectedConstructeurName] = useState<string | null>(null);
   const [selectedRgsConsole, setSelectedRgsConsole] = useState<string | null>(null);
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
+  const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.0.0", date: "2026-04-20", changes: ["🚀 Automated RGS Imports: Automatic moving, unzipping, and cleanup", "📦 Switch Mastery: Full .xci/.nsp support with instant disk relocation", "🧹 Streamlined UI: Removed Archive.org to focus on RetroGameSets", "🛠️ Improved folder-view download triggers and file picker filters"] },
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
     { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
     { version: "0.3.2", date: "2026-03-19", changes: ["🎮 Added Ryubing for Nintendo Switch emulation", "🖼️ Improved cover matching: Added GB/GBC fallbacks for GBA console (mGBA support)", "🎨 New custom EmuWorld app icon and branding"] },
@@ -823,6 +824,81 @@ export default function App() {
     }
   }, [showToast]);
 
+  const handleOpenRgsLink = useCallback(async (lien: RgsLien) => {
+    let url = lien.url;
+    // Add 1fichier affiliate tag
+    if (url.includes("1fichier.com") && !url.includes("af=")) {
+      url += (url.includes("?") ? "&" : "?") + "af=3186111";
+    }
+    
+    // If it's a directory, scrape it instead of opening it
+    if (url.includes("1fichier.com/dir/")) {
+      setRgsLoading(true);
+      setSelectedRgsLien(lien);
+      try {
+        const files = await invoke<RgsFile[]>("scrape_1fichier_dir", { url });
+        setRgsFolderFiles(files);
+        showToast(`📁 Loaded ${files.length} files from folder`, "success");
+      } catch (e: any) {
+        showToast(`Failed to scrape folder: ${e}`, "error");
+        // Fallback to opening in browser if scraping fails
+        await openUrl(url).catch(() => window.open(url, "_blank"));
+      } finally {
+        setRgsLoading(false);
+      }
+      return;
+    }
+
+    // Individual file links: copy password and open in system browser
+    if (lien.mot_de_passe) {
+      try {
+        await navigator.clipboard.writeText(lien.mot_de_passe);
+        showToast(`🔑 Password copied! Opening link...`, "success");
+      } catch {
+        showToast(`Password: ${lien.mot_de_passe}`, "info");
+      }
+    } else {
+      showToast("Opening download link...", "info");
+    }
+    
+    // Open in system browser to bypass anti-embedding protections
+    await openUrl(url).catch(() => window.open(url, "_blank"));
+    
+    // Set pending import state to help the user finalize
+    // If we're in a folder pack, use that console name
+    const currentConsole = selectedRgsConsoleName || "Nintendo Switch";
+    setPendingImportConsole(currentConsole);
+    showToast(`Once downloaded, click 'Finalize' to move and unzip the game to your ${currentConsole} library!`, "info");
+  }, [showToast, selectedRgsConsoleName]);
+
+  const handleImportRom = useCallback(async (targetConsole: string) => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'ROM Archives', extensions: ['zip', '7z', 'iso', 'bin', 'nes', 'sfc', 'n64', 'z64', 'rvz', 'wbfs', 'chd', 'xci', 'nsp', 'pbp', 'cso', 'rvz', 'wud', 'wux', 'rpx'] }]
+      });
+
+      if (!selected) return;
+      
+      setRgsLoading(true);
+      const path = Array.isArray(selected) ? selected[0] : selected;
+      
+      const result = await invoke<string>("finalize_rgs_import", { 
+        srcPath: path, 
+        console: targetConsole 
+      });
+
+      showToast(result, "success");
+      setPendingImportConsole(null);
+      // Refresh library
+      loadData();
+    } catch (e: any) {
+      showToast(`Import failed: ${e}`, "error");
+    } finally {
+      setRgsLoading(false);
+    }
+  }, [showToast, loadData]);
+
   const handleSelectRgsConsole = useCallback(async (id: string, nom: string) => {
     setSelectedRgsConsole(id);
     setSelectedRgsConsoleName(nom);
@@ -853,7 +929,7 @@ export default function App() {
         taille: "Unknown",
         mot_de_passe: null,
         createur: "RGS Search",
-        informations: result.titre || result.nom,
+        informations: result.nom, 
         dossier: null,
         is_signaled: "0",
         date_creation: null
@@ -883,47 +959,6 @@ export default function App() {
 
     return () => clearTimeout(timer);
   }, [rgsSearchQuery]);
-
-  const handleOpenRgsLink = useCallback(async (lien: RgsLien) => {
-    let url = lien.url;
-    // Add 1fichier affiliate tag
-    if (url.includes("1fichier.com") && !url.includes("af=")) {
-      url += (url.includes("?") ? "&" : "?") + "af=3186111";
-    }
-    
-    // If it's a directory, scrape it instead of opening it
-    if (url.includes("1fichier.com/dir/")) {
-      setRgsLoading(true);
-      setSelectedRgsLien(lien);
-      try {
-        const files = await invoke<RgsFile[]>("scrape_1fichier_dir", { url });
-        setRgsFolderFiles(files);
-        showToast(`📁 Loaded ${files.length} files from folder`, "success");
-      } catch (e: any) {
-        showToast(`Failed to scrape folder: ${e}`, "error");
-        // Fallback to opening in browser if scraping fails
-        await openUrl(url).catch(() => window.open(url, "_blank"));
-      } finally {
-        setRgsLoading(false);
-      }
-      return;
-    }
-
-    // Individual file links: copy password and open in internal webview
-    if (lien.mot_de_passe) {
-      try {
-        await navigator.clipboard.writeText(lien.mot_de_passe);
-        showToast(`🔑 Password copied! Opening link...`, "success");
-      } catch {
-        showToast(`Password: ${lien.mot_de_passe}`, "info");
-      }
-    } else {
-      showToast("Opening download link...", "info");
-    }
-    
-    // Use internal WebView for individual links if requested
-    setInternalWebViewUrl(url);
-  }, [showToast]);
 
   const searchStore = useCallback(async (query: string, consoleF: string | null) => {
     setIsSearchingStore(true);
@@ -1311,65 +1346,21 @@ export default function App() {
                     </div>
                   );
                 })}
-              </>
             ) : page === "store" ? (
               <>
-                <div className="sidebar__label">Source</div>
-                <button
-                  className={`sidebar__item ${storeMode === "rgs" ? "sidebar__item--active" : ""}`}
-                  onClick={() => setStoreMode("rgs")}
-                >
-                  <span className="sidebar__item-icon">🌐</span>
-                  RetroGameSets
-                </button>
-                <button
-                  className={`sidebar__item ${storeMode === "archive" ? "sidebar__item--active" : ""}`}
-                  onClick={() => setStoreMode("archive")}
-                >
-                  <span className="sidebar__item-icon">🏛️</span>
-                  Archive.org
-                </button>
-                
-                {storeMode === "archive" && (
-                  <>
-                    <div className="sidebar__divider" />
-                    <div className="sidebar__label">Store Systems</div>
-                    <button
-                      className={`sidebar__item ${!storeConsoleFilter ? "sidebar__item--active" : ""}`}
-                      onClick={() => setStoreConsoleFilter(null)}
-                    >
-                      <span className="sidebar__item-icon">🏪</span>
-                      All Systems
-                    </button>
-                    {storeConsoles.map((con) => (
-                      <button
-                        key={con}
-                        className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
-                        onClick={() => setStoreConsoleFilter(con)}
-                      >
-                        <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
-                        {con}
-                      </button>
-                    ))}
-                  </>
-                )}
-                
-                {storeMode === "rgs" && (
-                  <>
-                    <div className="sidebar__divider" />
-                    <div className="sidebar__label">Manufacturers</div>
-                    {rgsConstructeurs.map((c) => (
-                      <button
-                        key={c.id}
-                        className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
-                        onClick={() => handleSelectConstructeur(c.id, c.nom)}
-                      >
-                        <span className="sidebar__item-icon">{c.icon}</span>
-                        {c.nom}
-                      </button>
-                    ))}
-                  </>
-                )}
+                <div className="sidebar__divider" />
+                <div className="sidebar__label">Manufacturers</div>
+                {rgsConstructeurs.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
+                    onClick={() => handleSelectConstructeur(c.id, c.nom)}
+                  >
+                    <span className="sidebar__item-icon">{c.icon}</span>
+                    {c.nom}
+                  </button>
+                ))}
+              </>
               </>
             ) : page === "library" ? (
               <>
@@ -1501,19 +1492,28 @@ export default function App() {
                     {page === "catalog" && "Emulator Console"}
                     {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
-                    {page === "store" && (storeMode === "rgs" ? "RetroGameSets" : "ROM Store")}
+                    {page === "store" && "RetroGameSets"}
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} consoles available`}
-                    {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
-                    {page === "store" && storeMode === "archive" && `${storeRoms.length} ROMs available`}
+                    {page === "store" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                   </p>
                 </div>
                 <div className="main-content__actions">
+                  {page === "store" && pendingImportConsole && (
+                    <button className="btn btn--primary btn--glow" onClick={() => handleImportRom(pendingImportConsole)}>
+                      <CheckCircle size={14} /> Finalize {pendingImportConsole} Download
+                    </button>
+                  )}
+                  {page === "library" && (
+                    <button className="btn btn--secondary" onClick={() => handleImportRom("Mixed")}>
+                      <Download size={14} /> Import ROM
+                    </button>
+                  )}
                   {(page === "catalog" || page === "library" || page === "store") && (
                     <>
                       <div className="search-bar">
@@ -1798,7 +1798,7 @@ export default function App() {
                               <div className="rgs-file-size">{file.taille}</div>
                               <button 
                                 className="btn btn--primary btn--sm"
-                                onClick={() => setInternalWebViewUrl(file.url)}
+                                onClick={() => handleOpenRgsLink(file.url)}
                               >
                                 Download
                               </button>
@@ -2204,52 +2204,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ===== INTERNAL WEBVIEW (1fichier) ===== */}
-      <AnimatePresence>
-        {internalWebViewUrl && (
-          <motion.div
-            className="webview-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <motion.div
-              className="webview-modal"
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            >
-              <div className="webview-header">
-                <div className="webview-title">
-                  <Globe size={14} />
-                  <span>External Download Page</span>
-                </div>
-                <div className="webview-controls">
-                  <button 
-                    className="webview-close" 
-                    onClick={() => setInternalWebViewUrl(null)}
-                    title="Close and return to EmuWorld"
-                  >
-                    <X size={20} />
-                  </button>
-                </div>
-              </div>
-              <div className="webview-body">
-                <iframe 
-                  src={internalWebViewUrl} 
-                  className="webview-iframe"
-                  title="Download Page"
-                  sandbox="allow-forms allow-scripts allow-same-origin"
-                />
-              </div>
-              <div className="webview-footer">
-                <p>⚠️ Handling downloads, captchas and wait times on this provider. Click the close button above once your download has started.</p>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

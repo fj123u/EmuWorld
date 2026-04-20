@@ -1317,6 +1317,79 @@ async fn download_rom(
     Ok(format!("Downloaded to {}", dest_dir.display()))
 }
 
+#[tauri::command]
+async fn finalize_rgs_import(
+    src_path: String,
+    console: String,
+) -> Result<String, String> {
+    let config = get_config();
+    let roms_dir = std::path::PathBuf::from(&config.roms_directory);
+    let dest_dir = roms_dir.join(&console);
+    
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
+    }
+
+    let src = std::path::PathBuf::from(&src_path);
+    if !src.exists() {
+        return Err("Source file not found".to_string());
+    }
+
+    let file_name = src.file_name()
+        .ok_or_else(|| "Invalid source filename".to_string())?
+        .to_string_lossy()
+        .to_string();
+
+    // Auto-detect console from extension if console is "Mixed" or generic
+    let mut final_console = console.clone();
+    let lower_file = file_name.to_lowercase();
+    
+    if console == "Mixed" || console == "Unknown" {
+        let catalog = emulators::get_catalog();
+        for emu in catalog {
+            if emu.supported_extensions.iter().any(|ext| lower_file.ends_with(&ext.to_lowercase())) {
+                final_console = emu.console;
+                break;
+            }
+        }
+    }
+
+    let dest_dir = roms_dir.join(&final_console);
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
+    }
+
+    let dest = dest_dir.join(&file_name);
+    
+    println!("[Import] Moving {} to {} (Console: {})", src.display(), dest.display(), final_console);
+    
+    // Try to move directly (instant if on same drive)
+    if let Err(_) = fs::rename(&src, &dest) {
+        // Fallback to copy then delete if move fails (cross-device)
+        fs::copy(&src, &dest).map_err(|e| format!("Failed to copy file: {}", e))?;
+        let _ = fs::remove_file(&src);
+    }
+
+    // ZIP Auto-Extraction
+    // Check extension and magic bytes
+    let is_zip = lower_file.ends_with(".zip") || lower_file.ends_with(".7z") || is_zip_file(&dest);
+    
+    if is_zip {
+        println!("[Import] Detected archive, extracting...");
+        match extract_rom_zip(&dest, &dest_dir) {
+            Ok(extracted_files) => {
+                println!("[Import] Extracted {} files", extracted_files.len());
+                let _ = fs::remove_file(&dest);
+            }
+            Err(e) => {
+                println!("[Import] Extraction failed: {} — keeping raw file", e);
+            }
+        }
+    }
+
+    Ok(format!("Imported successfully to {} folder", final_console))
+}
+
 /// Check the file's magic bytes to see if it's a ZIP
 fn is_zip_file(path: &std::path::Path) -> bool {
     if let Ok(mut f) = fs::File::open(path) {
@@ -1608,6 +1681,7 @@ pub fn run() {
             get_rgs_liens,
             search_rgs,
             scrape_1fichier_dir,
+            finalize_rgs_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
