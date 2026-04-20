@@ -1805,91 +1805,95 @@ export default function App() {
                             </motion.div>
                           ))}
                       </div>
-                    </div>
-                  ) : (
-                    /* ---- Links List ---- */
-                    <div className="rgs-liens-list">
-                      {rgsLiens.map((lien) => {
-                        const hostname = (() => { try { return new URL(lien.url).hostname.replace('www.', ''); } catch { return 'link'; } })();
-                        const is1fichier = lien.url.includes('1fichier.com');
-                        const isTorrent = lien.url.endsWith('.torrent');
-                        
-                        return (
-                          <motion.div
-                            key={lien.id}
-                            className="rgs-lien-card"
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            onClick={() => handleOpenRgsLink(lien)}
-                          >
-                            <div className="rgs-lien-card__header">
-                              <div className="rgs-lien-card__source">
-                                {is1fichier ? '☁️' : isTorrent ? '🧲' : '🌐'} {hostname}
-                              </div>
-                              <div className="rgs-lien-card__creator">by {lien.createur}</div>
-                            </div>
-                            
-                            <div className="rgs-lien-card__stats">
-                              <div className="rgs-lien-card__stat">
-                                <Gamepad2 size={14} />
-                                <span>{lien.nb_fichiers !== "0" ? `${lien.nb_fichiers} games` : 'Pack'}</span>
-                              </div>
-                              <div className="rgs-lien-card__stat">
-                                <HardDrive size={14} />
-                                <span>{lien.taille}</span>
-                              </div>
-                              {lien.informations && (
-                                <div className="rgs-lien-card__stat rgs-lien-card__stat--info">
-                                  <FileText size={14} />
-                                  <span>{lien.informations}</span>
+                        )}
+                      </div>
+                    ) : (
+                      /* ---- Links List ---- */
+                      <div className="rgs-liens-list">
+                        {rgsLiens.map((lien) => {
+                          const hostname = (() => { try { return new URL(lien.url).hostname.replace('www.', ''); } catch { return 'link'; } })();
+                          const is1fichier = lien.url.includes('1fichier.com');
+                          const isTorrent = lien.url.endsWith('.torrent');
+                          
+                          return (
+                            <motion.div
+                              key={lien.id}
+                              className="rgs-lien-card"
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              onClick={() => handleOpenRgsLink(lien)}
+                            >
+                              <div className="rgs-lien-card__header">
+                                <div className="rgs-lien-card__source">
+                                  {is1fichier ? '☁️' : isTorrent ? '🧲' : '🌐'} {hostname}
                                 </div>
-                              )}
-                              {lien.dossier && (
+                                <div className="rgs-lien-card__creator">by {lien.createur}</div>
+                              </div>
+                              
+                              <div className="rgs-lien-card__stats">
                                 <div className="rgs-lien-card__stat">
-                                  <FolderOpen size={14} />
-                                  <span>/roms/{lien.dossier}</span>
+                                  <Gamepad2 size={14} />
+                                  <span>{lien.nb_fichiers !== "0" ? `${lien.nb_fichiers} games` : 'Pack'}</span>
+                                </div>
+                                <div className="rgs-lien-card__stat">
+                                  <HardDrive size={14} />
+                                  <span>{lien.taille}</span>
+                                </div>
+                                {lien.informations && (
+                                  <div className="rgs-lien-card__stat rgs-lien-card__stat--info">
+                                    <FileText size={14} />
+                                    <span>{lien.informations}</span>
+                                  </div>
+                                )}
+                                {lien.dossier && (
+                                  <div className="rgs-lien-card__stat">
+                                    <FolderOpen size={14} />
+                                    <span>/roms/{lien.dossier}</span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {lien.mot_de_passe && (
+                                <div className="rgs-lien-card__password">
+                                  <Lock size={14} />
+                                  <span>Password required</span>
+                                  <button 
+                                    className="rgs-lien-card__copy-pwd"
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await navigator.clipboard.writeText(lien.mot_de_passe!);
+                                        showToast('🔑 Password copied!', 'success');
+                                      } catch {
+                                        showToast(`Password: ${lien.mot_de_passe}`, 'info');
+                                      }
+                                    }}
+                                  >
+                                    <Copy size={12} /> Copy
+                                  </button>
                                 </div>
                               )}
-                            </div>
-                            
-                            {lien.mot_de_passe && (
-                              <div className="rgs-lien-card__password">
-                                <Lock size={14} />
-                                <span>Password required</span>
-                                <button 
-                                  className="rgs-lien-card__copy-pwd"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    try {
-                                      await navigator.clipboard.writeText(lien.mot_de_passe!);
-                                      showToast('🔑 Password copied!', 'success');
-                                    } catch {
-                                      showToast(`Password: ${lien.mot_de_passe}`, 'info');
-                                    }
-                                  }}
-                                >
-                                  <Copy size={12} /> Copy
-                                </button>
-                              </div>
-                            )}
-                            
-                            <button className="btn btn--ghost btn--full rgs-lien-card__dl-btn">
-                              {lien.url.includes('/dir/') ? 'Open Folder' : 'Download File'}
-                            </button>
-                          </motion.div>
-                        );
-                      })}
-                      {rgsLiens.length === 0 && (
-                        <div className="empty-state">
-                          <div className="empty-state__icon">📦</div>
-                          <h3 className="empty-state__title">No downloads available</h3>
-                          <p className="empty-state__text">This console has no download links yet</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
+                              
+                              <button className="btn btn--ghost btn--full rgs-lien-card__dl-btn">
+                                {lien.url.includes('/dir/') ? 'Open Folder' : 'Download File'}
+                              </button>
+                            </motion.div>
+                          );
+                        })}
+                        {rgsLiens.length === 0 && (
+                          <div className="empty-state">
+                            <div className="empty-state__icon">📦</div>
+                            <h3 className="empty-state__title">No downloads available</h3>
+                            <p className="empty-state__text">This console has no download links yet</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
               {page === "library" && (
                 <div className="library-content">
