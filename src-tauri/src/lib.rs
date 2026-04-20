@@ -753,6 +753,60 @@ pub struct RomStoreEntry {
     pub thumbnail_url: Option<String>,
 }
 
+/* ============================
+   RetroGameSets.fr Integration
+   ============================ */
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RgsConstructeurInfo {
+    pub id: String,
+    pub nom: String,
+    pub icon: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RgsConsoleInfo {
+    pub id: String,
+    pub nom: String,
+    pub image: String,
+    pub constructeur_id: String,
+    pub nb_liens: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RgsLien {
+    pub id: String,
+    pub url: String,
+    pub nb_fichiers: String,
+    pub taille: String,
+    pub mot_de_passe: Option<String>,
+    pub createur: String,
+    pub informations: Option<String>,
+    pub dossier: Option<String>,
+    pub is_signaled: String,
+    pub date_creation: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RgsFile {
+    pub nom: String,
+    pub taille: String,
+    pub url: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RgsSearchResult {
+    pub id: String,
+    #[serde(rename = "titre")]
+    pub nom: String,
+    #[serde(rename = "type")]
+    pub type_result: String,
+    pub constructeur_nom: Option<String>,
+    pub image: Option<String>,
+    pub lien_id: Option<String>,
+    pub url: Option<String>,
+}
+
 #[allow(dead_code)]
 fn sanitize_filename(name: &str) -> String {
     let mut s = name.to_string();
@@ -1326,6 +1380,186 @@ fn get_store_consoles() -> Vec<String> {
     ].into_iter().map(|s| s.to_string()).collect()
 }
 
+// ============================
+// RetroGameSets.fr Commands
+// ============================
+
+#[tauri::command]
+fn get_rgs_constructeurs() -> Vec<RgsConstructeurInfo> {
+    vec![
+        RgsConstructeurInfo { id: "6".into(), nom: "Nintendo".into(), icon: "🍄".into() },
+        RgsConstructeurInfo { id: "9".into(), nom: "Sony".into(), icon: "🎮".into() },
+        RgsConstructeurInfo { id: "7".into(), nom: "Sega".into(), icon: "🔵".into() },
+        RgsConstructeurInfo { id: "4".into(), nom: "Microsoft".into(), icon: "❎".into() },
+        RgsConstructeurInfo { id: "8".into(), nom: "SNK".into(), icon: "🅰️".into() },
+        RgsConstructeurInfo { id: "2".into(), nom: "Atari".into(), icon: "🟤".into() },
+        RgsConstructeurInfo { id: "5".into(), nom: "NEC".into(), icon: "🔶".into() },
+        RgsConstructeurInfo { id: "1".into(), nom: "Arcade".into(), icon: "🕹️".into() },
+        RgsConstructeurInfo { id: "12".into(), nom: "Commodore".into(), icon: "💾".into() },
+        RgsConstructeurInfo { id: "10".into(), nom: "Panasonic".into(), icon: "📀".into() },
+    ]
+}
+
+#[tauri::command]
+async fn get_rgs_consoles(constructeur_id: String) -> Result<Vec<RgsConsoleInfo>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!("https://www.retrogamesets.fr/get_constructeurs.php?id={}", constructeur_id);
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        return Err(format!("RGS API error: {}", response.status()));
+    }
+    
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    
+    let mut consoles = Vec::new();
+    if let Some(console_arr) = json["consoles"].as_array() {
+        for c in console_arr {
+            let nb = c["nb_liens"].as_u64()
+                .or_else(|| c["nb_liens"].as_str().and_then(|s| s.parse::<u64>().ok()))
+                .unwrap_or(0) as u32;
+            
+            // Only include consoles that have at least 1 link
+            if nb == 0 { continue; }
+            
+            consoles.push(RgsConsoleInfo {
+                id: c["id"].as_str().unwrap_or("").to_string(),
+                nom: c["nom"].as_str().unwrap_or("").to_string(),
+                image: c["image"].as_str().unwrap_or("").to_string(),
+                constructeur_id: constructeur_id.clone(),
+                nb_liens: nb,
+            });
+        }
+    }
+    
+    Ok(consoles)
+}
+
+#[tauri::command]
+async fn get_rgs_liens(console_id: String) -> Result<Vec<RgsLien>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!("https://www.retrogamesets.fr/get_liens.php?id={}", console_id);
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        return Err(format!("RGS API error: {}", response.status()));
+    }
+    
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    
+    let mut liens = Vec::new();
+    if let Some(arr) = json.as_array() {
+        for l in arr {
+            let is_signaled = l["is_signaled"].as_str().unwrap_or("0").to_string();
+            // Skip reported/dead links
+            if is_signaled == "1" { continue; }
+            
+            let url_str = l["url"].as_str().unwrap_or("").to_string();
+            if url_str.is_empty() || !url_str.starts_with("http") { continue; }
+            
+            liens.push(RgsLien {
+                id: l["id"].as_str().unwrap_or("").to_string(),
+                url: url_str,
+                nb_fichiers: l["nb_fichiers"].as_str().unwrap_or("0").to_string(),
+                taille: l["taille"].as_str().unwrap_or("Inconnu").to_string(),
+                mot_de_passe: l["mot_de_passe"].as_str().map(|s| s.to_string()),
+                createur: l["createur"].as_str().unwrap_or("Anonyme").to_string(),
+                informations: l["informations"].as_str().map(|s| s.to_string()),
+                dossier: l["dossier"].as_str().map(|s| s.to_string()),
+                is_signaled,
+                date_creation: l["date_creation"].as_str().map(|s| s.to_string()),
+            });
+        }
+    }
+    
+    Ok(liens)
+}
+
+#[tauri::command]
+async fn search_rgs(query: String) -> Result<Vec<RgsSearchResult>, String> {
+    if query.len() < 2 {
+        return Ok(vec![]);
+    }
+    
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!("https://www.retrogamesets.fr/recherche_ajax.php?query={}", urlencoding::encode(&query));
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    
+    if !response.status().is_success() {
+        return Err(format!("RGS search error: {}", response.status()));
+    }
+    
+    let json: Vec<RgsSearchResult> = response.json().await.map_err(|e| e.to_string())?;
+    Ok(json)
+}
+
+#[tauri::command]
+async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Ensure the AF cookie is set to avoid reloads/redirects
+    let response = client.get(&url)
+        .header("Cookie", "AF=3186111")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let html = response.text().await.map_err(|e| e.to_string())?;
+    
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(&html);
+    
+    // 1fichier folders list filenames in table rows. 
+    // Filenames are in <td> with class alg file-obj
+    // Size is the next <td>
+    let row_selector = Selector::parse("tr").map_err(|_| "Invalid row selector")?;
+    let file_cell_selector = Selector::parse("td.file-obj").map_err(|_| "Invalid cell selector")?;
+    let size_cell_selector = Selector::parse("td:not(.file-obj)").map_err(|_| "Invalid size selector")?;
+
+    let mut files = Vec::new();
+    
+    for row in document.select(&row_selector) {
+        if let Some(file_cell) = row.select(&file_cell_selector).next() {
+            if let Some(link) = file_cell.select(&Selector::parse("a").unwrap()).next() {
+                let name = link.text().collect::<Vec<_>>().join("");
+                let url = link.value().attr("href").unwrap_or("").to_string();
+                
+                // Get size (it's the next td)
+                let mut size = String::from("Unknown");
+                let mut next_cells = row.select(&size_cell_selector);
+                if let Some(size_cell) = next_cells.next() {
+                    size = size_cell.text().collect::<Vec<_>>().join("").trim().to_string();
+                }
+                
+                if !url.is_empty() && !name.is_empty() {
+                    files.push(RgsFile { nom: name, taille: size, url });
+                }
+            }
+        }
+    }
+    
+    Ok(files)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_fs::init())
@@ -1369,6 +1603,11 @@ pub fn run() {
             get_featured_games,
             download_rom,
             delete_rom,
+            get_rgs_constructeurs,
+            get_rgs_consoles,
+            get_rgs_liens,
+            search_rgs,
+            scrape_1fichier_dir,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

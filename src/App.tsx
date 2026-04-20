@@ -43,6 +43,10 @@ import {
   Link2,
   ShoppingBag,
   Check,
+  Copy,
+  Lock,
+  Globe,
+  Package,
 } from "lucide-react";
 
 /* ============================
@@ -106,6 +110,49 @@ interface RomStoreEntry {
   download_url: string;
   ia_id?: string;
   thumbnail_url?: string;
+}
+
+interface RgsConstructeur {
+  id: string;
+  nom: string;
+  icon: string;
+}
+
+interface RgsConsole {
+  id: string;
+  nom: string;
+  image: string;
+  constructeur_id: string;
+  nb_liens: number;
+}
+
+interface RgsLien {
+  id: string;
+  url: string;
+  nb_fichiers: string;
+  taille: string;
+  mot_de_passe: string | null;
+  createur: string;
+  informations: string | null;
+  dossier: string | null;
+  is_signaled: string;
+  date_creation: string | null;
+}
+
+interface RgsFile {
+  nom: string;
+  taille: string;
+  url: string;
+}
+
+interface RgsSearchResult {
+  id: string;
+  nom: string;
+  type_result: string;
+  constructeur_nom?: string;
+  image?: string;
+  lien_id?: string;
+  url?: string;
 }
 
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
@@ -352,6 +399,24 @@ export default function App() {
   const [downloaded, setDownloaded] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadStats>>({});
   const [isSearchingStore, setIsSearchingStore] = useState(false);
+
+  // ---- RetroGameSets state ----
+  const [storeMode, setStoreMode] = useState<"rgs" | "archive">("rgs");
+  const [rgsConstructeurs, setRgsConstructeurs] = useState<RgsConstructeur[]>([]);
+  const [rgsConsoles, setRgsConsoles] = useState<RgsConsole[]>([]);
+  const [rgsLiens, setRgsLiens] = useState<RgsLien[]>([]);
+  const [rgsFolderFiles, setRgsFolderFiles] = useState<RgsFile[]>([]);
+  const [rgsLoading, setRgsLoading] = useState(false);
+  const [rgsSearchQuery, setRgsSearchQuery] = useState("");
+  const [rgsSearchResults, setRgsSearchResults] = useState<RgsSearchResult[]>([]);
+  const [isSearchingRgs, setIsSearchingRgs] = useState(false);
+  const [selectedRgsLien, setSelectedRgsLien] = useState<RgsLien | null>(null);
+  const [rgsFolderSearch, setRgsFolderSearch] = useState("");
+  const [internalWebViewUrl, setInternalWebViewUrl] = useState<string | null>(null);
+  const [selectedConstructeur, setSelectedConstructeur] = useState<string | null>(null);
+  const [selectedConstructeurName, setSelectedConstructeurName] = useState<string | null>(null);
+  const [selectedRgsConsole, setSelectedRgsConsole] = useState<string | null>(null);
+  const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
     { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
@@ -724,6 +789,141 @@ export default function App() {
   useEffect(() => {
     loadStoreData();
   }, [loadStoreData]);
+
+  // ---- RetroGameSets ----
+  const loadRgsConstructeurs = useCallback(async () => {
+    try {
+      const data = await invoke<RgsConstructeur[]>("get_rgs_constructeurs");
+      setRgsConstructeurs(data);
+    } catch (e) {
+      console.error("Failed to load RGS constructeurs:", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadRgsConstructeurs();
+  }, [loadRgsConstructeurs]);
+
+  const handleSelectConstructeur = useCallback(async (id: string, nom: string) => {
+    setSelectedConstructeur(id);
+    setSelectedConstructeurName(nom);
+    setSelectedRgsConsole(null);
+    setSelectedRgsConsoleName(null);
+    setRgsLiens([]);
+    setRgsFolderFiles([]);
+    setSelectedRgsLien(null);
+    setRgsLoading(true);
+    try {
+      const data = await invoke<RgsConsole[]>("get_rgs_consoles", { constructeurId: id });
+      setRgsConsoles(data);
+    } catch (e: any) {
+      showToast(`Failed to load consoles: ${e}`, "error");
+    } finally {
+      setRgsLoading(false);
+    }
+  }, [showToast]);
+
+  const handleSelectRgsConsole = useCallback(async (id: string, nom: string) => {
+    setSelectedRgsConsole(id);
+    setSelectedRgsConsoleName(nom);
+    setRgsFolderFiles([]);
+    setSelectedRgsLien(null);
+    setRgsLoading(true);
+    try {
+      const data = await invoke<RgsLien[]>("get_rgs_liens", { consoleId: id });
+      setRgsLiens(data);
+    } catch (e: any) {
+      showToast(`Failed to load links: ${e}`, "error");
+    } finally {
+      setRgsLoading(false);
+    }
+  }, [showToast]);
+
+  const handleSelectRgsSearchResult = useCallback(async (result: RgsSearchResult) => {
+    if (result.type_result === 'console') {
+      await handleSelectRgsConsole(result.id, result.nom);
+      setRgsSearchQuery("");
+      setRgsSearchResults([]);
+    } else if (result.url) {
+      // It's a direct link result
+      const lienMock: RgsLien = {
+        id: result.lien_id || result.id,
+        url: result.url,
+        nb_fichiers: "1",
+        taille: "Unknown",
+        mot_de_passe: null,
+        createur: "RGS Search",
+        informations: result.titre || result.nom,
+        dossier: null,
+        is_signaled: "0",
+        date_creation: null
+      };
+      handleOpenRgsLink(lienMock);
+    }
+  }, [handleSelectRgsConsole, handleOpenRgsLink]);
+
+  // Debounced Search Effect for RGS
+  useEffect(() => {
+    if (rgsSearchQuery.trim().length < 2) {
+      setRgsSearchResults([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingRgs(true);
+      try {
+        const results = await invoke<RgsSearchResult[]>("search_rgs", { query: rgsSearchQuery });
+        setRgsSearchResults(results);
+      } catch (e) {
+        console.error("RGS Search failed:", e);
+      } finally {
+        setIsSearchingRgs(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [rgsSearchQuery]);
+
+  const handleOpenRgsLink = useCallback(async (lien: RgsLien) => {
+    let url = lien.url;
+    // Add 1fichier affiliate tag
+    if (url.includes("1fichier.com") && !url.includes("af=")) {
+      url += (url.includes("?") ? "&" : "?") + "af=3186111";
+    }
+    
+    // If it's a directory, scrape it instead of opening it
+    if (url.includes("1fichier.com/dir/")) {
+      setRgsLoading(true);
+      setSelectedRgsLien(lien);
+      try {
+        const files = await invoke<RgsFile[]>("scrape_1fichier_dir", { url });
+        setRgsFolderFiles(files);
+        showToast(`📁 Loaded ${files.length} files from folder`, "success");
+      } catch (e: any) {
+        showToast(`Failed to scrape folder: ${e}`, "error");
+        // Fallback to opening in browser if scraping fails
+        await openUrl(url).catch(() => window.open(url, "_blank"));
+      } finally {
+        setRgsLoading(false);
+      }
+      return;
+    }
+
+    // Individual file links: copy password and open in internal webview
+    if (lien.mot_de_passe) {
+      try {
+        await navigator.clipboard.writeText(lien.mot_de_passe);
+        showToast(`🔑 Password copied! Opening link...`, "success");
+      } catch {
+        showToast(`Password: ${lien.mot_de_passe}`, "info");
+      }
+    } else {
+      showToast("Opening download link...", "info");
+    }
+    
+    // Use internal WebView for individual links if requested
+    setInternalWebViewUrl(url);
+  }, [showToast]);
 
   const searchStore = useCallback(async (query: string, consoleF: string | null) => {
     setIsSearchingStore(true);
@@ -1114,24 +1314,62 @@ export default function App() {
               </>
             ) : page === "store" ? (
               <>
-                <div className="sidebar__label">Store Systems</div>
+                <div className="sidebar__label">Source</div>
                 <button
-                  className={`sidebar__item ${!storeConsoleFilter ? "sidebar__item--active" : ""}`}
-                  onClick={() => setStoreConsoleFilter(null)}
+                  className={`sidebar__item ${storeMode === "rgs" ? "sidebar__item--active" : ""}`}
+                  onClick={() => setStoreMode("rgs")}
                 >
-                  <span className="sidebar__item-icon">🏪</span>
-                  All Systems
+                  <span className="sidebar__item-icon">🌐</span>
+                  RetroGameSets
                 </button>
-                {storeConsoles.map((con) => (
-                  <button
-                    key={con}
-                    className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
-                    onClick={() => setStoreConsoleFilter(con)}
-                  >
-                    <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
-                    {con}
-                  </button>
-                ))}
+                <button
+                  className={`sidebar__item ${storeMode === "archive" ? "sidebar__item--active" : ""}`}
+                  onClick={() => setStoreMode("archive")}
+                >
+                  <span className="sidebar__item-icon">🏛️</span>
+                  Archive.org
+                </button>
+                
+                {storeMode === "archive" && (
+                  <>
+                    <div className="sidebar__divider" />
+                    <div className="sidebar__label">Store Systems</div>
+                    <button
+                      className={`sidebar__item ${!storeConsoleFilter ? "sidebar__item--active" : ""}`}
+                      onClick={() => setStoreConsoleFilter(null)}
+                    >
+                      <span className="sidebar__item-icon">🏪</span>
+                      All Systems
+                    </button>
+                    {storeConsoles.map((con) => (
+                      <button
+                        key={con}
+                        className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
+                        onClick={() => setStoreConsoleFilter(con)}
+                      >
+                        <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                        {con}
+                      </button>
+                    ))}
+                  </>
+                )}
+                
+                {storeMode === "rgs" && (
+                  <>
+                    <div className="sidebar__divider" />
+                    <div className="sidebar__label">Manufacturers</div>
+                    {rgsConstructeurs.map((c) => (
+                      <button
+                        key={c.id}
+                        className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
+                        onClick={() => handleSelectConstructeur(c.id, c.nom)}
+                      >
+                        <span className="sidebar__item-icon">{c.icon}</span>
+                        {c.nom}
+                      </button>
+                    ))}
+                  </>
+                )}
               </>
             ) : page === "library" ? (
               <>
@@ -1263,12 +1501,13 @@ export default function App() {
                     {page === "catalog" && "Emulator Console"}
                     {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
-                    {page === "store" && "ROM Store"}
+                    {page === "store" && (storeMode === "rgs" ? "RetroGameSets" : "ROM Store")}
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} consoles available`}
-                    {page === "store" && `${storeRoms.length} ROMs available`}
+                    {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
+                    {page === "store" && storeMode === "archive" && `${storeRoms.length} ROMs available`}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
@@ -1350,7 +1589,7 @@ export default function App() {
                 </div>
               )}
 
-              {page === "store" && (
+              {page === "store" && storeMode === "archive" && (
                 <div className="store-page">
                   <div className="grid grid--fixed">
                     {isSearchingStore ? (
@@ -1378,6 +1617,273 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {page === "store" && storeMode === "rgs" && (
+                <div className="rgs-page">
+                  {/* Breadcrumb */}
+                  <div className="rgs-breadcrumb">
+                    <button 
+                      className={`rgs-breadcrumb__item ${!selectedConstructeur ? 'rgs-breadcrumb__item--active' : ''}`}
+                      onClick={() => { setSelectedConstructeur(null); setSelectedConstructeurName(null); setRgsConsoles([]); setRgsLiens([]); setSelectedRgsConsole(null); }}
+                    >
+                      <Globe size={14} /> All Manufacturers
+                    </button>
+                    {selectedConstructeurName && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <button 
+                          className={`rgs-breadcrumb__item ${!selectedRgsConsole ? 'rgs-breadcrumb__item--active' : ''}`}
+                          onClick={() => { setSelectedRgsConsole(null); setSelectedRgsConsoleName(null); setRgsLiens([]); }}
+                        >
+                          {selectedConstructeurName}
+                        </button>
+                      </>
+                    )}
+                    {selectedRgsConsoleName && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <button 
+                          className={`rgs-breadcrumb__item ${!selectedRgsLien ? 'rgs-breadcrumb__item--active' : ''}`}
+                          onClick={() => { setRgsFolderFiles([]); setSelectedRgsLien(null); }}
+                        >
+                          {selectedRgsConsoleName}
+                        </button>
+                      </>
+                    )}
+                    {selectedRgsLien && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
+                          Pack: {new URL(selectedRgsLien.url).hostname.replace('www.', '')}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* RGS Search Header */}
+                  {!selectedRgsLien && rgsFolderFiles.length === 0 && (
+                    <div className="rgs-search-header">
+                      <div className="search-bar search-bar--glow">
+                        <Search size={18} className="search-bar__icon" />
+                        <input 
+                          type="text" 
+                          className="search-bar__input" 
+                          placeholder="Search RetroGameSets (e.g. Mario, Zelda, PS1...)" 
+                          value={rgsSearchQuery}
+                          onChange={(e) => setRgsSearchQuery(e.target.value)}
+                        />
+                        {isSearchingRgs && <RefreshCw size={14} className="animate-spin text-cyan" />}
+                      </div>
+                    </div>
+                  )}
+
+                  {rgsLoading ? (
+                      <RefreshCw size={48} className="animate-spin" />
+                      <h3 className="empty-state__title">Loading from RetroGameSets...</h3>
+                    </div>
+                  ) : rgsSearchResults.length > 0 ? (
+                    /* ---- Search Results Grid ---- */
+                    <div className="rgs-search-results">
+                      <div className="rgs-results-header">Search Results for "{rgsSearchQuery}"</div>
+                      <div className="rgs-console-grid">
+                        {rgsSearchResults.map((result) => (
+                          <motion.div
+                            key={result.id}
+                            className="rgs-console-card rgs-console-card--search"
+                            whileHover={{ scale: 1.03, y: -4 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => handleSelectRgsSearchResult(result)}
+                          >
+                            <div className="rgs-console-card__img">
+                              <img 
+                                src={result.image === '404.png' ? 'https://www.retrogamesets.fr/assets/images/consoles/default.png' : `https://www.retrogamesets.fr/assets/images/consoles/${result.image}`} 
+                                alt={result.nom}
+                                onError={(e) => { (e.target as HTMLImageElement).src = 'https://www.retrogamesets.fr/assets/images/consoles/default.png'; }}
+                              />
+                            </div>
+                            <div className="rgs-console-card__info">
+                              <div className="rgs-console-card__type">{result.type_result}</div>
+                              <div className="rgs-console-card__name">{result.nom}</div>
+                              {result.constructeur_nom && (
+                                <div className="rgs-console-card__count">
+                                  <Globe size={12} /> {result.constructeur_nom}
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : !selectedConstructeur ? (
+                    /* ---- Constructeur Grid ---- */
+                    <div className="rgs-constructeur-grid">
+                      {rgsConstructeurs.map((c) => (
+                        <motion.div
+                          key={c.id}
+                          className="rgs-constructeur-card"
+                          whileHover={{ scale: 1.03, y: -4 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleSelectConstructeur(c.id, c.nom)}
+                        >
+                          <div className="rgs-constructeur-card__icon">{c.icon}</div>
+                          <div className="rgs-constructeur-card__name">{c.nom}</div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : !selectedRgsConsole ? (
+                    /* ---- Console Grid ---- */
+                    <div className="rgs-console-grid">
+                      {rgsConsoles.map((c) => (
+                        <motion.div
+                          key={c.id}
+                          className="rgs-console-card"
+                          whileHover={{ scale: 1.03, y: -4 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleSelectRgsConsole(c.id, c.nom)}
+                        >
+                          <div className="rgs-console-card__img">
+                            <img 
+                              src={`https://www.retrogamesets.fr/assets/images/consoles/${c.image}`} 
+                              alt={c.nom}
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          </div>
+                          <div className="rgs-console-card__info">
+                            <div className="rgs-console-card__name">{c.nom}</div>
+                            <div className="rgs-console-card__count">
+                              <Package size={12} /> {c.nb_liens} pack{c.nb_liens > 1 ? 's' : ''}
+                            </div>
+                  {rgsConsoles.length === 0 && (
+                        <div className="empty-state">
+                          <div className="empty-state__icon">📦</div>
+                          <h3 className="empty-state__title">No consoles with downloads</h3>
+                        </div>
+                      )}
+                    </div>
+                  ) : rgsFolderFiles.length > 0 ? (
+                    /* ---- Folder Files View ---- */
+                    <div className="rgs-folder-view">
+                      <div className="rgs-folder-header">
+                        <div className="search-bar">
+                          <Search size={16} className="search-bar__icon" />
+                          <input 
+                            type="text" 
+                            className="search-bar__input" 
+                            placeholder="Search in folder..." 
+                            value={rgsFolderSearch}
+                            onChange={(e) => setRgsFolderSearch(e.target.value)}
+                          />
+                        </div>
+                        <div className="rgs-folder-count">{rgsFolderFiles.length} files</div>
+                      </div>
+
+                      <div className="rgs-files-grid">
+                        {rgsFolderFiles
+                          .filter(f => f.nom.toLowerCase().includes(rgsFolderSearch.toLowerCase()))
+                          .map((file, idx) => (
+                            <motion.div 
+                              key={idx}
+                              className="rgs-file-row"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: Math.min(idx * 0.01, 0.5) }}
+                            >
+                              <div className="rgs-file-name">{file.nom}</div>
+                              <div className="rgs-file-size">{file.taille}</div>
+                              <button 
+                                className="btn btn--primary btn--sm"
+                                onClick={() => setInternalWebViewUrl(file.url)}
+                              >
+                                Download
+                              </button>
+                            </motion.div>
+                          ))}
+                      </div>
+                    </div>
+                  ) : (
+                    /* ---- Links List ---- */
+                    <div className="rgs-liens-list">
+                      {rgsLiens.map((lien) => {
+                        const hostname = (() => { try { return new URL(lien.url).hostname.replace('www.', ''); } catch { return 'link'; } })();
+                        const is1fichier = lien.url.includes('1fichier.com');
+                        const isTorrent = lien.url.endsWith('.torrent');
+                        
+                        return (
+                          <motion.div
+                            key={lien.id}
+                            className="rgs-lien-card"
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            onClick={() => handleOpenRgsLink(lien)}
+                          >
+                            <div className="rgs-lien-card__header">
+                              <div className="rgs-lien-card__source">
+                                {is1fichier ? '☁️' : isTorrent ? '🧲' : '🌐'} {hostname}
+                              </div>
+                              <div className="rgs-lien-card__creator">by {lien.createur}</div>
+                            </div>
+                            
+                            <div className="rgs-lien-card__stats">
+                              <div className="rgs-lien-card__stat">
+                                <Gamepad2 size={14} />
+                                <span>{lien.nb_fichiers !== "0" ? `${lien.nb_fichiers} games` : 'Pack'}</span>
+                              </div>
+                              <div className="rgs-lien-card__stat">
+                                <HardDrive size={14} />
+                                <span>{lien.taille}</span>
+                              </div>
+                              {lien.informations && (
+                                <div className="rgs-lien-card__stat rgs-lien-card__stat--info">
+                                  <FileText size={14} />
+                                  <span>{lien.informations}</span>
+                                </div>
+                              )}
+                              {lien.dossier && (
+                                <div className="rgs-lien-card__stat">
+                                  <FolderOpen size={14} />
+                                  <span>/roms/{lien.dossier}</span>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {lien.mot_de_passe && (
+                              <div className="rgs-lien-card__password">
+                                <Lock size={14} />
+                                <span>Password required</span>
+                                <button 
+                                  className="rgs-lien-card__copy-pwd"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    try {
+                                      await navigator.clipboard.writeText(lien.mot_de_passe!);
+                                      showToast('🔑 Password copied!', 'success');
+                                    } catch {
+                                      showToast(`Password: ${lien.mot_de_passe}`, 'info');
+                                    }
+                                  }}
+                                >
+                                  <Copy size={12} /> Copy
+                                </button>
+                              </div>
+                            )}
+                            
+                            <button className="btn btn--ghost btn--full rgs-lien-card__dl-btn">
+                              {lien.url.includes('/dir/') ? 'Open Folder' : 'Download File'}
+                            </button>
+                          </motion.div>
+                        );
+                      })}
+                      {rgsLiens.length === 0 && (
+                        <div className="empty-state">
+                          <div className="empty-state__icon">📦</div>
+                          <h3 className="empty-state__title">No downloads available</h3>
+                          <p className="empty-state__text">This console has no download links yet</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1693,6 +2199,53 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-    </>
+
+      {/* ===== INTERNAL WEBVIEW (1fichier) ===== */}
+      <AnimatePresence>
+        {internalWebViewUrl && (
+          <motion.div
+            className="webview-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="webview-modal"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+            >
+              <div className="webview-header">
+                <div className="webview-title">
+                  <Globe size={14} />
+                  <span>External Download Page</span>
+                </div>
+                <div className="webview-controls">
+                  <button 
+                    className="webview-close" 
+                    onClick={() => setInternalWebViewUrl(null)}
+                    title="Close and return to EmuWorld"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+              <div className="webview-body">
+                <iframe 
+                  src={internalWebViewUrl} 
+                  className="webview-iframe"
+                  title="Download Page"
+                  sandbox="allow-forms allow-scripts allow-same-origin"
+                />
+              </div>
+              <div className="webview-footer">
+                <p>⚠️ Handling downloads, captchas and wait times on this provider. Click the close button above once your download has started.</p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
