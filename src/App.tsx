@@ -1680,6 +1680,7 @@ export default function App() {
                   )}
 
                   {rgsLoading ? (
+                    <div className="empty-state">
                       <RefreshCw size={48} className="animate-spin" />
                       <h3 className="empty-state__title">Loading from RetroGameSets...</h3>
                     </div>
