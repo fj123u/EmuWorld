@@ -32,3 +32,5 @@ tauri-plugin-shell = "2.3.5"
 tauri-plugin-single-instance = "2.4.0"
 bytes = "1"
 scraper = "0.26.0"
+regex = "1"
+chrono = { version = "0.4.44", features = ["clock"] }

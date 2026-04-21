@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -47,6 +47,7 @@ import {
   Lock,
   Globe,
   Package,
+  Activity,
 } from "lucide-react";
 
 /* ============================
@@ -370,6 +371,27 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
    App Component
    ============================ */
 export default function App() {
+  const [boxartLogs, setBoxartLogs] = useState<{ game: string; url: string; status: string; error?: string }[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const unlisten = listen<{ game: string; url: string; status: string; error?: string }>(
+      "boxart-log",
+      (event) => {
+        setBoxartLogs((prev) => [...prev, event.payload].slice(-50));
+      }
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [boxartLogs]);
+
   const [page, setPage] = useState<Page>("catalog");
   const [catalog, setCatalog] = useState<EmulatorInfo[]>([]);
   const [installed, setInstalled] = useState<string[]>([]);
@@ -824,8 +846,11 @@ export default function App() {
     }
   }, [showToast]);
 
-  const handleOpenRgsLink = useCallback(async (lien: RgsLien) => {
-    let url = lien.url;
+  const handleOpenRgsLink = useCallback(async (urlOrLien: string | RgsLien) => {
+    const isString = typeof urlOrLien === "string";
+    let url = isString ? urlOrLien : urlOrLien.url;
+    const lien = isString ? null : urlOrLien;
+
     // Add 1fichier affiliate tag
     if (url.includes("1fichier.com") && !url.includes("af=")) {
       url += (url.includes("?") ? "&" : "?") + "af=3186111";
@@ -834,7 +859,7 @@ export default function App() {
     // If it's a directory, scrape it instead of opening it
     if (url.includes("1fichier.com/dir/")) {
       setRgsLoading(true);
-      setSelectedRgsLien(lien);
+      if (lien) setSelectedRgsLien(lien);
       try {
         const files = await invoke<RgsFile[]>("scrape_1fichier_dir", { url });
         setRgsFolderFiles(files);
@@ -850,7 +875,7 @@ export default function App() {
     }
 
     // Individual file links: copy password and open in system browser
-    if (lien.mot_de_passe) {
+    if (lien && lien.mot_de_passe) {
       try {
         await navigator.clipboard.writeText(lien.mot_de_passe);
         showToast(`🔑 Password copied! Opening link...`, "success");
@@ -862,10 +887,14 @@ export default function App() {
     }
     
     // Open in system browser to bypass anti-embedding protections
-    await openUrl(url).catch(() => window.open(url, "_blank"));
+    try {
+      await openUrl(url).catch(() => window.open(url, "_blank"));
+    } catch (e) {
+      console.error("Failed to open URL:", e);
+      // Even if opening fails, we set the pending state so the user can import manually
+    }
     
     // Set pending import state to help the user finalize
-    // If we're in a folder pack, use that console name
     const currentConsole = selectedRgsConsoleName || "Nintendo Switch";
     setPendingImportConsole(currentConsole);
     showToast(`Once downloaded, click 'Finalize' to move and unzip the game to your ${currentConsole} library!`, "info");
@@ -1086,6 +1115,17 @@ export default function App() {
       loadData(); // This will trigger the reactive useEffect to update 'downloaded' state
     } catch (err: any) {
       showToast(`Delete failed: ${err}`, "error");
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (!confirm("Are you sure you want to clear the cover cache? ALL covers will be re-downloaded next time they are viewed.")) return;
+    try {
+      await invoke("clear_cover_cache");
+      showToast("Cover cache cleared! Re-scanning...", "success");
+      await loadData();
+    } catch (e: any) {
+      showToast(`Error: ${e.message}`, "error");
     }
   };
 
@@ -1946,6 +1986,41 @@ export default function App() {
                       <label className="settings__field-label">Emulators Folder</label>
                       <input className="settings__field-input" value={config.emulators_directory} readOnly />
                       <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><RefreshCw size={16} /> Maintenance</div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">Cover Art Cache</label>
+                        <p className="settings__field-desc">Clear locally stored boxart images. Useful if some covers are wrong.</p>
+                      </div>
+                      <button className="btn btn--danger btn--sm" onClick={handleClearCache}>
+                        <X size={14} /> Clear Cache
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Activity size={16} /> Boxart Fetch Logs</div>
+                    <div className="settings__logs">
+                      {boxartLogs.length === 0 ? (
+                        <p className="settings__field-desc">No logs yet. Try refreshing a game's boxart.</p>
+                      ) : (
+                        <div className="logs-container">
+                          {boxartLogs.map((log, i) => (
+                            <div key={i} className="log-item">
+                              <span className="log-game">[{log.game}]</span>
+                              <span className="log-url">{log.url}</span>
+                              <span className={`log-status log-status--${log.status.toLowerCase().includes("success") ? "success" : "info"}`}>
+                                {log.status}
+                              </span>
+                            </div>
+                          ))}
+                          <div ref={logsEndRef} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

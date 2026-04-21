@@ -1,12 +1,32 @@
 use serde::{Deserialize, Serialize};
+use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use tauri::Emitter;
 use reqwest;
 use urlencoding;
+use base64::Engine;
+use std::io::Write;
 
 mod emulators;
+
+fn write_to_boxart_log(message: &str) {
+    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("EmuWorld");
+    let _ = std::fs::create_dir_all(&path);
+    path.push("boxart_fetch.log");
+    
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path) {
+        let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        // Compose line in memory to minimize interleaving
+        let line = format!("[{}] {}\n", timestamp, message);
+        let _ = file.write_all(line.as_bytes());
+    }
+}
 
 /// App configuration stored as JSON
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -404,29 +424,37 @@ fn regex_strip_version(name: &str) -> String {
     result.trim().to_string()
 }
 
-#[allow(dead_code)]
-/// Strip language code parentheses like "(En,Fr,De,Es,It)" — keeps region like "(Europe)"
-fn regex_strip_languages(name: &str) -> String {
+/// Strip language/scene tags but keep region tags
+fn regex_strip_tags(name: &str) -> String {
     let mut result = name.to_string();
+    let regions = ["Europe", "USA", "World", "Japan", "France", "Germany", "Italy", "Spain", "Netherlands", "Sweden", "Australia", "Brazil", "Korea", "China"];
+    
     let mut changed = true;
     while changed {
         changed = false;
         if let Some(start) = result.rfind('(') {
-            if let Some(end) = result[start..].find(')') {
-                let content = &result[start + 1..start + end];
-                // Language codes are short comma-separated items like "En,Fr,De"
-                let is_lang = content.contains(',') && content.split(',').all(|s| {
-                    let trimmed = s.trim();
-                    trimmed.len() <= 4 && trimmed.chars().all(|c| c.is_alphabetic())
-                });
-                if is_lang {
-                    result = format!("{}{}", &result[..start], &result[start + end + 1..]);
+            if let Some(end_offset) = result[start..].find(')') {
+                let end = start + end_offset;
+                let content = &result[start + 1..end];
+                
+                // If it's NOT a known region, strip it
+                let is_region = regions.iter().any(|&r| content.contains(r));
+                if !is_region {
+                    result = format!("{}{}", &result[..start], &result[end + 1..]);
                     changed = true;
+                    continue;
                 }
             }
         }
+        if let Some(start) = result.rfind('[') {
+            if let Some(end_offset) = result[start..].find(']') {
+                let end = start + end_offset;
+                result = format!("{}{}", &result[..start], &result[end + 1..]);
+                changed = true;
+            }
+        }
     }
-    result.trim().to_string()
+    result.replace("  ", " ").trim().to_string()
 }
 
 #[allow(dead_code)]
@@ -527,216 +555,569 @@ fn match_extension(ext: &str, catalog: &[emulators::EmulatorInfo]) -> Option<(St
 }
 
 #[tauri::command]
-async fn fetch_boxart(game_name: String, console: String) -> Result<String, String> {
+async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String) -> Result<String, String> {
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
-    
-    let libretro_systems: Vec<&str> = match console.as_str() {
-        "NES" => vec!["Nintendo - Nintendo Entertainment System"],
-        "Super Nintendo" => vec!["Nintendo - Super Nintendo Entertainment System"],
-        "Nintendo 64" => vec!["Nintendo - Nintendo 64"],
-        "Game Boy Advance" => vec!["Nintendo - Game Boy Advance"],
+
+    println!("[Boxart] Request for: '{}' ({})", game_name, console);
+
+    // Helper to log to frontend via events
+    let log_event = {
+        let app_handle = app_handle.clone();
+        let game_name = game_name.clone();
+        move |url: &str, status: &str, err: Option<String>| {
+            use tauri::Emitter;
+            let _ = app_handle.emit("boxart-log", serde_json::json!({
+                "game": game_name,
+                "url": url,
+                "status": status,
+                "error": err
+            }));
+        }
+    };
+
+    let libretro_systems = match console.as_ref() {
+        "NES" | "Famicom" => vec!["Nintendo - Nintendo Entertainment System"],
+        "SNES" | "Super Famicom" | "Super Nintendo" => vec!["Nintendo - Super Nintendo Entertainment System"],
+        "Nintendo 64" | "N64" => vec!["Nintendo - Nintendo 64"],
+        "Game Boy" => vec!["Nintendo - Game Boy"],
+        "Game Boy Color" | "GBC" => vec!["Nintendo - Game Boy Color"],
+        "Game Boy Advance" | "GBA" => vec!["Nintendo - Game Boy Advance"],
         "Nintendo DS" => vec!["Nintendo - Nintendo DS"],
         "GameCube" => vec!["Nintendo - GameCube"],
-        "Wii" => vec!["Nintendo - Wii"],
         "GameCube / Wii" => vec!["Nintendo - Wii", "Nintendo - GameCube"],
+        "Wii" => vec!["Nintendo - Wii"],
         "Wii U" => vec!["Nintendo - Wii U"],
         "Nintendo Switch" => vec!["Nintendo - Nintendo Switch"],
         "Virtual Boy" => vec!["Nintendo - Virtual Boy"],
-        "PlayStation 1" | "PS1" | "PSX" => vec!["Sony - PlayStation"],
+        "PlayStation 1" | "PS1" => vec!["Sony - PlayStation"],
         "PlayStation 2" | "PS2" => vec!["Sony - PlayStation 2"],
-        "PlayStation 3" | "PS3" => vec!["Sony - PlayStation 3"],
-        "PlayStation Portable" | "PSP" => vec!["Sony - PlayStation Portable"],
-        "Dreamcast" => vec!["Sega - Dreamcast"],
-        "Mega Drive" => vec!["Sega - Mega Drive - Genesis"],
-        "Master System" => vec!["Sega - Master System - Mark III"],
-        "Saturn" => vec!["Sega - Saturn"],
-        "Game Gear" => vec!["Sega - Game Gear"],
-        "Xbox" => vec!["Microsoft - Xbox"],
-        "Neo-Geo" => vec!["SNK - Neo Geo"],
-        "Arcade" => vec!["FBNeo - Arcade Games", "MAME"],
-        "PC Engine" => vec!["NEC - PC Engine - TurboGrafx 16"],
-        "Atari 2600" => vec!["Atari - 2600"],
-        _ => return Err(format!("No cover source for console: {}", console)),
+        _ => vec![],
     };
-    
-    let mut normalized_name = game_name.replace('_', " ").replace("  ", " ").trim().to_string();
-    // Strip accents (é -> e, etc)
-    normalized_name = normalized_name
-        .replace('é', "e").replace('è', "e").replace('ê', "e").replace('ë', "e")
-        .replace('à', "a").replace('â', "a")
-        .replace('ô', "o").replace('û', "u").replace('ï', "i").replace('î', "i")
-        .replace('ç', "c")
-        .to_string();
-    
-    let lower_name = normalized_name.to_lowercase();
-    if lower_name.ends_with(".chd") || lower_name.ends_with(".iso") || lower_name.ends_with(".rvz") || lower_name.ends_with(".wbfs") {
-        normalized_name = normalized_name[..normalized_name.len()-4].to_string();
-    }
-    
-    // Libretro naming conventions replacements
-    let cleaned_for_search = normalized_name
-        .replace(':', " -")
-        .replace(" & ", " + ")
-        .to_string();
 
-    let forbidden = ['*', '/', '<', '>', '?', '\\', '|', '"']; // Removed & and : from forbidden to handle them in search variants
-    let safe_name: String = normalized_name.chars()
-        .map(|c| if forbidden.contains(&c) { '_' } else { c })
+    let candidates = generate_search_candidates(&game_name, &console);
+    let safe_name: String = game_name.chars()
+        .map(|c| if ['*', '/', '<', '>', '?', '\\', '|', '"', ':'].contains(&c) { '_' } else { c })
         .collect();
     
-    let mut cleaned = cleaned_for_search; // Use the cleaned variant as base for candidates
-    let tags = vec![" (USA)", " (Europe)", " (World)", " (Japan)", " (En,Fr,De)", " (En,Fr,Es)", " (Canada)", " (Italy)", " (Proto)"];
-    for tag in &tags {
-        cleaned = cleaned.replace(tag, "");
-    }
-    
-    if let Some(bracket_pos) = cleaned.find('[') {
-        cleaned = cleaned[..bracket_pos].trim().to_string();
-    }
-    if let Some(paren_pos) = cleaned.find('(') {
-        cleaned = cleaned[..paren_pos].trim().to_string();
-    }
-
-    let mut candidates = vec![
-        cleaned.clone(),
-        format!("{} (USA)", cleaned),
-        format!("{} (World)", cleaned),
-        format!("{} (Europe)", cleaned),
-        format!("{} (USA, Europe)", cleaned),
+    let norm_target = game_name.to_lowercase().chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>();
+        
+    let console_covers_dir = covers_dir.join(&console);
+    let synonym_groups = vec![
+        vec!["rouge", "red"], vec!["bleu", "blue"], vec!["jaune", "yellow"],
+        vec!["argent", "silver"], vec!["or", "gold"], vec!["cristal", "crystal"],
+        vec!["rubis", "ruby"], vec!["saphir", "sapphire"], vec!["emeraude", "emerald"],
+        vec!["platine", "platinum"], vec!["perle", "pearl"], vec!["diamant", "diamond"],
+        vec!["noir", "black"], vec!["blanc", "white"],
+        vec!["soleil", "sun"], vec!["lune", "moon"],
+        vec!["epee", "sword"], vec!["bouclier", "shield"],
+        vec!["violet", "violet"], vec!["ecarlate", "scarlet"],
+        vec!["vert", "green"]
     ];
 
-    // Try variants for titles with ampersands
-    if cleaned.contains(" and ") {
-        let plus = cleaned.replace(" and ", " + ");
-        let amp = cleaned.replace(" and ", " & ");
-        candidates.push(plus.clone());
-        candidates.push(format!("{} (USA)", plus));
-        candidates.push(format!("{} (Europe)", plus));
-        candidates.push(amp.clone());
-        candidates.push(format!("{} (USA)", amp));
-        candidates.push(format!("{} (Europe)", amp));
-    }
-    
-    if cleaned.to_lowercase().starts_with("the ") {
-        let suffix = &cleaned[4..];
-        let swapped = format!("{}, The", suffix);
-        candidates.push(swapped.clone());
-        candidates.push(format!("{} (USA)", swapped));
-        candidates.push(format!("{} (World)", swapped));
-        candidates.push(format!("{} (Europe)", swapped));
-    }
+    let check_mismatch = |target: &str, candidate: &str| -> Option<String> {
+        let t_low = target.to_lowercase();
+        let c_low = candidate.to_lowercase();
+        
+        for group in &synonym_groups {
+            // Check for entire words using word boundaries to avoid "Bros" matching "Or"
+            let target_has_group = group.iter().any(|syn| {
+                let re = regex::Regex::new(&format!(r"(?i)\b{}\b", syn)).ok();
+                re.map(|r| r.is_match(&t_low)).unwrap_or(false)
+            });
+            let candidate_has_group = group.iter().any(|syn| {
+                let re = regex::Regex::new(&format!(r"(?i)\b{}\b", syn)).ok();
+                re.map(|r| r.is_match(&c_low)).unwrap_or(false)
+            });
+            
+            if target_has_group != candidate_has_group {
+                return Some(format!("Mismatch on group {:?} (Target: {}, Candidate: {})", group, target_has_group, candidate_has_group));
+            }
+        }
+        None
+    };
 
-    // 1. First check local covers directory with fuzzy matching
-    let console_covers_dir = covers_dir.join(&console);
+    write_to_boxart_log(&format!("=== FETCH START: {} ({}) ===", game_name, console));
+
+    // 1. First check local covers directory
     if let Ok(entries) = std::fs::read_dir(&console_covers_dir) {
+        let mut best_local = None;
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str() {
                 let lower = file_name.to_lowercase();
-                if lower.ends_with(".png") || lower.ends_with(".jpg") {
-                    // Strip extension, strip bracket content like [01008F...][v0], then normalize
+                if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
                     let name_no_ext = lower.rsplit_once('.').map(|(n,_)| n).unwrap_or(&lower);
-                    // Remove everything in brackets: [titleid], [v0], (USA), etc.
-                    let mut stripped = String::new();
-                    let mut depth = 0;
-                    for ch in name_no_ext.chars() {
-                        match ch {
-                            '[' | '(' => depth += 1,
-                            ']' | ')' => { depth -= 1; },
-                            _ if depth == 0 => stripped.push(ch),
-                            _ => {}
-                        }
-                    }
-                    // Also strip accents from the file name
-                    let clean_file = stripped
-                        .replace('é', "e").replace('è', "e").replace('ê', "e").replace('ë', "e")
-                        .replace('à', "a").replace('â', "a").replace('ô', "o")
-                        .replace('û', "u").replace('ï', "i").replace('î', "i").replace('ç', "c")
-                        .replace(' ', "").replace('_', "").replace('+', "").replace('&', "").replace(':', "").replace('-', "").replace('.', "");
+                    let norm_file = name_no_ext.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
                     
-                    // Also strip brackets/parens from the game name
-                    let mut game_stripped = String::new();
-                    let mut gdepth = 0;
-                    for ch in normalized_name.to_lowercase().chars() {
-                        match ch {
-                            '[' | '(' => gdepth += 1,
-                            ']' | ')' => { gdepth -= 1; },
-                            _ if gdepth == 0 => game_stripped.push(ch),
-                            _ => {}
-                        }
+                    if norm_file == norm_target {
+                        best_local = Some(entry.path());
+                        break;
                     }
-                    let clean_game = game_stripped
-                        .replace('é', "e").replace('è', "e").replace('ê', "e").replace('ë', "e")
-                        .replace('à', "a").replace('â', "a").replace('ô', "o")
-                        .replace('û', "u").replace('ï', "i").replace('î', "i").replace('ç', "c")
-                        .replace('\u{FFFD}', "e").replace("__", "e") // Handle corrupted encoding
-                        .replace(' ', "").replace('_', "").replace('+', "").replace('&', "").replace(':', "").replace('-', "").replace('.', "")
-                        .to_lowercase();
                     
-                    if !clean_file.is_empty() && clean_file == clean_game {
-                        if let Ok(data) = std::fs::read(&entry.path()) {
-                            use base64::Engine;
-                            let ext = if lower.ends_with(".jpg") { "jpeg" } else { "png" };
-                            let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
-                            return Ok(format!("data:image/{};base64,{}", ext, b64));
+                    if best_local.is_none() && (norm_target.contains(&norm_file) || norm_file.contains(&norm_target)) {
+                        if let Some(reason) = check_mismatch(&game_name, &lower) {
+                            write_to_boxart_log(&format!("Local Reject: {} - Reason: {}", lower, reason));
+                            continue;
+                        }
+                        if norm_file.len() > 3 {
+                            best_local = Some(entry.path());
                         }
                     }
                 }
             }
         }
+        
+        if let Some(path) = best_local {
+            if let Ok(data) = std::fs::read(&path) {
+                if data.len() > 100 { 
+                    log_event("Local Cache", "Match Found", None);
+                    write_to_boxart_log("Result: Local Cache Success");
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
+                    return Ok(format!("data:image/png;base64,{}", b64));
+                }
+            }
+        }
     }
-    
+
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
-        .user_agent("Mozilla/5.0")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .build()
-        .map_err(|e| e.to_string())?;
+        .unwrap_or_else(|_| reqwest::Client::new());
 
-    for system in &libretro_systems {
-        let encoded_system = urlencoding::encode(system);
-        for candidate in &candidates {
-            let encoded_name = urlencoding::encode(candidate);
-            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", encoded_system, encoded_name);
-            if let Ok(response) = client.get(&url).send().await {
-                if response.status().is_success() {
-                    if let Ok(bytes) = response.bytes().await {
-                        if bytes.len() > 500 {
+    // Console-specific size thresholds to block junk/icons but keep small retro covers
+    let min_size: usize = match console.as_str() {
+        "Nintendo Switch" | "Wii U" => 10000,
+        "NES" | "SNES" | "Super Nintendo" | "Game Boy" | "Game Boy Color" | "Game Boy Advance" => 3000,
+        "Wii" | "GameCube" | "GameCube / Wii" | "PlayStation 2" => 5000,
+        _ => 5000,
+    };
+
+    // === SWITCH/WIIU: Try tinfoil.media first (best source for Switch covers) ===
+    if console == "Nintendo Switch" {
+        if let Some(id) = extract_title_id(&game_name) {
+            let url = format!("https://tinfoil.media/ti/{}/512/512", id);
+            write_to_boxart_log(&format!("Trying Tinfoil.media: {}", url));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size {
+                            write_to_boxart_log(&format!("Result: Tinfoil.media Success (ID: {})", id));
                             let _ = std::fs::create_dir_all(&console_covers_dir);
-                            let file_path = console_covers_dir.join(format!("{}.png", &safe_name));
-                            if let Ok(mut file) = std::fs::File::create(&file_path) {
-                                use std::io::Write;
-                                let _ = file.write_all(&bytes);
-                            }
-                            use base64::Engine;
-                            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                            return Ok(format!("data:image/png;base64,{}", b64));
+                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                         }
                     }
                 }
             }
         }
     }
-    
-    Err("Boxart not found".to_string())
-}
 
-/// Extract a 16-character hex Title ID from a filename (e.g. "[0100000000010000]")
-fn extract_title_id(name: &str) -> Option<String> {
-    for part in name.split('[') {
-        if let Some(bracket_end) = part.find(']') {
-            let content = part[..bracket_end].trim().to_uppercase();
-            if content.len() >= 16 {
-                let chars: Vec<char> = content.chars().collect();
-                for i in 0..=(chars.len() - 16) {
-                    let potential: String = chars[i..i+16].iter().collect();
-                    if potential.chars().all(|c| c.is_ascii_hexdigit()) {
-                        return Some(potential);
+    // === LIBRETRO: Try raw filename first (exact match with region tags) ===
+    let raw_libretro_name = game_name.chars().map(|c| if "&*/:<>?\\|".contains(c) { '_' } else { c }).collect::<String>();
+    for folder in &libretro_systems {
+        let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&raw_libretro_name));
+        write_to_boxart_log(&format!("Trying Libretro (raw): {}", url));
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                if let Ok(bytes) = resp.bytes().await {
+                    if bytes.len() >= min_size {
+                        write_to_boxart_log(&format!("Result: Libretro Raw Success ({})", raw_libretro_name));
+                        let _ = std::fs::create_dir_all(&console_covers_dir);
+                        let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                        return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                     }
                 }
             }
         }
     }
+
+    // === LIBRETRO: Try stripped name (remove lang codes + version, keep region) ===
+    {
+        let stripped = regex_strip_version(&regex_strip_tags(&raw_libretro_name));
+        if stripped != raw_libretro_name {
+            for folder in &libretro_systems {
+                let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&stripped));
+                write_to_boxart_log(&format!("Trying Libretro (stripped): {}", url));
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            if bytes.len() >= min_size {
+                                write_to_boxart_log(&format!("Result: Libretro Stripped Success ({})", stripped));
+                                let _ = std::fs::create_dir_all(&console_covers_dir);
+                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Try Title Searching FIRST (Libretro / Wikipedia) as requested
+    for search_name in &candidates {
+        // --- 3.1: Libretro ---
+        for folder in &libretro_systems {
+            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(search_name));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size {
+                            write_to_boxart_log(&format!("Result: Libretro Success ({})", search_name));
+                            let _ = std::fs::create_dir_all(&console_covers_dir);
+                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 3.2: Wikipedia ---
+        for suffix in &[" video game", " (video game)", ""] {
+            let wiki_query = format!("{}{}", search_name, suffix);
+            let wiki_url = format!("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&srlimit=1&format=json", urlencoding::encode(&wiki_query));
+            if let Ok(resp) = client.get(&wiki_url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(search_res) = json["query"]["search"].as_array().and_then(|a| a.get(0)) {
+                        let title = search_res["title"].as_str().unwrap_or_default();
+                        // Get the image
+                        let img_query_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=pageimages&format=json&pithumbsize=1000", urlencoding::encode(title));
+                        if let Ok(img_resp) = client.get(&img_query_url).send().await {
+                            if let Ok(img_json) = img_resp.json::<serde_json::Value>().await {
+                                if let Some(pages) = img_json["query"]["pages"].as_object() {
+                                    for (_, page) in pages {
+                                        if let Some(thumbnail) = page["thumbnail"]["source"].as_str() {
+                                            if let Ok(bytes_resp) = client.get(thumbnail).send().await {
+                                                if let Ok(bytes) = bytes_resp.bytes().await {
+                                                    if bytes.len() >= min_size {
+                                                        write_to_boxart_log(&format!("Result: Wikipedia Success ({})", title));
+                                                        let _ = std::fs::create_dir_all(&console_covers_dir);
+                                                        let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                        return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Try Title ID Fallback (Switch / WiiU)
+    if let Some(id) = extract_title_id(&game_name) {
+        let is_wiiu = id.starts_with("0005");
+        let console_type = if is_wiiu { "wiiu" } else { "switch" };
+        
+        for region in &["EN", "US", "JA", "FR", "DE"] {
+            let url = format!("https://art.gametdb.com/{}/coverfullHQ/{}/{}.jpg", console_type, region, id);
+            write_to_boxart_log(&format!("Trying GameTDB: {}", url));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size {
+                            write_to_boxart_log(&format!("Result: GameTDB Success ({})", region));
+                            let _ = std::fs::create_dir_all(&console_covers_dir);
+                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            return Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Libretro Fallback
+    for system in &libretro_systems {
+        for candidate in &candidates {
+            let libretro_name = candidate.chars().map(|c| if "&*/:<>?\\|".contains(c) { '_' } else { c }).collect::<String>();
+            if let Some(reason) = check_mismatch(&game_name, &libretro_name) {
+                write_to_boxart_log(&format!("Libretro Reject: {} - Reason: {}", libretro_name, reason));
+                continue;
+            }
+
+            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(system), urlencoding::encode(&libretro_name));
+            write_to_boxart_log(&format!("Trying Libretro: {}", url));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size {
+                            log_event(&url, "SUCCESS", None);
+                            write_to_boxart_log("Result: Libretro Success");
+                            let _ = std::fs::create_dir_all(&console_covers_dir);
+                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                        } else {
+                            write_to_boxart_log(&format!("Libretro Ignored (Too small: {} bytes)", bytes.len()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Archive.org Fallback
+    let search_name = if !candidates.is_empty() { candidates[0].clone() } else { game_name.clone() };
+    let arch_query = format!("title:(\"{}\") AND mediatype:image", search_name);
+    let arch_url = format!("https://archive.org/advancedsearch.php?q={}&fl[]=identifier&rows=5&output=json", urlencoding::encode(&arch_query));
+    write_to_boxart_log(&format!("Trying Archive.org Search: {}", arch_url));
+    if let Ok(resp) = client.get(&arch_url).send().await {
+        if let Ok(json) = resp.json::<serde_json::Value>().await {
+            if let Some(docs) = json["response"]["docs"].as_array() {
+                for doc in docs {
+                    if let Some(ia_id) = doc["identifier"].as_str() {
+                        let meta_url = format!("https://archive.org/metadata/{}", ia_id);
+                        if let Ok(meta_resp) = client.get(&meta_url).send().await {
+                            if let Ok(meta_json) = meta_resp.json::<serde_json::Value>().await {
+                                if let Some(files) = meta_json["files"].as_array() {
+                                    for file in files {
+                                        if let Some(fname) = file["name"].as_str() {
+                                            let low = fname.to_lowercase();
+                                            if (low.ends_with(".png") || low.ends_with(".jpg")) && (low.contains("front") || low.contains("cover") || low.contains("box")) {
+                                                if let Some(reason) = check_mismatch(&game_name, &low) {
+                                                    write_to_boxart_log(&format!("Archive File Reject: {} - Reason: {}", low, reason));
+                                                    continue;
+                                                }
+                                                if let Some(reason) = check_mismatch(&game_name, &ia_id.to_lowercase()) {
+                                                    write_to_boxart_log(&format!("Archive ID Reject: {} - Reason: {}", ia_id, reason));
+                                                    continue;
+                                                }
+
+                                                let img_url = format!("https://archive.org/download/{}/{}", ia_id, fname);
+                                                if let Ok(img_resp) = client.get(&img_url).send().await {
+                                                    if let Ok(bytes) = img_resp.bytes().await {
+                                                        if bytes.len() >= min_size {
+                                                            log_event(&img_url, "SUCCESS", None);
+                                                            write_to_boxart_log("Result: Archive.org Success");
+                                                            let _ = std::fs::create_dir_all(&console_covers_dir);
+                                                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Wikipedia Fallback
+    for suffix in &[" video game", " (video game)", ""] {
+        let wiki_query = format!("{}{}", search_name, suffix);
+        let wiki_url = format!("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&srlimit=1&format=json", urlencoding::encode(&wiki_query));
+        write_to_boxart_log(&format!("Trying Wikipedia Search: {}", wiki_url));
+        if let Ok(resp) = client.get(&wiki_url).send().await {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(search_res) = json["query"]["search"].as_array().and_then(|a| a.get(0)) {
+                    let title = search_res["title"].as_str().unwrap_or_default();
+                    if let Some(reason) = check_mismatch(&game_name, title) {
+                        write_to_boxart_log(&format!("Wikipedia Title Reject: {} - Reason: {}", title, reason));
+                        continue;
+                    }
+
+                    let page_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=pageimages&format=json&pithumbsize=1000", urlencoding::encode(title));
+                    if let Ok(page_resp) = client.get(&page_url).send().await {
+                        if let Ok(page_json) = page_resp.json::<serde_json::Value>().await {
+                            if let Some(pages) = page_json["query"]["pages"].as_object() {
+                                for (_, page) in pages {
+                                    if let Some(src) = page["thumbnail"]["source"].as_str() {
+                                        let low_src = src.to_lowercase();
+                                        if low_src.contains("logo") && !low_src.contains("box") {
+                                            write_to_boxart_log(&format!("Wikipedia Skip Logo: {}", src));
+                                            continue;
+                                        }
+                                        if let Ok(img_resp) = client.get(src).send().await {
+                                            if let Ok(bytes) = img_resp.bytes().await {
+                                                if bytes.len() >= min_size {
+                                                    log_event(src, "SUCCESS (Wiki)", None);
+                                                    write_to_boxart_log("Result: Wikipedia Success");
+                                                    let _ = std::fs::create_dir_all(&console_covers_dir);
+                                                    let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                                    return Ok(format!("data:image/png;base64,{}", b64));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    write_to_boxart_log("Result: FAILED - All sources exhausted");
+    log_event("DONE", "NONE FOUND", None);
+    Err("No boxart found".to_string())
+}
+
+/// Clean a game name for searching (handles scene tags, IDs, etc.)
+fn clean_game_name(name: &str) -> String {
+    let mut cleaned = name.to_string();
+    
+    // Remove extensions first
+    let extensions = vec![".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64"];
+    for ext in extensions {
+        if cleaned.to_lowercase().ends_with(ext) {
+            cleaned = cleaned[..cleaned.len()-ext.len()].to_string();
+            break;
+        }
+    }
+
+    // Use simple replacement to avoid unsupported look-around regex panics
+    cleaned = cleaned.replace('.', " ").replace('_', " ");
+
+    // Preserve alphanumeric + spaces, strip brackets/parens content (tags)
+    let re_tags = Regex::new(r"\[.*?\]|\(.*?\)").unwrap();
+    cleaned = re_tags.replace_all(&cleaned, "").to_string();
+
+    // Strip common scene keywords
+    let scene_keywords = vec![
+        "PROPER", "REPACK", "NSW", "MULTi", "READNFO", "INTERNAL", "D0WNLOAD", 
+        "BigBlueBox", "Kaze-Nico", "v1.1", "Update", "DLC", "Patch",
+        "Collection", "v0", "v65536"
+    ];
+    for kw in scene_keywords {
+        let re = Regex::new(&format!(r"(?i)\b{}\b", kw)).unwrap();
+        cleaned = re.replace_all(&cleaned, "").to_string();
+    }
+
+    // Final cleanup
+    cleaned = cleaned
+        .replace('é', "e").replace('è', "e").replace('ê', "e").replace('ë', "e")
+        .replace('à', "a").replace('â', "a").replace('ô', "o")
+        .replace('û', "u").replace('ï', "i").replace('î', "i").replace('ç', "c");
+    
+    while cleaned.contains("  ") {
+        cleaned = cleaned.replace("  ", " ");
+    }
+    
+    cleaned.trim().to_string()
+}
+
+/// Extract a Title ID from a string (e.g. "[01007EF...")
+/// Resilient against truncation, spaces, and formatting junk.
+fn extract_title_id(name: &str) -> Option<String> {
+    // 1. "Dirty" Bracket extraction
+    if let Some(start) = name.find('[') {
+        let content = if let Some(end) = name[start..].find(']') {
+            &name[start + 1..start + end]
+        } else {
+            &name[start + 1..] // Handle missing closing bracket
+        };
+
+        // Strip ALL non-hex characters
+        let mut id = content.chars()
+            .filter(|c| c.is_ascii_hexdigit())
+            .collect::<String>()
+            .to_uppercase();
+
+        if id.len() >= 8 {
+            // Pad to 16 if it looks like Switch (0100...) or WiiU (0005...)
+            if id.starts_with("0100") || id.starts_with("0005") {
+                while id.len() < 16 { id.push('0'); }
+                if id.len() > 16 { id.truncate(16); }
+            }
+            return Some(id);
+        }
+    }
+
+    // 2. Standalone hex search (Fallback)
+    let re_id = regex::Regex::new(r"(?i)\b(0100[0-9A-F]{12})\b|\b(00050000[0-9A-F]{8})\b").ok()?;
+    if let Some(caps) = re_id.captures(name) {
+        if let Some(m) = caps.get(1) { return Some(m.as_str().to_uppercase()); }
+        if let Some(m) = caps.get(2) { return Some(m.as_str().to_uppercase()); }
+    }
+
     None
+}
+fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
+    let mut cleaned = clean_game_name(name);
+    if cleaned.is_empty() { return vec![]; }
+    
+    let mut candidates = vec![cleaned.clone()];
+
+    // Aggressive cleaning for pure title
+    let mut pure = cleaned.clone();
+    if let Some(pos) = pure.find('(') { pure = pure[..pos].trim().to_string(); }
+    if let Some(pos) = pure.find('[') { pure = pure[..pos].trim().to_string(); }
+    if let Some(pos) = pure.find(" - ") { pure = pure[..pos].trim().to_string(); }
+    
+    if !pure.is_empty() && pure != cleaned {
+        candidates.push(pure.clone());
+    }
+
+    // Language bridge (French to English mapping for common titles like Pokemon)
+    let fr_to_en = vec![
+        ("Platine", "Platinum"), ("Rouge", "Red"), ("Bleu", "Blue"), ("Jaune", "Yellow"),
+        ("Or", "Gold"), ("Argent", "Silver"), ("Cristal", "Crystal"), ("Rubis", "Ruby"),
+        ("Saphir", "Sapphire"), ("Emeraude", "Emerald"), ("Diamant", "Diamond"),
+        ("Perle", "Pearl"), ("Noir", "Black"), ("Blanc", "White"), ("Soleil", "Sun"), ("Lune", "Moon")
+    ];
+
+    let mut translated = pure.clone();
+    let mut matched = false;
+    for (fr, en) in fr_to_en {
+        if translated.contains(fr) {
+            translated = translated.replace(fr, en);
+            matched = true;
+        }
+    }
+    if matched {
+        candidates.push(translated.clone());
+        candidates.push(format!("{} (World)", translated));
+        candidates.push(format!("{} (USA)", translated));
+    }
+
+    // Add console name to force the right Wikipedia result
+    if !pure.is_empty() {
+        candidates.push(format!("{} {}", pure, console));
+        if matched {
+            candidates.push(format!("{} {}", translated, console));
+        }
+    }
+
+    // Libretro conversions
+    let alt1 = pure.replace(':', " -").replace(" & ", " + ");
+    if alt1 != pure { candidates.push(alt1); }
+
+    // Re-add colon if it was missing but might be needed for Wikipedia/Libretro
+    if !pure.contains(':') && (pure.contains("Mario") || pure.contains("Zelda") || pure.contains("Metroid")) {
+        // Simple heuristic: add colon after the first word or known series names
+        let series = ["Mario & Luigi", "The Legend of Zelda", "Super Mario", "Metroid"];
+        for s in series {
+            if pure.starts_with(s) && pure.len() > s.len() + 1 {
+                candidates.push(format!("{}: {}", s, &pure[s.len()..].trim()));
+                break;
+            }
+        }
+    }
+
+    // Specific fix for 1.2.Switch
+    if pure.contains("1.2.Switch") || pure.contains("1 2 Switch") {
+        candidates.push("1-2-Switch".to_string());
+        candidates.push("1-2-Switch (video game)".to_string());
+    }
+
+    // Deduplicate and return
+    candidates.dedup();
+    candidates
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1614,7 +1995,10 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
         if let Some(file_cell) = row.select(&file_cell_selector).next() {
             if let Some(link) = file_cell.select(&Selector::parse("a").unwrap()).next() {
                 let name = link.text().collect::<Vec<_>>().join("");
-                let url = link.value().attr("href").unwrap_or("").to_string();
+                let mut url = link.value().attr("href").unwrap_or("").to_string();
+                if url.starts_with("/") {
+                    url = format!("https://1fichier.com{}", url);
+                }
                 
                 // Get size (it's the next td)
                 let mut size = String::from("Unknown");
@@ -1631,6 +2015,17 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
     }
     
     Ok(files)
+}
+
+#[tauri::command]
+fn clear_cover_cache() -> Result<(), String> {
+    let config = get_config();
+    let covers_dir = PathBuf::from(&config.covers_directory);
+    if covers_dir.exists() {
+        std::fs::remove_dir_all(&covers_dir).map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&covers_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 pub fn run() {
@@ -1682,6 +2077,7 @@ pub fn run() {
             search_rgs,
             scrape_1fichier_dir,
             finalize_rgs_import,
+            clear_cover_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
