@@ -273,8 +273,12 @@ const CONSOLE_ICONS: Record<string, string> = {
    Source: https://github.com/libretro/retroarch-assets/tree/master/xmb/monochrome/png */
 const CONSOLE_RETROARCH_SLUG: Record<string, string> = {
   "NES": "Nintendo - Nintendo Entertainment System",
+  "Nes": "Nintendo - Nintendo Entertainment System",
+  "Famicom": "Nintendo - Nintendo Entertainment System",
   "Super Nintendo": "Nintendo - Super Nintendo Entertainment System",
+  "Super Nes": "Nintendo - Super Nintendo Entertainment System",
   "SNES": "Nintendo - Super Nintendo Entertainment System",
+  "Super Famicom": "Nintendo - Super Nintendo Entertainment System",
   "Nintendo 64": "Nintendo - Nintendo 64",
   "N64": "Nintendo - Nintendo 64",
   "Game Boy": "Nintendo - Game Boy",
@@ -283,15 +287,20 @@ const CONSOLE_RETROARCH_SLUG: Record<string, string> = {
   "Game Boy Advance": "Nintendo - Game Boy Advance",
   "GBA": "Nintendo - Game Boy Advance",
   "Nintendo DS": "Nintendo - Nintendo DS",
+  "NDS": "Nintendo - Nintendo DS",
   "Nintendo 3DS": "Nintendo - Nintendo 3DS",
   "3DS": "Nintendo - Nintendo 3DS",
   "GameCube": "Nintendo - GameCube",
+  "Gamecube": "Nintendo - GameCube",
   "GameCube / Wii": "Nintendo - GameCube",
   "GameCube - Wii": "Nintendo - GameCube",
   "Wii": "Nintendo - Wii",
   "Wii U": "Nintendo - Wii U",
+  "WiiU": "Nintendo - Wii U",
   "Nintendo Switch": "Nintendo - Switch",
+  "Switch": "Nintendo - Switch",
   "Virtual Boy": "Nintendo - Virtual Boy",
+  "VirtualBoy": "Nintendo - Virtual Boy",
 
   "PlayStation 1": "Sony - PlayStation",
   "PS1": "Sony - PlayStation",
@@ -1628,7 +1637,7 @@ export default function App() {
                                 className={`sidebar__item ${consoleFilter === con ? "sidebar__item--active" : ""}`}
                                 onClick={() => setConsoleFilter(con)}
                               >
-                                <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                                <span className="sidebar__item-icon"><ConsoleLogo name={con} size={14} /></span>
                                 {con}
                               </button>
                             ))}
@@ -1714,7 +1723,7 @@ export default function App() {
                                     onClick={() => toggleSidebarConsole(con)}
                                   >
                                     <span className="sidebar__item-icon">{isConExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}</span>
-                                    <span className="sidebar__item-icon">{CONSOLE_ICONS[con] || "🎮"}</span>
+                                    <span className="sidebar__item-icon sidebar__item-icon--console"><ConsoleLogo name={con} size={14} /></span>
                                     {con}
                                     <span className="sidebar__item-count">{consoleGames.length}</span>
                                   </button>
@@ -1804,7 +1813,15 @@ export default function App() {
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
-                    {page === "catalog" && `${filteredCatalog.length} consoles available`}
+                    {page === "catalog" && (
+                      search.trim().length >= 2
+                        ? `${filteredCatalog.length} result${filteredCatalog.length === 1 ? "" : "s"} for "${search}"`
+                        : consoleFilter
+                          ? `${filteredCatalog.length} emulator${filteredCatalog.length === 1 ? "" : "s"} for ${consoleFilter}`
+                          : categoryFilter
+                            ? `Pick a console in ${categoryFilter}`
+                            : `${catalog.length} emulator${catalog.length === 1 ? "" : "s"} — pick a manufacturer`
+                    )}
                     {page === "store" && storeMode === "vimm" && (
                       vimmSearch.trim().length >= 2
                         ? `${vimmGames.length} result${vimmGames.length === 1 ? "" : "s"}${selectedVimmConsole ? ` on ${selectedVimmConsole.name}` : ""}`
@@ -1870,45 +1887,148 @@ export default function App() {
                 </div>
               </div>
 
-              {page === "catalog" && (
-                <div className="catalog-content">
-                  <div className="emu-grid">
-                    {filteredCatalog.map((emu) => (
-                      <motion.div key={emu.id} className="emu-card">
-                        <div className="emu-card__header">
-                          <div className="emu-card__icon">{emu.icon}</div>
-                          <div className="emu-card__info">
-                            <div className="emu-card__name">{emu.name}</div>
-                            <div className="emu-card__console">{emu.console}</div>
-                          </div>
-                          {installed.includes(emu.id) && (
-                            <div className="emu-card__status emu-card__status--installed">
-                              <CheckCircle size={12} /> Installed
-                            </div>
-                          )}
+              {page === "catalog" && (() => {
+                const renderEmuCard = (emu: EmulatorInfo) => (
+                  <motion.div key={emu.id} className="emu-card">
+                    <div className="emu-card__header">
+                      <div className="emu-card__icon">{emu.icon}</div>
+                      <div className="emu-card__info">
+                        <div className="emu-card__name">{emu.name}</div>
+                        <div className="emu-card__console">{emu.console}</div>
+                      </div>
+                      {installed.includes(emu.id) && (
+                        <div className="emu-card__status emu-card__status--installed">
+                          <CheckCircle size={12} /> Installed
                         </div>
-                        <p className="emu-card__desc">{emu.description}</p>
-                        <div className="emu-card__actions">
-                          {installed.includes(emu.id) ? (
-                            <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
-                          ) : (
-                            <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing.includes(emu.id)}>
-                              {installing.includes(emu.id) ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
-                            </button>
-                          )}
-                          <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
-                        </div>
-                      </motion.div>
-                    ))}
-                  </div>
-                  {filteredCatalog.length === 0 && (
-                    <div className="empty-state">
-                      <div className="empty-state__icon">🔍</div>
-                      <div className="empty-state__title">No emulators found</div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                    <p className="emu-card__desc">{emu.description}</p>
+                    <div className="emu-card__actions">
+                      {installed.includes(emu.id) ? (
+                        <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
+                      ) : (
+                        <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing.includes(emu.id)}>
+                          {installing.includes(emu.id) ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                        </button>
+                      )}
+                      <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
+                    </div>
+                  </motion.div>
+                );
+
+                return (
+                  <div className="catalog-content">
+                    {/* Breadcrumb */}
+                    <div className="rgs-breadcrumb">
+                      <button
+                        className={`rgs-breadcrumb__item ${!categoryFilter && !consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
+                        onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
+                      >
+                        <Globe size={14} /> All Manufacturers
+                      </button>
+                      {categoryFilter && (
+                        <>
+                          <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                          <button
+                            className={`rgs-breadcrumb__item ${!consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
+                            onClick={() => setConsoleFilter(null)}
+                          >
+                            {categoryFilter}
+                          </button>
+                        </>
+                      )}
+                      {consoleFilter && (
+                        <>
+                          <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                          <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
+                            {consoleFilter}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {search.trim().length >= 2 ? (
+                      /* ---- Global search bypasses drill-down ---- */
+                      <>
+                        <div className="emu-grid">{filteredCatalog.map(renderEmuCard)}</div>
+                        {filteredCatalog.length === 0 && (
+                          <div className="empty-state">
+                            <div className="empty-state__icon">🔍</div>
+                            <div className="empty-state__title">No emulators match "{search}"</div>
+                          </div>
+                        )}
+                      </>
+                    ) : !categoryFilter ? (
+                      /* ---- Manufacturer grid ---- */
+                      <div className="rgs-console-grid">
+                        {Object.entries(consolesByCategory).map(([category, cons]) => {
+                          const emuCount = catalog.filter((e) => e.category === category).length;
+                          return (
+                            <motion.div
+                              key={category}
+                              className="rgs-console-card"
+                              whileHover={{ scale: 1.03, y: -4 }}
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => setCategoryFilter(category)}
+                            >
+                              <div className="rgs-console-card__img">
+                                <div className="vimm-console-card__fallback">
+                                  <BrandLogo brand={category} size={56} />
+                                </div>
+                              </div>
+                              <div className="rgs-console-card__info">
+                                <div className="rgs-console-card__name">{category}</div>
+                                <div className="rgs-console-card__meta">
+                                  {cons.length} console{cons.length > 1 ? "s" : ""} • {emuCount} emulator{emuCount > 1 ? "s" : ""}
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    ) : !consoleFilter ? (
+                      /* ---- Console grid for the selected manufacturer ---- */
+                      <div className="rgs-console-grid">
+                        {(consolesByCategory[categoryFilter] || []).sort().map((con) => {
+                          const count = catalog.filter((e) => e.console === con).length;
+                          return (
+                            <motion.div
+                              key={con}
+                              className="rgs-console-card"
+                              whileHover={{ scale: 1.03, y: -4 }}
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => setConsoleFilter(con)}
+                            >
+                              <div className="rgs-console-card__img">
+                                <div className="vimm-console-card__fallback">
+                                  <ConsoleLogo name={con} />
+                                </div>
+                              </div>
+                              <div className="rgs-console-card__info">
+                                <div className="rgs-console-card__name">{con}</div>
+                                <div className="rgs-console-card__meta">
+                                  {count} emulator{count > 1 ? "s" : ""}
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* ---- Emulator grid for the selected console ---- */
+                      <>
+                        <div className="emu-grid">{filteredCatalog.map(renderEmuCard)}</div>
+                        {filteredCatalog.length === 0 && (
+                          <div className="empty-state">
+                            <div className="empty-state__icon">🔍</div>
+                            <div className="empty-state__title">No emulators for {consoleFilter}</div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {page === "store" && (
                 <div className="store-source-toggle">
@@ -2190,7 +2310,7 @@ export default function App() {
                           whileTap={{ scale: 0.97 }}
                           onClick={() => handleSelectConstructeur(c.id, c.nom)}
                         >
-                          <div className="rgs-constructeur-card__icon">{c.icon}</div>
+                          <div className="rgs-constructeur-card__icon"><BrandLogo brand={c.nom} size={48} /></div>
                           <div className="rgs-constructeur-card__name">{c.nom}</div>
                         </motion.div>
                       ))}
@@ -2207,11 +2327,9 @@ export default function App() {
                           onClick={() => handleSelectRgsConsole(c.id, c.nom)}
                         >
                           <div className="rgs-console-card__img">
-                            <img 
-                              src={`https://www.retrogamesets.fr/assets/images/consoles/${c.image}`} 
-                              alt={c.nom}
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
+                            <div className="vimm-console-card__fallback">
+                              <ConsoleLogo name={c.nom} />
+                            </div>
                           </div>
                           <div className="rgs-console-card__info">
                             <div className="rgs-console-card__name">{c.nom}</div>
