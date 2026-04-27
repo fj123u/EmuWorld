@@ -476,6 +476,14 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.1.0", date: "2026-04-27", changes: [
+      "🎮 New Store: Vimm's Lair for individual game downloads (Myrient shut down 31 March 2026)",
+      "🔀 Dual-source Store: toggle between Individual games (Vimm's Lair) and Complete packs (RetroGameSets)",
+      "🖼️ Cover fix: Wii & Wii U covers now load correctly (GameTDB format per console, proper disc IDs)",
+      "🧠 Smarter cover matching: composite titles (A & B), title-case fallback, franchise aliases",
+      "🔁 Retry button on missing covers — force a fresh fetch without restarting the app",
+      "🧹 Removed an unused_mut Rust warning"
+    ] },
     { version: "1.0.0", date: "2026-04-20", changes: ["🚀 Automated RGS Imports: Automatic moving, unzipping, and cleanup", "📦 Switch Mastery: Full .xci/.nsp support with instant disk relocation", "🧹 Streamlined UI: Removed Archive.org to focus on RetroGameSets", "🛠️ Improved folder-view download triggers and file picker filters"] },
     { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
     { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
