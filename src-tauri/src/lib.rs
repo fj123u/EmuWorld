@@ -824,29 +824,28 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
 
     // 4. Try Title ID Fallback (GameTDB for Wii / Wii U / GameCube; Switch uses Tinfoil above)
     if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
-        // Detect console type + the right file extension GameTDB actually serves.
-        // GameTDB: wii => .png, wiiu => .jpg, gamecube => .png. Switch not hosted.
-        let (console_type, ext, mime) = if id.starts_with("0100") {
-            // Switch — skip (GameTDB has no Switch covers; Tinfoil already tried above).
-            ("", "", "")
+        // Pick the right GameTDB path + file extension per console:
+        //   wii       => cover.png            (front face; coverfull is wrap-around, looks off)
+        //   wiiu      => coverHQ.jpg          (front face HQ; coverfull is the full jacket)
+        //   gamecube  => cover.png
+        //   switch    => skipped (Tinfoil already tried above; GameTDB has no Switch)
+        let (console_type, path, ext, mime) = if id.starts_with("0100") {
+            ("", "", "", "")
         } else if id.len() == 6 {
             match console.as_ref() {
                 "GameCube" | "GameCube / Wii" | "GameCube - Wii" if id.starts_with('G') =>
-                    ("gamecube", "png", "image/png"),
+                    ("gamecube", "cover", "png", "image/png"),
                 _ if id.starts_with('A') || id.starts_with('B') =>
-                    ("wiiu", "jpg", "image/jpeg"),
-                _ => ("wii", "png", "image/png"),
+                    ("wiiu", "coverHQ", "jpg", "image/jpeg"),
+                _ => ("wii", "cover", "png", "image/png"),
             }
         } else if id.starts_with("0005") {
-            // Legacy 16-hex WiiU Title ID — GameTDB doesn't index these directly, but try png anyway.
-            ("wiiu", "png", "image/png")
+            ("wiiu", "coverHQ", "jpg", "image/jpeg")
         } else {
-            ("", "", "")
+            ("", "", "", "")
         };
 
         if !console_type.is_empty() {
-            // Only try the region that matches the disc ID's 4th char (E=US, P=EUR, J=JPN)
-            // but fall back to trying all regions for robustness.
             let primary_region = if id.len() == 6 {
                 match id.chars().nth(3) {
                     Some('E') => "US",
@@ -863,7 +862,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
             }
 
             for region in regions {
-                let url = format!("https://art.gametdb.com/{}/coverfullHQ/{}/{}.{}", console_type, region, id, ext);
+                let url = format!("https://art.gametdb.com/{}/{}/{}/{}.{}", console_type, path, region, id, ext);
                 write_to_boxart_log(&format!("Trying GameTDB: {}", url));
                 if let Ok(resp) = client.get(&url).send().await {
                     if resp.status().is_success() {
