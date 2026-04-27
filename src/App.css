@@ -2591,3 +2591,172 @@ body::before {
   background: rgba(139, 92, 246, 0.35);
   color: #fff;
 }
+
+/* ============================
+   Favorite star + playtime badge on GameCard
+   ============================ */
+.game-card__fav {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  z-index: 2;
+}
+.game-card__fav:hover {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.5);
+}
+.game-card__fav--active {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.6);
+  background: rgba(251, 191, 36, 0.15);
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.3);
+}
+
+.game-card__playtime {
+  position: absolute;
+  bottom: 52px; /* just above the info strip */
+  right: 8px;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #e9e6ff;
+  font-size: 0.68rem;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+/* ============================
+   Gaming Profile panel (account modal)
+   ============================ */
+.gaming-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.gaming-profile__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 0.6rem;
+}
+
+.gaming-profile__tile {
+  padding: 0.7rem 0.75rem;
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+  text-align: center;
+}
+.gaming-profile__tile-value {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #e9e6ff;
+}
+.gaming-profile__tile-label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 0.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.gaming-profile__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+}
+.gaming-profile__row-label {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 110px;
+}
+.gaming-profile__row-value {
+  flex: 1;
+  text-align: right;
+  min-width: 0;
+}
+.gaming-profile__row-name {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 500;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gaming-profile__row-meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.gaming-profile__top {
+  margin-top: 0.35rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+}
+.gaming-profile__top-label {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+}
+.gaming-profile__top-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.gaming-profile__top-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+.gaming-profile__top-rank {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(139, 92, 246, 0.2);
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #c4b5fd;
+  flex-shrink: 0;
+}
+.gaming-profile__top-name {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gaming-profile__top-time {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+}

@@ -101,6 +101,37 @@ interface ChangelogEntry {
   date: string;
   changes: string[];
 }
+
+interface GameEntry {
+  console: string;
+  name: string;
+  seconds: number;
+  launches: number;
+  last_played: string | null;
+  first_played: string | null;
+  favorite: boolean;
+  last_emulator_id: string | null;
+}
+
+interface PlaytimeStore {
+  games: Record<string, GameEntry>;
+  emulators: Record<string, number>;
+}
+
+interface ProfileStats {
+  total_seconds: number;
+  total_launches: number;
+  games_played: number;
+  favorite_count: number;
+  most_played: GameEntry | null;
+  favorite_game: GameEntry | null;
+  top_games: GameEntry[];
+  top_emulator_id: string | null;
+  top_console: string | null;
+  top_console_seconds: number;
+  first_played: string | null;
+  streak_days: number;
+}
 interface RomStoreEntry {
   id: string;
   name: string;
@@ -368,14 +399,27 @@ const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
   );
 };
 
+/* Short human-readable playtime (e.g. "1h 30m", "24m", "45s"). */
+const formatPlaytime = (seconds: number): string => {
+  if (!seconds) return "";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${s}s`;
+};
+
 /* ============================
    Components
    ============================ */
 
-const GameCard = ({ rom, onLaunch, onDelete }: {
+const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
-  onDelete: (rom: RomFile) => void
+  onDelete: (rom: RomFile) => void,
+  entry?: GameEntry,
+  onToggleFavorite?: (rom: RomFile) => void,
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -430,9 +474,20 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
         </div>
       </div>
 
+      {/* Favorite toggle */}
+      {onToggleFavorite && (
+        <button
+          className={`game-card__fav ${entry?.favorite ? "game-card__fav--active" : ""}`}
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(rom); }}
+          title={entry?.favorite ? "Remove from favorites" : "Add to favorites"}
+        >
+          {entry?.favorite ? "★" : "☆"}
+        </button>
+      )}
+
       {/* Delete Button */}
-      <button 
-        className="game-card__delete" 
+      <button
+        className="game-card__delete"
         onClick={(e) => {
           e.stopPropagation();
           if (confirm(`Delete ${rom.name}?`)) {
@@ -443,6 +498,13 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
       >
         <Trash2 size={14} />
       </button>
+
+      {/* Playtime badge */}
+      {entry && entry.seconds > 0 && (
+        <div className="game-card__playtime" title={`${entry.launches} launch${entry.launches === 1 ? "" : "es"}`}>
+          ⏱ {formatPlaytime(entry.seconds)}
+        </div>
+      )}
 
       <div className="game-card__info" onClick={() => onLaunch(rom)}>
         <div className="game-card__name">{rom.name}</div>
@@ -583,6 +645,9 @@ export default function App() {
   const [catalog, setCatalog] = useState<EmulatorInfo[]>([]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [roms, setRoms] = useState<RomFile[]>([]);
+  // Playtime / profile
+  const [playtime, setPlaytime] = useState<PlaytimeStore>({ games: {}, emulators: {} });
+  const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
   const [config, setConfig] = useState<AppConfig>({
     roms_directory: "",
     emulators_directory: "",
@@ -634,6 +699,14 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.2.0", date: "2026-04-28", changes: [
+      "📊 Gaming Profile: total playtime, launches, games played and day streak now show in the Account panel",
+      "🏆 Stats: most-played game, favorite, top emulator, top console and first-played date, with a top-5 podium",
+      "⏱ Every session is tracked locally (stored in playtime.json) — the emulator exit time is the source of truth, no clock-in/out needed",
+      "★ Favorite toggle on every game card + a subtle playtime badge once you've launched it",
+      "🎨 Real console logos throughout the app (NES, SNES, Switch, PlayStation, Xbox, Genesis, Dreamcast…) from RetroArch's asset pack",
+      "🗂 Drill-down navigation on both Roms and Console pages (Manufacturer → Console → content), mirroring the store"
+    ] },
     { version: "1.1.1", date: "2026-04-27", changes: [
       "🔎 Store: replaced the A-Z alphabet with a real search bar — type a name, results appear instantly",
       "🎨 Cover art: Wii & Wii U now use the front-only box art (no more wrap-around jackets)",
@@ -1005,6 +1078,49 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ---- Playtime / profile stats ----
+  const loadPlaytime = useCallback(async () => {
+    try {
+      const [pt, stats] = await Promise.all([
+        invoke<PlaytimeStore>("get_playtime"),
+        invoke<ProfileStats>("get_profile_stats"),
+      ]);
+      setPlaytime(pt);
+      setProfileStats(stats);
+    } catch (err) {
+      console.error("Failed to load playtime:", err);
+    }
+  }, []);
+
+  useEffect(() => { loadPlaytime(); }, [loadPlaytime]);
+
+  // Refresh playtime whenever an emulator child process exits.
+  useEffect(() => {
+    const unlisten = listen<{ console: string; name: string; seconds: number }>(
+      "game-closed",
+      (event) => {
+        const mins = Math.floor(event.payload.seconds / 60);
+        if (event.payload.seconds >= 3) {
+          showToast(
+            `Session saved: ${event.payload.name} (${mins >= 1 ? `${mins} min` : `${event.payload.seconds}s`})`,
+            "success"
+          );
+        }
+        loadPlaytime();
+      }
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [loadPlaytime, showToast]);
+
+  const handleToggleFavorite = useCallback(async (rom: RomFile) => {
+    try {
+      await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
+      loadPlaytime();
+    } catch (err: any) {
+      showToast(`Favorite failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast]);
 
   // ---- ROM Store ----
   const loadStoreData = useCallback(async () => {
@@ -1412,6 +1528,8 @@ export default function App() {
       const res: string = await invoke("launch_emulator", {
         emulatorId: emulator.id,
         romPath: rom.path || null,
+        romName: rom.name || null,
+        romConsole: rom.console || null,
       });
       console.log("Backend Launch Success:", res);
       showToast(`Launching ${rom.name}...`, "success");
@@ -2529,6 +2647,8 @@ export default function App() {
                               rom={rom}
                               onLaunch={handleLaunch}
                               onDelete={handleDeleteRom}
+                              entry={playtime.games[`${rom.console}::${rom.name}`]}
+                              onToggleFavorite={handleToggleFavorite}
                             />
                           ))}
                         </div>
@@ -2605,6 +2725,8 @@ export default function App() {
                               rom={rom}
                               onLaunch={handleLaunch}
                               onDelete={handleDeleteRom}
+                              entry={playtime.games[`${rom.console}::${rom.name}`]}
+                              onToggleFavorite={handleToggleFavorite}
                             />
                           ))}
                         </div>
@@ -2776,6 +2898,107 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Gaming Profile Section */}
+                {profileStats && (profileStats.total_seconds > 0 || profileStats.favorite_count > 0) && (
+                  <div className="account-modal__section">
+                    <label className="account-modal__label">Gaming Profile</label>
+                    <div className="gaming-profile">
+                      <div className="gaming-profile__tiles">
+                        <div className="gaming-profile__tile">
+                          <div className="gaming-profile__tile-value">{formatPlaytime(profileStats.total_seconds) || "0m"}</div>
+                          <div className="gaming-profile__tile-label">Total playtime</div>
+                        </div>
+                        <div className="gaming-profile__tile">
+                          <div className="gaming-profile__tile-value">{profileStats.games_played}</div>
+                          <div className="gaming-profile__tile-label">Games played</div>
+                        </div>
+                        <div className="gaming-profile__tile">
+                          <div className="gaming-profile__tile-value">{profileStats.total_launches}</div>
+                          <div className="gaming-profile__tile-label">Launches</div>
+                        </div>
+                        <div className="gaming-profile__tile">
+                          <div className="gaming-profile__tile-value">🔥 {profileStats.streak_days}</div>
+                          <div className="gaming-profile__tile-label">Day streak</div>
+                        </div>
+                      </div>
+
+                      {profileStats.most_played && (
+                        <div className="gaming-profile__row">
+                          <div className="gaming-profile__row-label">🏆 Most played</div>
+                          <div className="gaming-profile__row-value">
+                            <span className="gaming-profile__row-name">{profileStats.most_played.name}</span>
+                            <span className="gaming-profile__row-meta">
+                              {profileStats.most_played.console} · {formatPlaytime(profileStats.most_played.seconds)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {profileStats.favorite_game && (
+                        <div className="gaming-profile__row">
+                          <div className="gaming-profile__row-label">★ Favorite</div>
+                          <div className="gaming-profile__row-value">
+                            <span className="gaming-profile__row-name">{profileStats.favorite_game.name}</span>
+                            <span className="gaming-profile__row-meta">
+                              {profileStats.favorite_game.console} · {formatPlaytime(profileStats.favorite_game.seconds)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {profileStats.top_emulator_id && (() => {
+                        const emu = catalog.find((e) => e.id === profileStats.top_emulator_id);
+                        const emuSeconds = playtime.emulators[profileStats.top_emulator_id] || 0;
+                        return (
+                          <div className="gaming-profile__row">
+                            <div className="gaming-profile__row-label">🕹 Top emulator</div>
+                            <div className="gaming-profile__row-value">
+                              <span className="gaming-profile__row-name">{emu?.name || profileStats.top_emulator_id}</span>
+                              <span className="gaming-profile__row-meta">
+                                {emu?.console || ""} · {formatPlaytime(emuSeconds)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {profileStats.top_console && (
+                        <div className="gaming-profile__row">
+                          <div className="gaming-profile__row-label">🎮 Top console</div>
+                          <div className="gaming-profile__row-value">
+                            <span className="gaming-profile__row-name">{profileStats.top_console}</span>
+                            <span className="gaming-profile__row-meta">
+                              {formatPlaytime(profileStats.top_console_seconds)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {profileStats.first_played && (
+                        <div className="gaming-profile__row">
+                          <div className="gaming-profile__row-label">📅 First played</div>
+                          <div className="gaming-profile__row-value">
+                            <span className="gaming-profile__row-name">
+                              {new Date(profileStats.first_played).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {profileStats.top_games.length > 1 && (
+                        <div className="gaming-profile__top">
+                          <div className="gaming-profile__top-label">Top games</div>
+                          <ol className="gaming-profile__top-list">
+                            {profileStats.top_games.map((g, i) => (
+                              <li key={`${g.console}::${g.name}`}>
+                                <span className="gaming-profile__top-rank">{i + 1}</span>
+                                <span className="gaming-profile__top-name">{g.name}</span>
+                                <span className="gaming-profile__top-time">{formatPlaytime(g.seconds)}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Username Section */}
                 <div className="account-modal__section">
