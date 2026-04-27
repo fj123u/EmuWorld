@@ -1,0 +1,197 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::PathBuf;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct GameEntry {
+    pub console: String,
+    pub name: String,
+    pub seconds: u64,
+    pub launches: u32,
+    pub last_played: Option<String>,
+    pub first_played: Option<String>,
+    #[serde(default)]
+    pub favorite: bool,
+    /// Emulator id used the last time this game was launched — used to build
+    /// "most used emulator" stats without having to re-scan the catalog.
+    #[serde(default)]
+    pub last_emulator_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct PlaytimeStore {
+    #[serde(default)]
+    pub games: HashMap<String, GameEntry>,
+    /// Emulator id → total seconds spent. Cached so the profile page doesn't
+    /// have to recompute it every render.
+    #[serde(default)]
+    pub emulators: HashMap<String, u64>,
+}
+
+fn store_path() -> PathBuf {
+    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("EmuWorld");
+    let _ = std::fs::create_dir_all(&path);
+    path.push("playtime.json");
+    path
+}
+
+pub fn load() -> PlaytimeStore {
+    let path = store_path();
+    if let Ok(data) = std::fs::read_to_string(&path) {
+        if let Ok(store) = serde_json::from_str::<PlaytimeStore>(&data) {
+            return store;
+        }
+    }
+    PlaytimeStore::default()
+}
+
+pub fn save(store: &PlaytimeStore) -> Result<(), String> {
+    let path = store_path();
+    let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
+    std::fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+fn key(console: &str, name: &str) -> String {
+    format!("{}::{}", console, name)
+}
+
+/// Record a completed play session (when the emulator child process exits).
+/// Updates total seconds, launches, last-played timestamp, per-emulator totals.
+pub fn record_session(console: &str, name: &str, seconds: u64, emulator_id: &str) -> Result<(), String> {
+    let mut store = load();
+    let now = chrono::Utc::now().to_rfc3339();
+    let entry = store.games.entry(key(console, name)).or_insert(GameEntry {
+        console: console.to_string(),
+        name: name.to_string(),
+        first_played: Some(now.clone()),
+        ..Default::default()
+    });
+    // In case the entry already existed but had no first_played (older schema)
+    if entry.first_played.is_none() {
+        entry.first_played = Some(now.clone());
+    }
+    entry.seconds += seconds;
+    entry.launches += 1;
+    entry.last_played = Some(now);
+    entry.last_emulator_id = Some(emulator_id.to_string());
+
+    *store.emulators.entry(emulator_id.to_string()).or_insert(0) += seconds;
+    save(&store)
+}
+
+pub fn toggle_favorite(console: &str, name: &str) -> Result<bool, String> {
+    let mut store = load();
+    let k = key(console, name);
+    let entry = store.games.entry(k).or_insert(GameEntry {
+        console: console.to_string(),
+        name: name.to_string(),
+        ..Default::default()
+    });
+    entry.favorite = !entry.favorite;
+    let new_value = entry.favorite;
+    save(&store)?;
+    Ok(new_value)
+}
+
+#[derive(Debug, Serialize, Clone, Default)]
+pub struct ProfileStats {
+    pub total_seconds: u64,
+    pub total_launches: u32,
+    pub games_played: u32,
+    pub favorite_count: u32,
+    pub most_played: Option<GameEntry>,
+    pub favorite_game: Option<GameEntry>,
+    pub top_games: Vec<GameEntry>,
+    pub top_emulator_id: Option<String>,
+    pub top_console: Option<String>,
+    pub top_console_seconds: u64,
+    pub first_played: Option<String>,
+    /// Days in a row with at least one launch, counting from today.
+    pub streak_days: u32,
+}
+
+pub fn compute_stats() -> ProfileStats {
+    let store = load();
+    let mut stats = ProfileStats::default();
+
+    let mut per_console: HashMap<String, u64> = HashMap::new();
+    let mut play_days: Vec<chrono::NaiveDate> = Vec::new();
+
+    for entry in store.games.values() {
+        stats.total_seconds += entry.seconds;
+        stats.total_launches += entry.launches;
+        if entry.seconds > 0 || entry.launches > 0 {
+            stats.games_played += 1;
+        }
+        if entry.favorite {
+            stats.favorite_count += 1;
+        }
+        *per_console.entry(entry.console.clone()).or_insert(0) += entry.seconds;
+
+        if let Some(ts) = entry.last_played.as_ref() {
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(ts) {
+                play_days.push(dt.date_naive());
+            }
+        }
+    }
+
+    // Most played by seconds
+    stats.most_played = store
+        .games
+        .values()
+        .max_by_key(|e| e.seconds)
+        .filter(|e| e.seconds > 0)
+        .cloned();
+
+    // Favorite: first one marked favorite (most played among favorites)
+    stats.favorite_game = store
+        .games
+        .values()
+        .filter(|e| e.favorite)
+        .max_by_key(|e| e.seconds)
+        .cloned();
+
+    // Top 5 games (most time first)
+    let mut games: Vec<GameEntry> = store.games.values().cloned().collect();
+    games.sort_by(|a, b| b.seconds.cmp(&a.seconds));
+    stats.top_games = games.into_iter().filter(|e| e.seconds > 0).take(5).collect();
+
+    // Top emulator
+    stats.top_emulator_id = store
+        .emulators
+        .iter()
+        .max_by_key(|(_, v)| *v)
+        .filter(|(_, v)| **v > 0)
+        .map(|(k, _)| k.clone());
+
+    // Top console
+    if let Some((console, seconds)) = per_console.iter().max_by_key(|(_, v)| *v) {
+        stats.top_console = Some(console.clone());
+        stats.top_console_seconds = *seconds;
+    }
+
+    // First played = oldest first_played across all games
+    stats.first_played = store
+        .games
+        .values()
+        .filter_map(|e| e.first_played.clone())
+        .min();
+
+    // Streak: consecutive days ending today with at least one play
+    if !play_days.is_empty() {
+        play_days.sort();
+        play_days.dedup();
+        let today = chrono::Utc::now().date_naive();
+        let mut day = today;
+        let mut streak = 0u32;
+        while play_days.binary_search(&day).is_ok() {
+            streak += 1;
+            day = day.pred_opt().unwrap_or(day);
+            if day == today { break; } // safety
+        }
+        stats.streak_days = streak;
+    }
+
+    stats
+}

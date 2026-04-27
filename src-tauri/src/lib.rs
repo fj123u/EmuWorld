@@ -10,6 +10,7 @@ use base64::Engine;
 use std::io::Write;
 
 mod emulators;
+mod playtime;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -241,23 +242,28 @@ fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<String, String> {
+async fn launch_emulator(
+    app_handle: tauri::AppHandle,
+    emulator_id: String,
+    rom_path: Option<String>,
+    rom_name: Option<String>,
+    rom_console: Option<String>,
+) -> Result<String, String> {
     let catalog = emulators::get_catalog();
-    let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or_else(|| "Emulator not found".to_string())?;
+    let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or_else(|| "Emulator not found".to_string())?.clone();
     let config = get_config();
     let install_dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
     let exe_path = find_executable(&install_dir, &emu.executable_name)
         .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
-    if let Some(rom) = rom_path {
+    if let Some(rom) = rom_path.clone() {
         let final_path = rom.replace(r"\\?\", "").replace("/", "\\");
         println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
-        
+
         // Handle RetroArch cores if applicable
         if emu.id.starts_with("retroarch") {
             if let Some(core) = &emu.core_name {
-                // Find the core file in the emulator directory
                 if let Some(core_path) = find_executable(&install_dir, core) {
                     println!("[Launch] Detected RetroArch core: {:?}", core_path);
                     cmd.arg("-L");
@@ -267,29 +273,59 @@ fn launch_emulator(emulator_id: String, rom_path: Option<String>) -> Result<Stri
                 }
             }
         }
-        
+
         cmd.arg(&final_path);
     }
-    
-    // Use CREATE_NO_WINDOW (0x08000000) to separate the emulator but keep console handles
+
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
-        // CREATE_NO_WINDOW (0x08000000) provides a console but no window,
-        // preventing "Invalid Handle" crashes in apps like Ryujinx.
         cmd.creation_flags(0x08000000);
     }
 
-    match cmd.spawn() {
-        Ok(_) => {
-            println!("[Launch] Success!");
-            Ok(format!("Launched {}", emu.name))
-        },
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
         Err(e) => {
             println!("[Launch] ERROR spawning process: {}", e);
-            Err(format!("Could not start emulator: {}", e))
+            return Err(format!("Could not start emulator: {}", e));
         }
+    };
+
+    println!("[Launch] Success!");
+    let launched_name = emu.name.clone();
+
+    // Track playtime only when we have a ROM context (launching the bare emulator doesn't count as a game session).
+    if let (Some(name), Some(console)) = (rom_name.clone(), rom_console.clone()) {
+        let emulator_id_for_task = emu.id.clone();
+        // Wait for the child to exit on a blocking thread, then record the session.
+        tauri::async_runtime::spawn_blocking(move || {
+            use tauri::Emitter;
+            let start = std::time::Instant::now();
+            match child.wait() {
+                Ok(status) => println!("[Launch] Child exited ({:?}) for {}", status, name),
+                Err(e) => println!("[Launch] wait() failed: {}", e),
+            }
+            let elapsed = start.elapsed().as_secs();
+            // Ignore sessions < 3s (likely the emulator crashed or the user mis-clicked).
+            if elapsed >= 3 {
+                if let Err(e) = playtime::record_session(&console, &name, elapsed, &emulator_id_for_task) {
+                    println!("[Playtime] record failed: {}", e);
+                }
+            }
+            let _ = app_handle.emit("game-closed", serde_json::json!({
+                "console": console,
+                "name": name,
+                "seconds": elapsed,
+            }));
+        });
+    } else {
+        // No ROM context: just drop the child into its own thread so we don't leak a zombie.
+        tauri::async_runtime::spawn_blocking(move || {
+            let _ = child.wait();
+        });
     }
+
+    Ok(format!("Launched {}", launched_name))
 }
 
 fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
@@ -2410,6 +2446,26 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
     Ok(games)
 }
 
+// ============================================================
+// PLAYTIME — per-game session tracking, favorites, aggregate stats.
+// Data lives in %APPDATA%/Local/EmuWorld/playtime.json.
+// ============================================================
+
+#[tauri::command]
+fn get_playtime() -> playtime::PlaytimeStore {
+    playtime::load()
+}
+
+#[tauri::command]
+fn toggle_favorite(console: String, name: String) -> Result<bool, String> {
+    playtime::toggle_favorite(&console, &name)
+}
+
+#[tauri::command]
+fn get_profile_stats() -> playtime::ProfileStats {
+    playtime::compute_stats()
+}
+
 #[tauri::command]
 fn clear_cover_cache() -> Result<(), String> {
     let config = get_config();
@@ -2473,6 +2529,9 @@ pub fn run() {
             get_vimm_consoles,
             browse_vimm,
             search_vimm,
+            get_playtime,
+            toggle_favorite,
+            get_profile_stats,
             clear_cover_cache,
         ])
         .run(tauri::generate_context!())
