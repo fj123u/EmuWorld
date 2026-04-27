@@ -2189,6 +2189,214 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
     Ok(files)
 }
 
+// ============================================================
+// VIMM'S LAIR — individual ROM downloads from vimm.net
+// Classic vault, one ROM per game, box art for each entry.
+// Downloads happen in the system browser (anti-bot on direct POST).
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VimmConsole {
+    pub id: String,            // Vimm vault slug (e.g. "NES", "SNES", "GBA")
+    pub name: String,          // display name
+    pub image: String,         // box/icon URL (vimm's system icon)
+    pub manufacturer: String,
+    pub target_console: String, // console key used under ROMs/
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct VimmGame {
+    pub id: String,            // vault numeric id (e.g. "75294")
+    pub name: String,          // game title
+    pub region: String,        // "Europe", "USA", "Japan", "World", "-" or multi
+    pub version: String,       // "1.0", "1.01"
+    pub languages: String,     // language codes joined by space
+    pub rating: String,        // "8.5" or "none"
+    pub box_url: String,       // cover image URL
+    pub page_url: String,      // page to open in system browser
+}
+
+fn vimm_consoles_catalog() -> Vec<VimmConsole> {
+    // (vault_slug, display_name, manufacturer, target_console)
+    let entries: &[(&str, &str, &str, &str)] = &[
+        ("NES", "NES", "Nintendo", "NES"),
+        ("SNES", "Super Nintendo", "Nintendo", "Super Nintendo"),
+        ("N64", "Nintendo 64", "Nintendo", "Nintendo 64"),
+        ("GB", "Game Boy", "Nintendo", "Game Boy"),
+        ("GBC", "Game Boy Color", "Nintendo", "Game Boy Color"),
+        ("GBA", "Game Boy Adv", "Nintendo", "Game Boy Advance"),
+        ("VB", "Virtual Boy", "Nintendo", "Virtual Boy"),
+        ("DS", "Nintendo DS", "Nintendo", "Nintendo DS"),
+        ("3DS", "Nintendo 3DS", "Nintendo", "Nintendo 3DS"),
+        ("GameCube", "GameCube", "Nintendo", "GameCube"),
+        ("Wii", "Wii", "Nintendo", "Wii"),
+        ("WiiWare", "WiiWare", "Nintendo", "Wii"),
+        ("PS1", "PlayStation", "Sony", "PlayStation 1"),
+        ("PS2", "PlayStation 2", "Sony", "PlayStation 2"),
+        ("PS3", "PlayStation 3", "Sony", "PlayStation 3"),
+        ("PSP", "PSP", "Sony", "PSP"),
+        ("Genesis", "Genesis", "Sega", "Mega Drive"),
+        ("SegaCD", "Sega CD", "Sega", "Sega CD"),
+        ("32X", "Sega 32X", "Sega", "Sega 32X"),
+        ("Saturn", "Saturn", "Sega", "Saturn"),
+        ("Dreamcast", "Dreamcast", "Sega", "Dreamcast"),
+        ("SMS", "Master System", "Sega", "Master System"),
+        ("GG", "Game Gear", "Sega", "Game Gear"),
+        ("Xbox", "Xbox", "Microsoft", "Xbox"),
+        ("Xbox360", "Xbox 360", "Microsoft", "Xbox 360"),
+        ("Atari2600", "Atari 2600", "Atari", "Atari 2600"),
+        ("Atari5200", "Atari 5200", "Atari", "Atari 5200"),
+        ("Atari7800", "Atari 7800", "Atari", "Atari 7800"),
+        ("Jaguar", "Jaguar", "Atari", "Jaguar"),
+        ("Lynx", "Lynx", "Atari", "Lynx"),
+        ("TG16", "TurboGrafx-16", "NEC", "TurboGrafx-16"),
+        ("TGCD", "TurboGrafx-CD", "NEC", "TurboGrafx-CD"),
+        ("CDi", "CD-i", "Panasonic", "CD-i"),
+    ];
+    entries.iter().map(|(slug, name, manuf, target)| VimmConsole {
+        id: slug.to_string(),
+        name: name.to_string(),
+        image: format!("https://vimm.net/images/{}.png", slug.to_lowercase()),
+        manufacturer: manuf.to_string(),
+        target_console: target.to_string(),
+    }).collect()
+}
+
+#[tauri::command]
+fn get_vimm_consoles() -> Result<Vec<VimmConsole>, String> {
+    Ok(vimm_consoles_catalog())
+}
+
+#[tauri::command]
+async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGame>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // Letter path. "#" means numeric section — vimm uses ?p=list&system=...&section=number
+    let url = if letter == "#" {
+        format!("https://vimm.net/vault/?p=list&system={}&section=number", console_slug)
+    } else {
+        format!("https://vimm.net/vault/{}/{}", console_slug, letter)
+    };
+
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Vimm returned HTTP {}", response.status()));
+    }
+    let html = response.text().await.map_err(|e| e.to_string())?;
+
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(&html);
+
+    // Rows live inside <table class="hoverable rounded"><tr>...</tr></table>. Each row has:
+    // td[0] = link to /vault/{id} with game title
+    // td[1] = region flags (img alt)
+    // td[2] = version
+    // td[3] = languages
+    // td[4] = rating (inside <a>)
+    let row_selector = Selector::parse("table.hovertable tr").map_err(|_| "Invalid row selector")?;
+    let link_selector = Selector::parse("a").map_err(|_| "Invalid link selector")?;
+    let td_selector = Selector::parse("td").map_err(|_| "Invalid td selector")?;
+    let img_selector = Selector::parse("img.flag").map_err(|_| "Invalid img selector")?;
+
+    let id_re = Regex::new(r"/vault/(\d+)").map_err(|e| e.to_string())?;
+
+    let mut games = Vec::new();
+    for row in document.select(&row_selector) {
+        // Find the first <a> whose href matches /vault/<numeric-id>
+        let game_link = row.select(&link_selector).find(|a| {
+            let href = a.value().attr("href").unwrap_or("");
+            id_re.is_match(href)
+        });
+        let Some(link) = game_link else { continue };
+        let href = link.value().attr("href").unwrap_or("");
+        let Some(caps) = id_re.captures(href) else { continue };
+        let id = caps[1].to_string();
+
+        let name_raw = link.text().collect::<Vec<_>>().join("").trim().to_string();
+        if name_raw.is_empty() { continue; }
+
+        let tds: Vec<_> = row.select(&td_selector).collect();
+        let region = tds.get(1)
+            .and_then(|td| td.select(&img_selector).next())
+            .and_then(|img| img.value().attr("title"))
+            .unwrap_or("-")
+            .to_string();
+        let version = tds.get(2).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+        let languages = tds.get(3).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+        let rating = tds.get(4).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+
+        games.push(VimmGame {
+            id: id.clone(),
+            name: name_raw,
+            region,
+            version,
+            languages,
+            rating,
+            box_url: format!("https://dl.vimm.net/image.php?type=box&id={}", id),
+            page_url: format!("https://vimm.net/vault/{}", id),
+        });
+    }
+
+    Ok(games)
+}
+
+#[tauri::command]
+async fn search_vimm(query: String) -> Result<Vec<VimmGame>, String> {
+    if query.trim().len() < 2 { return Ok(vec![]); }
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(20))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!("https://vimm.net/vault/?p=list&q={}", urlencoding::encode(query.trim()));
+    let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Vimm search HTTP {}", response.status()));
+    }
+    let html = response.text().await.map_err(|e| e.to_string())?;
+
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(&html);
+    let row_selector = Selector::parse("table.hovertable tr").map_err(|_| "Invalid row selector")?;
+    let link_selector = Selector::parse("a").map_err(|_| "Invalid link selector")?;
+    let td_selector = Selector::parse("td").map_err(|_| "Invalid td selector")?;
+    let id_re = Regex::new(r"/vault/(\d+)").map_err(|e| e.to_string())?;
+
+    let mut games = Vec::new();
+    for row in document.select(&row_selector) {
+        let game_link = row.select(&link_selector).find(|a| {
+            let href = a.value().attr("href").unwrap_or("");
+            id_re.is_match(href)
+        });
+        let Some(link) = game_link else { continue };
+        let href = link.value().attr("href").unwrap_or("");
+        let Some(caps) = id_re.captures(href) else { continue };
+        let id = caps[1].to_string();
+        let name = link.text().collect::<Vec<_>>().join("").trim().to_string();
+        if name.is_empty() { continue; }
+
+        let tds: Vec<_> = row.select(&td_selector).collect();
+        let region = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+
+        games.push(VimmGame {
+            id: id.clone(),
+            name,
+            region,
+            version: String::new(),
+            languages: String::new(),
+            rating: String::new(),
+            box_url: format!("https://dl.vimm.net/image.php?type=box&id={}", id),
+            page_url: format!("https://vimm.net/vault/{}", id),
+        });
+    }
+    Ok(games)
+}
+
 #[tauri::command]
 fn clear_cover_cache() -> Result<(), String> {
     let config = get_config();
@@ -2249,6 +2457,9 @@ pub fn run() {
             search_rgs,
             scrape_1fichier_dir,
             finalize_rgs_import,
+            get_vimm_consoles,
+            browse_vimm,
+            search_vimm,
             clear_cover_cache,
         ])
         .run(tauri::generate_context!())

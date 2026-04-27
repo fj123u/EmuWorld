@@ -156,6 +156,25 @@ interface RgsSearchResult {
   url?: string;
 }
 
+interface VimmConsole {
+  id: string;
+  name: string;
+  image: string;
+  manufacturer: string;
+  target_console: string;
+}
+
+interface VimmGame {
+  id: string;
+  name: string;
+  region: string;
+  version: string;
+  languages: string;
+  rating: string;
+  box_url: string;
+  page_url: string;
+}
+
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
 
 /* ============================
@@ -430,8 +449,17 @@ export default function App() {
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadStats>>({});
   const [isSearchingStore, setIsSearchingStore] = useState(false);
 
-  // ---- RetroGameSets state ----
-  const [storeMode, setStoreMode] = useState<"rgs" | "archive">("rgs");
+  // ---- Store state ----
+  const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
+  // ---- Vimm's Lair state ----
+  const [vimmConsoles, setVimmConsoles] = useState<VimmConsole[]>([]);
+  const [selectedVimmConsole, setSelectedVimmConsole] = useState<VimmConsole | null>(null);
+  const [selectedVimmLetter, setSelectedVimmLetter] = useState<string | null>(null);
+  const [vimmGames, setVimmGames] = useState<VimmGame[]>([]);
+  const [vimmLoading, setVimmLoading] = useState(false);
+  const [vimmSearch, setVimmSearch] = useState("");
+  const [vimmSearchResults, setVimmSearchResults] = useState<VimmGame[]>([]);
+  const [isSearchingVimm, setIsSearchingVimm] = useState(false);
   const [rgsConstructeurs, setRgsConstructeurs] = useState<RgsConstructeur[]>([]);
   const [rgsConsoles, setRgsConsoles] = useState<RgsConsole[]>([]);
   const [rgsLiens, setRgsLiens] = useState<RgsLien[]>([]);
@@ -1078,12 +1106,12 @@ export default function App() {
         if (id) {
           setDownloadProgress(prev => {
             const current = prev[id] || { progress: 0, downloaded_bytes: 0, total_bytes: 0, speed_bps: 0, eta: 0 };
-            return { 
-              ...prev, 
+            return {
+              ...prev,
               [id]: {
                 ...current,
                 ...event.payload
-              } 
+              }
             };
           });
         }
@@ -1093,6 +1121,76 @@ export default function App() {
       unlisten.then((fn) => fn());
     };
   }, []);
+
+  // ---- Vimm loaders ----
+  const loadVimmConsoles = useCallback(async () => {
+    try {
+      const data = await invoke<VimmConsole[]>("get_vimm_consoles");
+      setVimmConsoles(data);
+    } catch (e) {
+      console.error("Failed to load Vimm consoles:", e);
+    }
+  }, []);
+
+  useEffect(() => { loadVimmConsoles(); }, [loadVimmConsoles]);
+
+  const handleSelectVimmConsole = useCallback((c: VimmConsole) => {
+    setSelectedVimmConsole(c);
+    setSelectedVimmLetter(null);
+    setVimmGames([]);
+    setVimmSearch("");
+    setVimmSearchResults([]);
+  }, []);
+
+  const handleSelectVimmLetter = useCallback(async (letter: string) => {
+    if (!selectedVimmConsole) return;
+    setSelectedVimmLetter(letter);
+    setVimmGames([]);
+    setVimmLoading(true);
+    try {
+      const data = await invoke<VimmGame[]>("browse_vimm", {
+        consoleSlug: selectedVimmConsole.id,
+        letter,
+      });
+      setVimmGames(data);
+    } catch (e: any) {
+      showToast(`Failed to load Vimm: ${e}`, "error");
+    } finally {
+      setVimmLoading(false);
+    }
+  }, [selectedVimmConsole, showToast]);
+
+  const handleOpenVimmGame = useCallback(async (game: VimmGame) => {
+    const targetConsole = selectedVimmConsole?.target_console || "Mixed";
+    try {
+      await openUrl(game.page_url).catch(() => window.open(game.page_url, "_blank"));
+      setPendingImportConsole(targetConsole);
+      showToast(`Once downloaded, click 'Finalize' to move the ROM to your ${targetConsole} library.`, "info");
+    } catch (e) {
+      console.error("Failed to open Vimm page:", e);
+    }
+  }, [selectedVimmConsole, showToast]);
+
+  // Debounced Vimm search
+  useEffect(() => {
+    if (vimmSearch.trim().length < 2) {
+      setVimmSearchResults([]);
+      setIsSearchingVimm(false);
+      return;
+    }
+    setIsSearchingVimm(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await invoke<VimmGame[]>("search_vimm", { query: vimmSearch.trim() });
+        setVimmSearchResults(data);
+      } catch (e) {
+        console.error("Vimm search failed:", e);
+      } finally {
+        setIsSearchingVimm(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [vimmSearch]);
 
   // ---- Actions ----
   const handleInstall = async (id: string) => {
@@ -1540,12 +1638,13 @@ export default function App() {
                     {page === "catalog" && "Emulator Console"}
                     {page === "library" && "ROMs"}
                     {page === "installed" && "Installed Emulators"}
-                    {page === "store" && "RetroGameSets"}
+                    {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} consoles available`}
-                    {page === "store" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
+                    {page === "store" && storeMode === "vimm" && (selectedVimmConsole ? (selectedVimmLetter ? `${vimmGames.length} games — ${selectedVimmConsole.name} / ${selectedVimmLetter}` : `Pick a letter for ${selectedVimmConsole.name}`) : "Individual ROM downloads")}
+                    {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
@@ -1632,6 +1731,183 @@ export default function App() {
                     <div className="empty-state">
                       <div className="empty-state__icon">🔍</div>
                       <div className="empty-state__title">No emulators found</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {page === "store" && (
+                <div className="store-source-toggle">
+                  <button
+                    className={`store-source-toggle__btn ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
+                    onClick={() => setStoreMode("vimm")}
+                  >
+                    🎮 Individual games (Vimm's Lair)
+                  </button>
+                  <button
+                    className={`store-source-toggle__btn ${storeMode === "rgs" ? "store-source-toggle__btn--active" : ""}`}
+                    onClick={() => setStoreMode("rgs")}
+                  >
+                    📦 Complete packs (RetroGameSets)
+                  </button>
+                </div>
+              )}
+
+              {page === "store" && storeMode === "vimm" && (
+                <div className="rgs-page">
+                  {/* Breadcrumb */}
+                  <div className="rgs-breadcrumb">
+                    <button
+                      className={`rgs-breadcrumb__item ${!selectedVimmConsole ? 'rgs-breadcrumb__item--active' : ''}`}
+                      onClick={() => {
+                        setSelectedVimmConsole(null);
+                        setSelectedVimmLetter(null);
+                        setVimmGames([]);
+                        setVimmSearch("");
+                        setVimmSearchResults([]);
+                      }}
+                    >
+                      <Globe size={14} /> All Consoles
+                    </button>
+                    {selectedVimmConsole && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <button
+                          className={`rgs-breadcrumb__item ${!selectedVimmLetter ? 'rgs-breadcrumb__item--active' : ''}`}
+                          onClick={() => { setSelectedVimmLetter(null); setVimmGames([]); }}
+                        >
+                          {selectedVimmConsole.name}
+                        </button>
+                      </>
+                    )}
+                    {selectedVimmLetter && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
+                          {selectedVimmLetter}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Global search (always visible at the top) */}
+                  {!selectedVimmConsole && (
+                    <div className="rgs-search-header">
+                      <div className="search-bar search-bar--glow">
+                        <Search size={18} className="search-bar__icon" />
+                        <input
+                          type="text"
+                          className="search-bar__input"
+                          placeholder="Search Vimm's Lair (e.g. Mario, Zelda, Castlevania...)"
+                          value={vimmSearch}
+                          onChange={(e) => setVimmSearch(e.target.value)}
+                        />
+                        {isSearchingVimm && <RefreshCw size={14} className="animate-spin text-cyan" />}
+                      </div>
+                    </div>
+                  )}
+
+                  {vimmLoading ? (
+                    <div className="empty-state">
+                      <RefreshCw size={48} className="animate-spin" />
+                      <h3 className="empty-state__title">Loading games from Vimm's Lair...</h3>
+                    </div>
+                  ) : vimmSearchResults.length > 0 && !selectedVimmConsole ? (
+                    /* ---- Global search results ---- */
+                    <div className="rgs-search-results">
+                      <div className="rgs-results-header">Search results for "{vimmSearch}"</div>
+                      <div className="vimm-games-grid">
+                        {vimmSearchResults.map((game) => (
+                          <motion.div
+                            key={game.id}
+                            className="vimm-game-card"
+                            whileHover={{ scale: 1.03, y: -4 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => handleOpenVimmGame(game)}
+                          >
+                            <div className="vimm-game-card__cover">
+                              <img src={game.box_url} alt={game.name} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                            </div>
+                            <div className="vimm-game-card__info">
+                              <div className="vimm-game-card__name" title={game.name}>{game.name}</div>
+                              <div className="vimm-game-card__meta">{game.region || "—"}</div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : !selectedVimmConsole ? (
+                    /* ---- Console grid (RGS style) ---- */
+                    <div className="rgs-console-grid">
+                      {vimmConsoles.map((c) => (
+                        <motion.div
+                          key={c.id}
+                          className="rgs-console-card"
+                          whileHover={{ scale: 1.03, y: -4 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleSelectVimmConsole(c)}
+                        >
+                          <div className="rgs-console-card__img">
+                            <img
+                              src={c.image}
+                              alt={c.name}
+                              onError={(e) => {
+                                const parent = (e.target as HTMLImageElement).parentElement;
+                                if (parent) parent.innerHTML = `<div class="vimm-console-card__fallback">${CONSOLE_ICONS[c.target_console] || "🎮"}</div>`;
+                              }}
+                            />
+                          </div>
+                          <div className="rgs-console-card__info">
+                            <div className="rgs-console-card__name">{c.name}</div>
+                            <div className="rgs-console-card__meta">{c.manufacturer}</div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : !selectedVimmLetter ? (
+                    /* ---- Alphabet picker ---- */
+                    <div className="vimm-alphabet-grid">
+                      {["#", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))].map((letter) => (
+                        <motion.button
+                          key={letter}
+                          className="vimm-letter-tile"
+                          whileHover={{ scale: 1.06, y: -3 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => handleSelectVimmLetter(letter)}
+                        >
+                          {letter}
+                        </motion.button>
+                      ))}
+                    </div>
+                  ) : (
+                    /* ---- Games grid for selected letter ---- */
+                    <div className="vimm-games-grid">
+                      {vimmGames.map((game) => (
+                        <motion.div
+                          key={game.id}
+                          className="vimm-game-card"
+                          whileHover={{ scale: 1.03, y: -4 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleOpenVimmGame(game)}
+                        >
+                          <div className="vimm-game-card__cover">
+                            <img src={game.box_url} alt={game.name} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                          </div>
+                          <div className="vimm-game-card__info">
+                            <div className="vimm-game-card__name" title={game.name}>{game.name}</div>
+                            <div className="vimm-game-card__meta">
+                              {game.region || "—"} {game.rating && game.rating !== "none" ? `• ⭐ ${game.rating}` : ""}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                      {vimmGames.length === 0 && (
+                        <div className="empty-state empty-state--full">
+                          <div className="empty-state__icon">🔍</div>
+                          <div className="empty-state__title">No games found</div>
+                          <p className="empty-state__text">Vimm has no entries starting with {selectedVimmLetter} for this console.</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

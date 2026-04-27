@@ -2491,6 +2491,145 @@ body::before {
   border: 1px solid rgba(96, 165, 250, 0.2);
 }
 
+/* ============================
+   Store source toggle + Vimm's Lair
+   ============================ */
+.store-source-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.35rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.store-source-toggle__btn {
+  padding: 0.55rem 1.1rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.store-source-toggle__btn:hover {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.store-source-toggle__btn--active {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(59, 130, 246, 0.25));
+  color: #fff;
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
+}
+
+/* Alphabet picker */
+.vimm-alphabet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.vimm-letter-tile {
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
+  border: 1px solid rgba(139, 92, 246, 0.18);
+  color: #e9e6ff;
+  font-size: 1.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.vimm-letter-tile:hover {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(59, 130, 246, 0.18));
+  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.18);
+  color: #fff;
+}
+
+/* Console card fallback icon (when Vimm's system image fails to load) */
+.vimm-console-card__fallback {
+  font-size: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+}
+
+/* Game cards — inspired by RGS console card + game-card cover */
+.vimm-games-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.vimm-game-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.vimm-game-card:hover {
+  border-color: rgba(139, 92, 246, 0.45);
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.18);
+}
+
+.vimm-game-card__cover {
+  aspect-ratio: 3 / 4;
+  background: #0d0d18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vimm-game-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.vimm-game-card__info {
+  padding: 0.6rem 0.75rem;
+}
+
+.vimm-game-card__name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.92);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vimm-game-card__meta {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 0.2rem;
+}
+
+.empty-state--full {
+  grid-column: 1 / -1;
+}
+
 /* Retry cover button on GameCard placeholder */
 .game-card__retry {
   margin-top: 0.75rem;
