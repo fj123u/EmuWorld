@@ -2542,6 +2542,35 @@ body::before {
   grid-column: 1 / -1;
 }
 
+/* Brand / Console logo components */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: contain;
+  /* simpleicons serve white monochrome SVGs; soften + tint to match UI accents */
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  opacity: 0.92;
+}
+
+.brand-logo--emoji {
+  line-height: 1;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+}
+
+.console-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
+
+/* Override: in the rgs-console-card image slot the fallback wrapper centres content */
+.vimm-console-card__fallback .brand-logo,
+.vimm-console-card__fallback .console-logo {
+  filter: drop-shadow(0 4px 10px rgba(139, 92, 246, 0.25));
+}
+
 /* Retry cover button on GameCard placeholder */
 .game-card__retry {
   margin-top: 0.75rem;

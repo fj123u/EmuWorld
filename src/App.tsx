@@ -178,6 +178,68 @@ interface VimmGame {
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
 
 /* ============================
+   Brand logo mapping (simpleicons CDN where available, emoji fallback)
+   ============================ */
+const BRAND_LOGO_SLUG: Record<string, string | null> = {
+  "Sony": "playstation",
+  "Sega": "sega",
+  "Atari": "atari",
+  "NEC": "nec",
+  "Panasonic": "panasonic",
+  "Commodore": "commodore",
+  // simpleicons doesn't host trademarked Nintendo/Microsoft/SNK marks → fall back to emoji
+  "Nintendo": null,
+  "Microsoft": null,
+  "SNK": null,
+  "Arcade": null,
+  "Arcade & Retro": null,
+  "Multi-System": null,
+};
+
+const BRAND_EMOJI_FALLBACK: Record<string, string> = {
+  "Nintendo": "🍄",
+  "Sony": "🎮",
+  "Sega": "🦔",
+  "Microsoft": "❎",
+  "Atari": "🕹️",
+  "NEC": "🔶",
+  "Panasonic": "💿",
+  "Commodore": "💾",
+  "SNK": "🅰️",
+  "Arcade": "🕹️",
+  "Arcade & Retro": "🕹️",
+  "Multi-System": "🔄",
+};
+
+const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
+  const slug = BRAND_LOGO_SLUG[brand];
+  const emoji = BRAND_EMOJI_FALLBACK[brand] || "🎮";
+  const [failed, setFailed] = useState(false);
+
+  if (!slug || failed) {
+    return (
+      <span
+        className="brand-logo brand-logo--emoji"
+        style={{ fontSize: size * 0.75 }}
+        aria-label={brand}
+      >
+        {emoji}
+      </span>
+    );
+  }
+  return (
+    <img
+      className="brand-logo"
+      src={`https://cdn.simpleicons.org/${slug}/white`}
+      alt={brand}
+      width={size}
+      height={size}
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
+/* ============================
    Console icon mapping
    ============================ */
 const CONSOLE_ICONS: Record<string, string> = {
@@ -207,6 +269,19 @@ const CONSOLE_ICONS: Record<string, string> = {
   "Atari 2600": "🟤",
   "WonderSwan": "🔲",
   "Multi-System": "🔄",
+};
+
+const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
+  const emoji = CONSOLE_ICONS[name] || "🎮";
+  return (
+    <span
+      className="console-logo"
+      style={{ fontSize: size, lineHeight: 1 }}
+      aria-label={name}
+    >
+      {emoji}
+    </span>
+  );
 };
 
 /* ============================
@@ -1495,10 +1570,6 @@ export default function App() {
                 <div className="sidebar__label">Manufacturers</div>
                 {storeMode === "vimm"
                   ? (() => {
-                      const MANU_ICONS: Record<string, string> = {
-                        Nintendo: "🍄", Sony: "🎮", Sega: "🔵", Microsoft: "❎",
-                        Atari: "🟤", NEC: "🔶", Panasonic: "💿",
-                      };
                       const manus = Array.from(new Set(vimmConsoles.map((c) => c.manufacturer)));
                       return manus.map((m) => (
                         <button
@@ -1508,7 +1579,7 @@ export default function App() {
                             setSelectedVimmManufacturer(selectedVimmManufacturer === m ? null : m)
                           }
                         >
-                          <span className="sidebar__item-icon">{MANU_ICONS[m] || "🎮"}</span>
+                          <span className="sidebar__item-icon"><BrandLogo brand={m} size={16} /></span>
                           {m}
                         </button>
                       ));
@@ -1519,7 +1590,7 @@ export default function App() {
                         className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
                         onClick={() => handleSelectConstructeur(c.id, c.nom)}
                       >
-                        <span className="sidebar__item-icon">{c.icon}</span>
+                        <span className="sidebar__item-icon"><BrandLogo brand={c.nom} size={16} /></span>
                         {c.nom}
                       </button>
                     ))}
@@ -1881,14 +1952,9 @@ export default function App() {
                           onClick={() => handleSelectVimmConsole(c)}
                         >
                           <div className="rgs-console-card__img">
-                            <img
-                              src={c.image}
-                              alt={c.name}
-                              onError={(e) => {
-                                const parent = (e.target as HTMLImageElement).parentElement;
-                                if (parent) parent.innerHTML = `<div class="vimm-console-card__fallback">${CONSOLE_ICONS[c.target_console] || "🎮"}</div>`;
-                              }}
-                            />
+                            <div className="vimm-console-card__fallback">
+                              <ConsoleLogo name={c.target_console} />
+                            </div>
                           </div>
                           <div className="rgs-console-card__info">
                             <div className="rgs-console-card__name">{c.name}</div>
@@ -2213,15 +2279,6 @@ export default function App() {
               )}
 
               {page === "library" && (() => {
-                const CATEGORY_ICONS: Record<string, string> = {
-                  "Nintendo": "🍄",
-                  "Sony": "🎮",
-                  "Sega": "🔵",
-                  "Microsoft": "❎",
-                  "Arcade & Retro": "🕹️",
-                  "Multi-System": "🔄",
-                };
-
                 // Helper: only offer a manufacturer/console if the user actually owns ROMs for it.
                 const ownedConsoles = new Set(roms.map((r) => r.console));
                 const manufacturersWithRoms = Object.entries(consolesByCategory)
@@ -2301,7 +2358,9 @@ export default function App() {
                             onClick={() => setCategoryFilter(category)}
                           >
                             <div className="rgs-console-card__img">
-                              <div className="vimm-console-card__fallback">{CATEGORY_ICONS[category] || "🎮"}</div>
+                              <div className="vimm-console-card__fallback">
+                                <BrandLogo brand={category} size={56} />
+                              </div>
                             </div>
                             <div className="rgs-console-card__info">
                               <div className="rgs-console-card__name">{category}</div>
@@ -2329,7 +2388,9 @@ export default function App() {
                                 onClick={() => setConsoleFilter(con)}
                               >
                                 <div className="rgs-console-card__img">
-                                  <div className="vimm-console-card__fallback">{CONSOLE_ICONS[con] || "🎮"}</div>
+                                  <div className="vimm-console-card__fallback">
+                                    <ConsoleLogo name={con} />
+                                  </div>
                                 </div>
                                 <div className="rgs-console-card__info">
                                   <div className="rgs-console-card__name">{con}</div>
