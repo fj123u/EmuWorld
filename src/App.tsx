@@ -473,6 +473,11 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.1.1", date: "2026-04-27", changes: [
+      "🔎 Store: replaced the A-Z alphabet with a real search bar — type a name, results appear instantly",
+      "🎨 Cover art: Wii & Wii U now use the front-only box art (no more wrap-around jackets)",
+      "🌐 Vimm search can be scoped to the current console or run globally when no console is picked"
+    ] },
     { version: "1.1.0", date: "2026-04-27", changes: [
       "🎮 New Store: Vimm's Lair for individual game downloads (Myrient shut down 31 March 2026)",
       "🔀 Dual-source Store: toggle between Individual games (Vimm's Lair) and Complete packs (RetroGameSets)",
