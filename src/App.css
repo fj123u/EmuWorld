@@ -2490,3 +2490,24 @@ body::before {
   color: #60a5fa;
   border: 1px solid rgba(96, 165, 250, 0.2);
 }
+
+/* Retry cover button on GameCard placeholder */
+.game-card__retry {
+  margin-top: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.7rem;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  color: #c4b5fd;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.game-card__retry:hover {
+  background: rgba(139, 92, 246, 0.35);
+  color: #fff;
+}

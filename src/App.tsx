@@ -194,31 +194,32 @@ const CONSOLE_ICONS: Record<string, string> = {
    Components
    ============================ */
 
-const GameCard = ({ rom, onLaunch, onDelete }: { 
-  rom: RomFile, 
+const GameCard = ({ rom, onLaunch, onDelete }: {
+  rom: RomFile,
   onLaunch: (rom: RomFile) => void,
-  onDelete: (rom: RomFile) => void 
+  onDelete: (rom: RomFile) => void
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const fetchCover = async () => {
-      try {
-        setLoading(true);
-        const dataUrl: string = await invoke("fetch_boxart", { 
-          gameName: rom.name, 
-          console: rom.console 
-        });
-        setCover(dataUrl);
-      } catch (e) {
-        // No cover available, placeholder will show
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCover();
+  const fetchCover = useCallback(async () => {
+    try {
+      setLoading(true);
+      const dataUrl: string = await invoke("fetch_boxart", {
+        gameName: rom.name,
+        console: rom.console
+      });
+      setCover(dataUrl);
+    } catch (e) {
+      // No cover available, placeholder will show
+    } finally {
+      setLoading(false);
+    }
   }, [rom.name, rom.console]);
+
+  useEffect(() => {
+    fetchCover();
+  }, [fetchCover]);
 
   return (
     <motion.div
@@ -236,6 +237,13 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
           <div className="game-card__placeholder">
             <span className="game-card__placeholder-icon">🎮</span>
             <div className="game-card__placeholder-title">{rom.name}</div>
+            <button
+              className="game-card__retry"
+              onClick={(e) => { e.stopPropagation(); fetchCover(); }}
+              title="Retry cover fetch"
+            >
+              <RefreshCw size={12} /> Retry
+            </button>
           </div>
         ) : null}
         <div className="game-card__overlay">
