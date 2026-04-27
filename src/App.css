@@ -2538,64 +2538,6 @@ body::before {
   width: 100%;
 }
 
-/* Game cards — inspired by RGS console card + game-card cover */
-.vimm-games-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.vimm-game-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-}
-
-.vimm-game-card:hover {
-  border-color: rgba(139, 92, 246, 0.45);
-  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.18);
-}
-
-.vimm-game-card__cover {
-  aspect-ratio: 3 / 4;
-  background: #0d0d18;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-
-.vimm-game-card__cover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.vimm-game-card__info {
-  padding: 0.6rem 0.75rem;
-}
-
-.vimm-game-card__name {
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.vimm-game-card__meta {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 0.2rem;
-}
-
 .empty-state--full {
   grid-column: 1 / -1;
 }

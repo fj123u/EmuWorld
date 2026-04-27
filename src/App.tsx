@@ -1797,33 +1797,39 @@ export default function App() {
                   </div>
 
                   {vimmSearch.trim().length >= 2 ? (
-                    /* ---- Search results grid ---- */
+                    /* ---- Search results: text list (no covers) ---- */
                     vimmLoading ? (
                       <div className="empty-state">
                         <RefreshCw size={48} className="animate-spin" />
                         <h3 className="empty-state__title">Searching Vimm's Lair...</h3>
                       </div>
                     ) : vimmGames.length > 0 ? (
-                      <div className="vimm-games-grid">
-                        {vimmGames.map((game) => (
-                          <motion.div
-                            key={game.id}
-                            className="vimm-game-card"
-                            whileHover={{ scale: 1.03, y: -4 }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => handleOpenVimmGame(game)}
-                          >
-                            <div className="vimm-game-card__cover">
-                              <img src={game.box_url} alt={game.name} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                            </div>
-                            <div className="vimm-game-card__info">
-                              <div className="vimm-game-card__name" title={game.name}>{game.name}</div>
-                              <div className="vimm-game-card__meta">
-                                {game.region || "—"} {game.rating && game.rating !== "none" ? `• ⭐ ${game.rating}` : ""}
+                      <div className="rgs-folder-view">
+                        <div className="rgs-folder-header">
+                          <div className="rgs-folder-count">{vimmGames.length} results</div>
+                        </div>
+                        <div className="rgs-files-grid">
+                          {vimmGames.map((game, idx) => (
+                            <motion.div
+                              key={game.id}
+                              className="rgs-file-row"
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: Math.min(idx * 0.01, 0.5) }}
+                            >
+                              <div className="rgs-file-name" title={game.name}>{game.name}</div>
+                              <div className="rgs-file-size">
+                                {game.region || "—"}{game.rating && game.rating !== "none" ? ` • ⭐ ${game.rating}` : ""}
                               </div>
-                            </div>
-                          </motion.div>
-                        ))}
+                              <button
+                                className="btn btn--primary btn--sm"
+                                onClick={() => handleOpenVimmGame(game)}
+                              >
+                                Download
+                              </button>
+                            </motion.div>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <div className="empty-state">
