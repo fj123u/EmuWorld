@@ -455,6 +455,7 @@ export default function App() {
   // ---- Vimm's Lair state ----
   const [vimmConsoles, setVimmConsoles] = useState<VimmConsole[]>([]);
   const [selectedVimmConsole, setSelectedVimmConsole] = useState<VimmConsole | null>(null);
+  const [selectedVimmManufacturer, setSelectedVimmManufacturer] = useState<string | null>(null);
   const [vimmGames, setVimmGames] = useState<VimmGame[]>([]);
   const [vimmLoading, setVimmLoading] = useState(false);
   const [vimmSearch, setVimmSearch] = useState("");
@@ -1492,16 +1493,36 @@ export default function App() {
               <>
                 <div className="sidebar__divider" />
                 <div className="sidebar__label">Manufacturers</div>
-                {rgsConstructeurs.map((c) => (
-                  <button
-                    key={c.id}
-                    className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
-                    onClick={() => handleSelectConstructeur(c.id, c.nom)}
-                  >
-                    <span className="sidebar__item-icon">{c.icon}</span>
-                    {c.nom}
-                  </button>
-                ))}
+                {storeMode === "vimm"
+                  ? (() => {
+                      const MANU_ICONS: Record<string, string> = {
+                        Nintendo: "🍄", Sony: "🎮", Sega: "🔵", Microsoft: "❎",
+                        Atari: "🟤", NEC: "🔶", Panasonic: "💿",
+                      };
+                      const manus = Array.from(new Set(vimmConsoles.map((c) => c.manufacturer)));
+                      return manus.map((m) => (
+                        <button
+                          key={m}
+                          className={`sidebar__item ${selectedVimmManufacturer === m ? "sidebar__item--active" : ""}`}
+                          onClick={() =>
+                            setSelectedVimmManufacturer(selectedVimmManufacturer === m ? null : m)
+                          }
+                        >
+                          <span className="sidebar__item-icon">{MANU_ICONS[m] || "🎮"}</span>
+                          {m}
+                        </button>
+                      ));
+                    })()
+                  : rgsConstructeurs.map((c) => (
+                      <button
+                        key={c.id}
+                        className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
+                        onClick={() => handleSelectConstructeur(c.id, c.nom)}
+                      >
+                        <span className="sidebar__item-icon">{c.icon}</span>
+                        {c.nom}
+                      </button>
+                    ))}
               </>
             ) : page === "library" ? (
               <>
@@ -1843,7 +1864,9 @@ export default function App() {
                   ) : !selectedVimmConsole ? (
                     /* ---- Console grid (empty query, no console selected) ---- */
                     <div className="rgs-console-grid">
-                      {vimmConsoles.map((c) => (
+                      {vimmConsoles
+                        .filter((c) => !selectedVimmManufacturer || c.manufacturer === selectedVimmManufacturer)
+                        .map((c) => (
                         <motion.div
                           key={c.id}
                           className="rgs-console-card"
