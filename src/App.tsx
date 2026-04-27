@@ -454,12 +454,9 @@ export default function App() {
   // ---- Vimm's Lair state ----
   const [vimmConsoles, setVimmConsoles] = useState<VimmConsole[]>([]);
   const [selectedVimmConsole, setSelectedVimmConsole] = useState<VimmConsole | null>(null);
-  const [selectedVimmLetter, setSelectedVimmLetter] = useState<string | null>(null);
   const [vimmGames, setVimmGames] = useState<VimmGame[]>([]);
   const [vimmLoading, setVimmLoading] = useState(false);
   const [vimmSearch, setVimmSearch] = useState("");
-  const [vimmSearchResults, setVimmSearchResults] = useState<VimmGame[]>([]);
-  const [isSearchingVimm, setIsSearchingVimm] = useState(false);
   const [rgsConstructeurs, setRgsConstructeurs] = useState<RgsConstructeur[]>([]);
   const [rgsConsoles, setRgsConsoles] = useState<RgsConsole[]>([]);
   const [rgsLiens, setRgsLiens] = useState<RgsLien[]>([]);
@@ -1144,29 +1141,9 @@ export default function App() {
 
   const handleSelectVimmConsole = useCallback((c: VimmConsole) => {
     setSelectedVimmConsole(c);
-    setSelectedVimmLetter(null);
     setVimmGames([]);
     setVimmSearch("");
-    setVimmSearchResults([]);
   }, []);
-
-  const handleSelectVimmLetter = useCallback(async (letter: string) => {
-    if (!selectedVimmConsole) return;
-    setSelectedVimmLetter(letter);
-    setVimmGames([]);
-    setVimmLoading(true);
-    try {
-      const data = await invoke<VimmGame[]>("browse_vimm", {
-        consoleSlug: selectedVimmConsole.id,
-        letter,
-      });
-      setVimmGames(data);
-    } catch (e: any) {
-      showToast(`Failed to load Vimm: ${e}`, "error");
-    } finally {
-      setVimmLoading(false);
-    }
-  }, [selectedVimmConsole, showToast]);
 
   const handleOpenVimmGame = useCallback(async (game: VimmGame) => {
     const targetConsole = selectedVimmConsole?.target_console || "Mixed";
@@ -1179,26 +1156,30 @@ export default function App() {
     }
   }, [selectedVimmConsole, showToast]);
 
-  // Debounced Vimm search
+  // Debounced Vimm search — scoped to the currently selected console when available,
+  // or global across all Vimm consoles otherwise.
   useEffect(() => {
     if (vimmSearch.trim().length < 2) {
-      setVimmSearchResults([]);
-      setIsSearchingVimm(false);
+      setVimmGames([]);
+      setVimmLoading(false);
       return;
     }
-    setIsSearchingVimm(true);
+    setVimmLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const data = await invoke<VimmGame[]>("search_vimm", { query: vimmSearch.trim() });
-        setVimmSearchResults(data);
+        const data = await invoke<VimmGame[]>("search_vimm", {
+          query: vimmSearch.trim(),
+          consoleSlug: selectedVimmConsole?.id ?? null,
+        });
+        setVimmGames(data);
       } catch (e) {
         console.error("Vimm search failed:", e);
       } finally {
-        setIsSearchingVimm(false);
+        setVimmLoading(false);
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [vimmSearch]);
+  }, [vimmSearch, selectedVimmConsole]);
 
   // ---- Actions ----
   const handleInstall = async (id: string) => {
@@ -1651,7 +1632,13 @@ export default function App() {
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && `${filteredCatalog.length} consoles available`}
-                    {page === "store" && storeMode === "vimm" && (selectedVimmConsole ? (selectedVimmLetter ? `${vimmGames.length} games — ${selectedVimmConsole.name} / ${selectedVimmLetter}` : `Pick a letter for ${selectedVimmConsole.name}`) : "Individual ROM downloads")}
+                    {page === "store" && storeMode === "vimm" && (
+                      vimmSearch.trim().length >= 2
+                        ? `${vimmGames.length} result${vimmGames.length === 1 ? "" : "s"}${selectedVimmConsole ? ` on ${selectedVimmConsole.name}` : ""}`
+                        : selectedVimmConsole
+                          ? `Search ${selectedVimmConsole.name} by name`
+                          : "Search or pick a console"
+                    )}
                     {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
                     {page === "library" && `${filteredGames.length} games detected`}
                     {page === "installed" && `${installedCount} installed`}
@@ -1769,10 +1756,8 @@ export default function App() {
                       className={`rgs-breadcrumb__item ${!selectedVimmConsole ? 'rgs-breadcrumb__item--active' : ''}`}
                       onClick={() => {
                         setSelectedVimmConsole(null);
-                        setSelectedVimmLetter(null);
                         setVimmGames([]);
                         setVimmSearch("");
-                        setVimmSearchResults([]);
                       }}
                     >
                       <Globe size={14} /> All Consoles
@@ -1780,52 +1765,41 @@ export default function App() {
                     {selectedVimmConsole && (
                       <>
                         <ChevronRight size={14} className="rgs-breadcrumb__sep" />
-                        <button
-                          className={`rgs-breadcrumb__item ${!selectedVimmLetter ? 'rgs-breadcrumb__item--active' : ''}`}
-                          onClick={() => { setSelectedVimmLetter(null); setVimmGames([]); }}
-                        >
-                          {selectedVimmConsole.name}
-                        </button>
-                      </>
-                    )}
-                    {selectedVimmLetter && (
-                      <>
-                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
                         <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
-                          {selectedVimmLetter}
+                          {selectedVimmConsole.name}
                         </span>
                       </>
                     )}
                   </div>
 
-                  {/* Global search (always visible at the top) */}
-                  {!selectedVimmConsole && (
-                    <div className="rgs-search-header">
-                      <div className="search-bar search-bar--glow">
-                        <Search size={18} className="search-bar__icon" />
-                        <input
-                          type="text"
-                          className="search-bar__input"
-                          placeholder="Search Vimm's Lair (e.g. Mario, Zelda, Castlevania...)"
-                          value={vimmSearch}
-                          onChange={(e) => setVimmSearch(e.target.value)}
-                        />
-                        {isSearchingVimm && <RefreshCw size={14} className="animate-spin text-cyan" />}
-                      </div>
+                  {/* Search bar — always visible, scoped to the current console if one is picked */}
+                  <div className="rgs-search-header">
+                    <div className="search-bar search-bar--glow">
+                      <Search size={18} className="search-bar__icon" />
+                      <input
+                        type="text"
+                        className="search-bar__input"
+                        placeholder={selectedVimmConsole
+                          ? `Search games on ${selectedVimmConsole.name}...`
+                          : "Search Vimm's Lair (type at least 2 letters)"}
+                        value={vimmSearch}
+                        onChange={(e) => setVimmSearch(e.target.value)}
+                        autoFocus
+                      />
+                      {vimmLoading && <RefreshCw size={14} className="animate-spin text-cyan" />}
                     </div>
-                  )}
+                  </div>
 
-                  {vimmLoading ? (
-                    <div className="empty-state">
-                      <RefreshCw size={48} className="animate-spin" />
-                      <h3 className="empty-state__title">Loading games from Vimm's Lair...</h3>
-                    </div>
-                  ) : vimmSearchResults.length > 0 && !selectedVimmConsole ? (
-                    /* ---- Global search results ---- */
-                    <div className="rgs-search-results">
-                      <div className="rgs-results-header">Search results for "{vimmSearch}"</div>
+                  {vimmSearch.trim().length >= 2 ? (
+                    /* ---- Search results grid ---- */
+                    vimmLoading ? (
+                      <div className="empty-state">
+                        <RefreshCw size={48} className="animate-spin" />
+                        <h3 className="empty-state__title">Searching Vimm's Lair...</h3>
+                      </div>
+                    ) : vimmGames.length > 0 ? (
                       <div className="vimm-games-grid">
-                        {vimmSearchResults.map((game) => (
+                        {vimmGames.map((game) => (
                           <motion.div
                             key={game.id}
                             className="vimm-game-card"
@@ -1838,14 +1812,24 @@ export default function App() {
                             </div>
                             <div className="vimm-game-card__info">
                               <div className="vimm-game-card__name" title={game.name}>{game.name}</div>
-                              <div className="vimm-game-card__meta">{game.region || "—"}</div>
+                              <div className="vimm-game-card__meta">
+                                {game.region || "—"} {game.rating && game.rating !== "none" ? `• ⭐ ${game.rating}` : ""}
+                              </div>
                             </div>
                           </motion.div>
                         ))}
                       </div>
-                    </div>
+                    ) : (
+                      <div className="empty-state">
+                        <div className="empty-state__icon">🔍</div>
+                        <div className="empty-state__title">No games found</div>
+                        <p className="empty-state__text">
+                          No match for "{vimmSearch}"{selectedVimmConsole ? ` on ${selectedVimmConsole.name}` : ""}.
+                        </p>
+                      </div>
+                    )
                   ) : !selectedVimmConsole ? (
-                    /* ---- Console grid (RGS style) ---- */
+                    /* ---- Console grid (empty query, no console selected) ---- */
                     <div className="rgs-console-grid">
                       {vimmConsoles.map((c) => (
                         <motion.div
@@ -1872,50 +1856,14 @@ export default function App() {
                         </motion.div>
                       ))}
                     </div>
-                  ) : !selectedVimmLetter ? (
-                    /* ---- Alphabet picker ---- */
-                    <div className="vimm-alphabet-grid">
-                      {["#", ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i))].map((letter) => (
-                        <motion.button
-                          key={letter}
-                          className="vimm-letter-tile"
-                          whileHover={{ scale: 1.06, y: -3 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => handleSelectVimmLetter(letter)}
-                        >
-                          {letter}
-                        </motion.button>
-                      ))}
-                    </div>
                   ) : (
-                    /* ---- Games grid for selected letter ---- */
-                    <div className="vimm-games-grid">
-                      {vimmGames.map((game) => (
-                        <motion.div
-                          key={game.id}
-                          className="vimm-game-card"
-                          whileHover={{ scale: 1.03, y: -4 }}
-                          whileTap={{ scale: 0.97 }}
-                          onClick={() => handleOpenVimmGame(game)}
-                        >
-                          <div className="vimm-game-card__cover">
-                            <img src={game.box_url} alt={game.name} loading="lazy" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          </div>
-                          <div className="vimm-game-card__info">
-                            <div className="vimm-game-card__name" title={game.name}>{game.name}</div>
-                            <div className="vimm-game-card__meta">
-                              {game.region || "—"} {game.rating && game.rating !== "none" ? `• ⭐ ${game.rating}` : ""}
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))}
-                      {vimmGames.length === 0 && (
-                        <div className="empty-state empty-state--full">
-                          <div className="empty-state__icon">🔍</div>
-                          <div className="empty-state__title">No games found</div>
-                          <p className="empty-state__text">Vimm has no entries starting with {selectedVimmLetter} for this console.</p>
-                        </div>
-                      )}
+                    /* ---- Console selected but no query yet: hint the user ---- */
+                    <div className="empty-state">
+                      <div className="empty-state__icon">⌨️</div>
+                      <div className="empty-state__title">Type to search {selectedVimmConsole.name}</div>
+                      <p className="empty-state__text">
+                        Results will appear as you type. Clear the search to pick another console.
+                      </p>
                     </div>
                   )}
                 </div>

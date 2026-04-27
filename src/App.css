@@ -2528,36 +2528,6 @@ body::before {
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.2);
 }
 
-/* Alphabet picker */
-.vimm-alphabet-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.vimm-letter-tile {
-  aspect-ratio: 1 / 1;
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(59, 130, 246, 0.08));
-  border: 1px solid rgba(139, 92, 246, 0.18);
-  color: #e9e6ff;
-  font-size: 1.5rem;
-  font-weight: 600;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.vimm-letter-tile:hover {
-  border-color: rgba(139, 92, 246, 0.55);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(59, 130, 246, 0.18));
-  box-shadow: 0 4px 24px rgba(139, 92, 246, 0.18);
-  color: #fff;
-}
-
 /* Console card fallback icon (when Vimm's system image fails to load) */
 .vimm-console-card__fallback {
   font-size: 3rem;

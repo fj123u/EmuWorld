@@ -2344,7 +2344,7 @@ async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGam
 }
 
 #[tauri::command]
-async fn search_vimm(query: String) -> Result<Vec<VimmGame>, String> {
+async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<VimmGame>, String> {
     if query.trim().len() < 2 { return Ok(vec![]); }
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -2352,7 +2352,11 @@ async fn search_vimm(query: String) -> Result<Vec<VimmGame>, String> {
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = format!("https://vimm.net/vault/?p=list&q={}", urlencoding::encode(query.trim()));
+    let url = if let Some(slug) = console_slug.as_ref().filter(|s| !s.is_empty()) {
+        format!("https://vimm.net/vault/?p=list&system={}&q={}", slug, urlencoding::encode(query.trim()))
+    } else {
+        format!("https://vimm.net/vault/?p=list&q={}", urlencoding::encode(query.trim()))
+    };
     let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
         return Err(format!("Vimm search HTTP {}", response.status()));
