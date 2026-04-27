@@ -177,20 +177,19 @@ interface VimmGame {
 
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
 
-/* ============================
-   Brand logo mapping (simpleicons CDN where available, emoji fallback)
-   ============================ */
-const BRAND_LOGO_SLUG: Record<string, string | null> = {
-  "Sony": "playstation",
-  "Sega": "sega",
-  "Atari": "atari",
-  "NEC": "nec",
-  "Panasonic": "panasonic",
-  "Commodore": "commodore",
-  // simpleicons doesn't host trademarked Nintendo/Microsoft/SNK marks → fall back to emoji
-  "Nintendo": null,
-  "Microsoft": null,
-  "SNK": null,
+/* Brand logos: use one "emblematic" console logo per brand so everything comes
+   from the same source (RetroArch monochrome pack) and looks visually consistent.
+   Falls back to a curated emoji when no console logo exists. */
+const BRAND_REPRESENTATIVE_CONSOLE: Record<string, string | null> = {
+  "Nintendo": "Nintendo - Nintendo Entertainment System",
+  "Sony": "Sony - PlayStation",
+  "Sega": "Sega - Mega Drive - Genesis",
+  "Microsoft": "Microsoft - Xbox",
+  "Atari": "Atari - 2600",
+  "NEC": "NEC - PC Engine - TurboGrafx 16",
+  "SNK": null,           // RetroArch monochrome has no clean SNK logo
+  "Panasonic": "The 3DO Company - 3DO",
+  "Commodore": null,
   "Arcade": null,
   "Arcade & Retro": null,
   "Multi-System": null,
@@ -212,7 +211,7 @@ const BRAND_EMOJI_FALLBACK: Record<string, string> = {
 };
 
 const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
-  const slug = BRAND_LOGO_SLUG[brand];
+  const slug = BRAND_REPRESENTATIVE_CONSOLE[brand];
   const emoji = BRAND_EMOJI_FALLBACK[brand] || "🎮";
   const [failed, setFailed] = useState(false);
 
@@ -230,10 +229,9 @@ const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
   return (
     <img
       className="brand-logo"
-      src={`https://cdn.simpleicons.org/${slug}/white`}
+      src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(slug)}.png`}
       alt={brand}
-      width={size}
-      height={size}
+      style={{ height: size, width: size * 1.6, objectFit: "contain" }}
       onError={() => setFailed(true)}
     />
   );
@@ -271,16 +269,93 @@ const CONSOLE_ICONS: Record<string, string> = {
   "Multi-System": "🔄",
 };
 
+/* RetroArch monochrome asset names, indexed by the user-facing console label.
+   Source: https://github.com/libretro/retroarch-assets/tree/master/xmb/monochrome/png */
+const CONSOLE_RETROARCH_SLUG: Record<string, string> = {
+  "NES": "Nintendo - Nintendo Entertainment System",
+  "Super Nintendo": "Nintendo - Super Nintendo Entertainment System",
+  "SNES": "Nintendo - Super Nintendo Entertainment System",
+  "Nintendo 64": "Nintendo - Nintendo 64",
+  "N64": "Nintendo - Nintendo 64",
+  "Game Boy": "Nintendo - Game Boy",
+  "Game Boy Color": "Nintendo - Game Boy Color",
+  "GBC": "Nintendo - Game Boy Color",
+  "Game Boy Advance": "Nintendo - Game Boy Advance",
+  "GBA": "Nintendo - Game Boy Advance",
+  "Nintendo DS": "Nintendo - Nintendo DS",
+  "Nintendo 3DS": "Nintendo - Nintendo 3DS",
+  "3DS": "Nintendo - Nintendo 3DS",
+  "GameCube": "Nintendo - GameCube",
+  "GameCube / Wii": "Nintendo - GameCube",
+  "GameCube - Wii": "Nintendo - GameCube",
+  "Wii": "Nintendo - Wii",
+  "Wii U": "Nintendo - Wii U",
+  "Nintendo Switch": "Nintendo - Switch",
+  "Virtual Boy": "Nintendo - Virtual Boy",
+
+  "PlayStation 1": "Sony - PlayStation",
+  "PS1": "Sony - PlayStation",
+  "PlayStation": "Sony - PlayStation",
+  "PlayStation 2": "Sony - PlayStation 2",
+  "PS2": "Sony - PlayStation 2",
+  "PlayStation 3": "Sony - PlayStation 3",
+  "PS3": "Sony - PlayStation 3",
+  "PSP": "Sony - PlayStation Portable",
+  "PlayStation Portable": "Sony - PlayStation Portable",
+  "PlayStation Vita": "Sony - PlayStation Vita",
+  "PS Vita": "Sony - PlayStation Vita",
+
+  "Mega Drive": "Sega - Mega Drive - Genesis",
+  "Genesis": "Sega - Mega Drive - Genesis",
+  "Master System": "Sega - Master System - Mark III",
+  "Game Gear": "Sega - Game Gear",
+  "Saturn": "Sega - Saturn",
+  "Dreamcast": "Sega - Dreamcast",
+  "Sega 32X": "Sega - 32X",
+  "32X": "Sega - 32X",
+  "Sega CD": "Sega - Mega-CD - Sega CD",
+
+  "Xbox": "Microsoft - Xbox",
+  "Xbox 360": "Microsoft - Xbox 360",
+
+  "Atari 2600": "Atari - 2600",
+  "Atari 5200": "Atari - 5200",
+  "Atari 7800": "Atari - 7800",
+  "Jaguar": "Atari - Jaguar",
+  "Lynx": "Atari - Lynx",
+
+  "TurboGrafx-16": "NEC - PC Engine - TurboGrafx 16",
+  "TG16": "NEC - PC Engine - TurboGrafx 16",
+  "TurboGrafx-CD": "NEC - PC Engine CD - TurboGrafx-CD",
+  "TGCD": "NEC - PC Engine CD - TurboGrafx-CD",
+
+  "CD-i": "Philips - CD-i",
+};
+
 const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
+  const slug = CONSOLE_RETROARCH_SLUG[name];
   const emoji = CONSOLE_ICONS[name] || "🎮";
+  const [failed, setFailed] = useState(false);
+
+  if (!slug || failed) {
+    return (
+      <span
+        className="console-logo console-logo--emoji"
+        style={{ fontSize: size, lineHeight: 1 }}
+        aria-label={name}
+      >
+        {emoji}
+      </span>
+    );
+  }
   return (
-    <span
+    <img
       className="console-logo"
-      style={{ fontSize: size, lineHeight: 1 }}
-      aria-label={name}
-    >
-      {emoji}
-    </span>
+      src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(slug)}.png`}
+      alt={name}
+      style={{ width: size * 1.6, height: size, objectFit: "contain" }}
+      onError={() => setFailed(true)}
+    />
   );
 };
 
