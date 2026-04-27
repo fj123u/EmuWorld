@@ -585,7 +585,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         "Game Boy Advance" | "GBA" => vec!["Nintendo - Game Boy Advance"],
         "Nintendo DS" => vec!["Nintendo - Nintendo DS"],
         "GameCube" => vec!["Nintendo - GameCube"],
-        "GameCube / Wii" => vec!["Nintendo - Wii", "Nintendo - GameCube"],
+        "GameCube / Wii" | "GameCube - Wii" => vec!["Nintendo - Wii", "Nintendo - GameCube"],
         "Wii" => vec!["Nintendo - Wii"],
         "Wii U" => vec!["Nintendo - Wii U"],
         "Nintendo Switch" => vec!["Nintendo - Nintendo Switch"],
@@ -603,8 +603,18 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     let norm_target = game_name.to_lowercase().chars()
         .filter(|c| c.is_alphanumeric())
         .collect::<String>();
-        
-    let console_covers_dir = covers_dir.join(&console);
+
+    // Console-specific size thresholds to block junk/icons but keep small retro covers
+    let min_size: usize = match console.as_str() {
+        "Nintendo Switch" | "Wii U" => 10000,
+        "NES" | "SNES" | "Super Nintendo" | "Game Boy" | "Game Boy Color" | "Game Boy Advance" => 3000,
+        "Wii" | "GameCube" | "GameCube / Wii" | "PlayStation 2" => 5000,
+        _ => 5000,
+    };
+
+    // Sanitize console name for filesystem ("GameCube / Wii" -> "GameCube - Wii")
+    let safe_console: String = console.replace("/", "-");
+    let console_covers_dir = covers_dir.join(&safe_console);
     let synonym_groups = vec![
         vec!["rouge", "red"], vec!["bleu", "blue"], vec!["jaune", "yellow"],
         vec!["argent", "silver"], vec!["or", "gold"], vec!["cristal", "crystal"],
@@ -671,7 +681,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         
         if let Some(path) = best_local {
             if let Ok(data) = std::fs::read(&path) {
-                if data.len() > 100 { 
+                if data.len() >= min_size { 
                     log_event("Local Cache", "Match Found", None);
                     write_to_boxart_log("Result: Local Cache Success");
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
@@ -687,17 +697,11 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
-    // Console-specific size thresholds to block junk/icons but keep small retro covers
-    let min_size: usize = match console.as_str() {
-        "Nintendo Switch" | "Wii U" => 10000,
-        "NES" | "SNES" | "Super Nintendo" | "Game Boy" | "Game Boy Color" | "Game Boy Advance" => 3000,
-        "Wii" | "GameCube" | "GameCube / Wii" | "PlayStation 2" => 5000,
-        _ => 5000,
-    };
+    // min_size already computed above
 
     // === SWITCH/WIIU: Try tinfoil.media first (best source for Switch covers) ===
     if console == "Nintendo Switch" {
-        if let Some(id) = extract_title_id(&game_name) {
+        if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
             let url = format!("https://tinfoil.media/ti/{}/512/512", id);
             write_to_boxart_log(&format!("Trying Tinfoil.media: {}", url));
             if let Ok(resp) = client.get(&url).send().await {
@@ -784,6 +788,12 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 if let Ok(json) = resp.json::<serde_json::Value>().await {
                     if let Some(search_res) = json["query"]["search"].as_array().and_then(|a| a.get(0)) {
                         let title = search_res["title"].as_str().unwrap_or_default();
+                        // Skip Wikipedia series/franchise pages
+                        let title_low_w = title.to_lowercase();
+                        if title_low_w.contains("series") || title_low_w.contains("franchise") || title_low_w.contains("list of") {
+                            write_to_boxart_log(&format!("Wikipedia Skip Series Page: {}", title));
+                            continue;
+                        }
                         // Get the image
                         let img_query_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=pageimages&format=json&pithumbsize=1000", urlencoding::encode(title));
                         if let Ok(img_resp) = client.get(&img_query_url).send().await {
@@ -812,22 +822,58 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         }
     }
 
-    // 4. Try Title ID Fallback (Switch / WiiU)
-    if let Some(id) = extract_title_id(&game_name) {
-        let is_wiiu = id.starts_with("0005");
-        let console_type = if is_wiiu { "wiiu" } else { "switch" };
-        
-        for region in &["EN", "US", "JA", "FR", "DE"] {
-            let url = format!("https://art.gametdb.com/{}/coverfullHQ/{}/{}.jpg", console_type, region, id);
-            write_to_boxart_log(&format!("Trying GameTDB: {}", url));
-            if let Ok(resp) = client.get(&url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(bytes) = resp.bytes().await {
-                        if bytes.len() >= min_size {
-                            write_to_boxart_log(&format!("Result: GameTDB Success ({})", region));
-                            let _ = std::fs::create_dir_all(&console_covers_dir);
-                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
-                            return Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+    // 4. Try Title ID Fallback (GameTDB for Wii / Wii U / GameCube; Switch uses Tinfoil above)
+    if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
+        // Detect console type + the right file extension GameTDB actually serves.
+        // GameTDB: wii => .png, wiiu => .jpg, gamecube => .png. Switch not hosted.
+        let (console_type, ext, mime) = if id.starts_with("0100") {
+            // Switch — skip (GameTDB has no Switch covers; Tinfoil already tried above).
+            ("", "", "")
+        } else if id.len() == 6 {
+            match console.as_ref() {
+                "GameCube" | "GameCube / Wii" | "GameCube - Wii" if id.starts_with('G') =>
+                    ("gamecube", "png", "image/png"),
+                _ if id.starts_with('A') || id.starts_with('B') =>
+                    ("wiiu", "jpg", "image/jpeg"),
+                _ => ("wii", "png", "image/png"),
+            }
+        } else if id.starts_with("0005") {
+            // Legacy 16-hex WiiU Title ID — GameTDB doesn't index these directly, but try png anyway.
+            ("wiiu", "png", "image/png")
+        } else {
+            ("", "", "")
+        };
+
+        if !console_type.is_empty() {
+            // Only try the region that matches the disc ID's 4th char (E=US, P=EUR, J=JPN)
+            // but fall back to trying all regions for robustness.
+            let primary_region = if id.len() == 6 {
+                match id.chars().nth(3) {
+                    Some('E') => "US",
+                    Some('P') => "EN",
+                    Some('J') => "JA",
+                    Some('K') => "KO",
+                    _ => "EN",
+                }
+            } else { "EN" };
+
+            let mut regions = vec![primary_region];
+            for r in &["EN", "US", "FR", "DE", "JA", "ES", "IT"] {
+                if !regions.contains(r) { regions.push(r); }
+            }
+
+            for region in regions {
+                let url = format!("https://art.gametdb.com/{}/coverfullHQ/{}/{}.{}", console_type, region, id, ext);
+                write_to_boxart_log(&format!("Trying GameTDB: {}", url));
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            if bytes.len() >= min_size {
+                                write_to_boxart_log(&format!("Result: GameTDB Success ({}/{})", region, id));
+                                let _ = std::fs::create_dir_all(&console_covers_dir);
+                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                return Ok(format!("data:{};base64,{}", mime, base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                            }
                         }
                     }
                 }
@@ -924,6 +970,12 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
             if let Ok(json) = resp.json::<serde_json::Value>().await {
                 if let Some(search_res) = json["query"]["search"].as_array().and_then(|a| a.get(0)) {
                     let title = search_res["title"].as_str().unwrap_or_default();
+                    // Skip Wikipedia series/franchise pages
+                    let title_low_w2 = title.to_lowercase();
+                    if title_low_w2.contains("series") || title_low_w2.contains("franchise") || title_low_w2.contains("list of") {
+                        write_to_boxart_log(&format!("Wikipedia Skip Series Page: {}", title));
+                        continue;
+                    }
                     if let Some(reason) = check_mismatch(&game_name, title) {
                         write_to_boxart_log(&format!("Wikipedia Title Reject: {} - Reason: {}", title, reason));
                         continue;
@@ -989,9 +1041,9 @@ fn clean_game_name(name: &str) -> String {
 
     // Strip common scene keywords
     let scene_keywords = vec![
-        "PROPER", "REPACK", "NSW", "MULTi", "READNFO", "INTERNAL", "D0WNLOAD", 
-        "BigBlueBox", "Kaze-Nico", "v1.1", "Update", "DLC", "Patch",
-        "Collection", "v0", "v65536"
+        "PROPER", "REPACK", "NSW", "MULTi", "READNFO", "INTERNAL", "D0WNLOAD",
+        "BigBlueBox", "Kaze-Nico", "kaze-nico", "v1.1", "v1.0", "Update", "DLC", "Patch",
+        "Collection", "v0", "v65536", "nsw2u", "NKA", "NC", "NT"
     ];
     for kw in scene_keywords {
         let re = Regex::new(&format!(r"(?i)\b{}\b", kw)).unwrap();
@@ -1047,8 +1099,91 @@ fn extract_title_id(name: &str) -> Option<String> {
 
     None
 }
+
+/// Resolve a title ID from game name using a hardcoded lookup table
+/// for popular games that often lack IDs in their filenames.
+fn resolve_title_id(name: &str) -> Option<String> {
+    let cleaned = clean_game_name(name).to_lowercase();
+    
+    // Known Switch title IDs for games commonly missing IDs in filenames
+    let known_ids: Vec<(&[&str], &str)> = vec![
+        // Zelda
+        (&["zelda", "echoes of wisdom"], "01008CF01BAAC000"),
+        (&["zelda", "tears of the kingdom"], "0100F2C0115B6000"),
+        (&["zelda", "breath of the wild"], "01007EF00011E000"),
+        (&["zelda", "links awakening"], "01006BB00C6F0000"),
+        // Mario & Luigi
+        (&["mario", "luigi", "brothership"], "01006D0017F7A000"),
+        // 1-2-Switch
+        (&["1-2-switch"], "01000320000CC000"),
+        (&["1 2 switch"], "01000320000CC000"),
+        (&["12switch"], "01000320000CC000"),
+        // Tomodachi Life
+        (&["tomodachi", "life"], "010051F0207B2000"),
+        // Other popular titles often without IDs
+        (&["mario", "odyssey"], "0100000000010000"),
+        (&["mario kart 8"], "0100152000022000"),
+        (&["splatoon 3"], "0100C2500FC20000"),
+        (&["animal crossing", "new horizons"], "01006F8002326000"),
+        (&["pokemon", "scarlet"], "0100A3D008C5C000"),
+        (&["pokemon", "violet"], "01008F6008C5E000"),
+        (&["pokemon legends", "arceus"], "01001F5010DFA000"),
+        (&["pokemon legends", "za"], "0100F43008C44000"),
+        (&["super smash bros"], "01006A800016E000"),
+        (&["nintendo switch sports"], "0100D2F00D5C0000"),
+        (&["mario party jamboree"], "0100965017338000"),
+        (&["princess peach", "showtime"], "01007A3009184000"),
+        (&["sonic", "shadow generations"], "01005EA01C0FC000"),
+        (&["super mario 3d world"], "010028600EBDA000"),
+        (&["super mario bros", "wonder"], "010015100B514000"),
+        (&["pikmin 4"], "0100B7C00933A000"),
+        (&["mario strikers"], "010019401051C000"),
+        (&["mario tennis aces"], "0100BDE00862A000"),
+        (&["luigi mansion 2"], "010048701995E000"),
+        (&["luigi mansion 3"], "0100DCA0064A6000"),
+        (&["donkey kong country returns"], "01009D901BC56000"),
+        (&["donkey kong country tropical"], "0100C1F0051B6000"),
+        (&["lego horizon"], "010073C01AF34000"),
+        (&["watermelon game"], "0100800015926000"),
+        (&["suika game"], "0100800015926000"),
+        (&["celeste"], "01002B30028F6000"),
+        (&["forager"], "01001D200BCC4000"),
+        (&["dragon quest builders 2"], "010042000A986000"),
+        (&["dragon quest builders"], "010008900705C000"),
+        (&["tomb raider", "remastered"], "010024601BB16000"),
+        (&["super mario rpg"], "0100BC0018138000"),
+        (&["mario vs donkey kong"], "0100B99019412000"),
+        (&["pixark"], "0100CC700B2B4000"),
+        // Switch — extra entries for common filenames
+        (&["1.2.switch"], "01000320000CC000"),
+        (&["tomodachi life living"], "010051F0207B2000"),
+        // Wii U HD remasters — GameTDB disc IDs (6 chars, not 16-hex Title IDs)
+        (&["zelda", "wind waker"], "AMAP01"),         // Wind Waker HD (EUR)
+        (&["zelda", "twilight princess"], "BCZP01"),  // Twilight Princess HD (EUR)
+        (&["mario kart 8"], "AMKP01"),
+        (&["super mario 3d world"], "ARDP01"),
+        (&["new super mario bros u"], "ARPP01"),
+        // Wii (Redump/nkit family often lacks bracketed IDs)
+        (&["wii sports resort"], "RZTP01"),           // Wii Sports Resort (EUR)
+        (&["wii sports"], "RSPP01"),                  // Wii Sports (EUR)
+        (&["wii party"], "SUPP01"),
+        (&["mario kart wii"], "RMCP01"),
+        (&["new super mario bros wii"], "SMNP01"),
+        (&["luigi mansion", "gamecube"], "GLME01"),
+    ];
+    
+    for (keywords, id) in &known_ids {
+        if keywords.iter().all(|kw| cleaned.contains(kw)) {
+            write_to_boxart_log(&format!("Resolved title ID: {} -> {}", name, id));
+            return Some(id.to_string());
+        }
+    }
+    
+    None
+}
+
 fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
-    let mut cleaned = clean_game_name(name);
+    let cleaned = clean_game_name(name);
     if cleaned.is_empty() { return vec![]; }
     
     let mut candidates = vec![cleaned.clone()];
@@ -1113,6 +1248,43 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
     if pure.contains("1.2.Switch") || pure.contains("1 2 Switch") {
         candidates.push("1-2-Switch".to_string());
         candidates.push("1-2-Switch (video game)".to_string());
+    }
+
+    // Tomodachi Life (handles truncated "Living th..." filenames)
+    if pure.to_lowercase().contains("tomodachi") {
+        candidates.push("Tomodachi Life Living the Dream".to_string());
+        candidates.push("Tomodachi Life: Living the Dream".to_string());
+        candidates.push("Tomodachi Life".to_string());
+    }
+
+    // Split composite titles on " & " or " and " (e.g. "Wii Sports & Wii Sports Resort")
+    let split_pattern = regex::Regex::new(r"(?i) & | and ").unwrap();
+    for chunk in split_pattern.split(&pure) {
+        let trimmed = chunk.trim();
+        if !trimmed.is_empty() && trimmed.len() > 3 && trimmed != pure {
+            candidates.push(trimmed.to_string());
+        }
+    }
+
+    // Title case fallback for all-lowercase names ("zelda wind waker" -> "Zelda Wind Waker")
+    if !pure.is_empty() && pure.chars().all(|c| !c.is_uppercase()) {
+        let titled: String = pure.split_whitespace()
+            .map(|w| {
+                let mut chars = w.chars();
+                match chars.next() {
+                    Some(c) => c.to_uppercase().collect::<String>() + chars.as_str(),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        if titled != pure {
+            candidates.push(titled.clone());
+            // Add franchise-prefixed variants that Wikipedia/Libretro expect
+            if titled.contains("Zelda") && !titled.starts_with("The Legend") {
+                candidates.push(format!("The Legend of {}", titled));
+            }
+        }
     }
 
     // Deduplicate and return
