@@ -1667,7 +1667,13 @@ export default function App() {
                           : "Search or pick a console"
                     )}
                     {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
-                    {page === "library" && `${filteredGames.length} games detected`}
+                    {page === "library" && (
+                      consoleFilter
+                        ? `${filteredGames.length} game${filteredGames.length === 1 ? "" : "s"} on ${consoleFilter}`
+                        : categoryFilter
+                          ? `Pick a console in ${categoryFilter}`
+                          : `${roms.length} game${roms.length === 1 ? "" : "s"} — pick a manufacturer`
+                    )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                   </p>
@@ -2206,27 +2212,160 @@ export default function App() {
                 </div>
               )}
 
-              {page === "library" && (
-                <div className="library-content">
-                  <div className="game-grid">
-                    {filteredGames.map(rom => (
-                      <GameCard 
-                        key={rom.path} 
-                        rom={rom} 
-                        onLaunch={handleLaunch} 
-                        onDelete={handleDeleteRom}
-                      />
-                    ))}
-                  </div>
-                  {filteredGames.length === 0 && (
-                    <div className="empty-state">
-                      <div className="empty-state__icon">📂</div>
-                      <div className="empty-state__title">No ROMs found</div>
-                      <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
+              {page === "library" && (() => {
+                const CATEGORY_ICONS: Record<string, string> = {
+                  "Nintendo": "🍄",
+                  "Sony": "🎮",
+                  "Sega": "🔵",
+                  "Microsoft": "❎",
+                  "Arcade & Retro": "🕹️",
+                  "Multi-System": "🔄",
+                };
+
+                // Helper: only offer a manufacturer/console if the user actually owns ROMs for it.
+                const ownedConsoles = new Set(roms.map((r) => r.console));
+                const manufacturersWithRoms = Object.entries(consolesByCategory)
+                  .map(([cat, cons]) => {
+                    const ownedInCat = cons.filter((c) => ownedConsoles.has(c));
+                    const romCount = roms.filter((r) => ownedInCat.includes(r.console)).length;
+                    return { category: cat, consoles: ownedInCat, romCount };
+                  })
+                  .filter((m) => m.consoles.length > 0);
+
+                return (
+                  <div className="library-content">
+                    {/* Breadcrumb */}
+                    <div className="rgs-breadcrumb">
+                      <button
+                        className={`rgs-breadcrumb__item ${!categoryFilter && !consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
+                        onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
+                      >
+                        <Globe size={14} /> All Manufacturers
+                      </button>
+                      {categoryFilter && (
+                        <>
+                          <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                          <button
+                            className={`rgs-breadcrumb__item ${!consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
+                            onClick={() => setConsoleFilter(null)}
+                          >
+                            {categoryFilter}
+                          </button>
+                        </>
+                      )}
+                      {consoleFilter && (
+                        <>
+                          <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                          <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
+                            {consoleFilter}
+                          </span>
+                        </>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {roms.length === 0 ? (
+                      <div className="empty-state">
+                        <div className="empty-state__icon">📂</div>
+                        <div className="empty-state__title">No ROMs found</div>
+                        <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
+                      </div>
+                    ) : search.trim().length >= 2 ? (
+                      /* ---- Global search bypasses the drill-down ---- */
+                      <>
+                        <div className="game-grid">
+                          {filteredGames.map(rom => (
+                            <GameCard
+                              key={rom.path}
+                              rom={rom}
+                              onLaunch={handleLaunch}
+                              onDelete={handleDeleteRom}
+                            />
+                          ))}
+                        </div>
+                        {filteredGames.length === 0 && (
+                          <div className="empty-state">
+                            <div className="empty-state__icon">🔍</div>
+                            <div className="empty-state__title">No matches for "{search}"</div>
+                          </div>
+                        )}
+                      </>
+                    ) : !categoryFilter ? (
+                      /* ---- Manufacturer grid ---- */
+                      <div className="rgs-console-grid">
+                        {manufacturersWithRoms.map(({ category, consoles, romCount }) => (
+                          <motion.div
+                            key={category}
+                            className="rgs-console-card"
+                            whileHover={{ scale: 1.03, y: -4 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => setCategoryFilter(category)}
+                          >
+                            <div className="rgs-console-card__img">
+                              <div className="vimm-console-card__fallback">{CATEGORY_ICONS[category] || "🎮"}</div>
+                            </div>
+                            <div className="rgs-console-card__info">
+                              <div className="rgs-console-card__name">{category}</div>
+                              <div className="rgs-console-card__meta">
+                                {consoles.length} console{consoles.length > 1 ? "s" : ""} • {romCount} game{romCount > 1 ? "s" : ""}
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    ) : !consoleFilter ? (
+                      /* ---- Console grid for the selected manufacturer ---- */
+                      <div className="rgs-console-grid">
+                        {(consolesByCategory[categoryFilter] || [])
+                          .filter((con) => ownedConsoles.has(con))
+                          .sort()
+                          .map((con) => {
+                            const count = roms.filter((r) => r.console === con).length;
+                            return (
+                              <motion.div
+                                key={con}
+                                className="rgs-console-card"
+                                whileHover={{ scale: 1.03, y: -4 }}
+                                whileTap={{ scale: 0.97 }}
+                                onClick={() => setConsoleFilter(con)}
+                              >
+                                <div className="rgs-console-card__img">
+                                  <div className="vimm-console-card__fallback">{CONSOLE_ICONS[con] || "🎮"}</div>
+                                </div>
+                                <div className="rgs-console-card__info">
+                                  <div className="rgs-console-card__name">{con}</div>
+                                  <div className="rgs-console-card__meta">
+                                    {count} game{count > 1 ? "s" : ""}
+                                  </div>
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      /* ---- Game grid for the selected console ---- */
+                      <>
+                        <div className="game-grid">
+                          {filteredGames.map(rom => (
+                            <GameCard
+                              key={rom.path}
+                              rom={rom}
+                              onLaunch={handleLaunch}
+                              onDelete={handleDeleteRom}
+                            />
+                          ))}
+                        </div>
+                        {filteredGames.length === 0 && (
+                          <div className="empty-state">
+                            <div className="empty-state__icon">🔍</div>
+                            <div className="empty-state__title">No matches</div>
+                            <p className="empty-state__text">No ROMs match the current search on {consoleFilter}.</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })()}
 
               {page === "installed" && (
                 <div className="emu-grid">
