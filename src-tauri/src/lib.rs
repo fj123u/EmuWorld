@@ -555,7 +555,8 @@ fn match_extension(ext: &str, catalog: &[emulators::EmulatorInfo]) -> Option<(St
 }
 
 #[tauri::command]
-async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String) -> Result<String, String> {
+async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
+    let force_refresh = force_refresh.unwrap_or(false);
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
 
@@ -649,9 +650,16 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         None
     };
 
-    write_to_boxart_log(&format!("=== FETCH START: {} ({}) ===", game_name, console));
+    write_to_boxart_log(&format!("=== FETCH START: {} ({}) {} ===", game_name, console, if force_refresh { "[force]" } else { "" }));
 
-    // 1. First check local covers directory
+    // If the user hit Retry, remove any stale cache entry so we can't fall back to it.
+    if force_refresh {
+        let target_png = console_covers_dir.join(format!("{}.png", &safe_name));
+        let _ = std::fs::remove_file(&target_png);
+    }
+
+    // 1. First check local covers directory (skipped when force_refresh is set)
+    if !force_refresh {
     if let Ok(entries) = std::fs::read_dir(&console_covers_dir) {
         let mut best_local = None;
         for entry in entries.flatten() {
@@ -681,7 +689,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         
         if let Some(path) = best_local {
             if let Ok(data) = std::fs::read(&path) {
-                if data.len() >= min_size { 
+                if data.len() >= min_size {
                     log_event("Local Cache", "Match Found", None);
                     write_to_boxart_log("Result: Local Cache Success");
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
@@ -689,6 +697,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 }
             }
         }
+    }
     }
 
     let client = reqwest::Client::builder()
@@ -831,11 +840,12 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         //   switch    => skipped (Tinfoil already tried above; GameTDB has no Switch)
         let (console_type, path, ext, mime) = if id.starts_with("0100") {
             ("", "", "", "")
-        } else if id.len() == 6 {
+        } else if id.len() == 6 || id.len() == 4 {
+            // 4-char Wii U disc IDs (WDKE, WDKP) and 6-char Wii/WiiU/GameCube IDs (RSPP01, AMKP01, GLME01).
             match console.as_ref() {
                 "GameCube" | "GameCube / Wii" | "GameCube - Wii" if id.starts_with('G') =>
                     ("gamecube", "cover", "png", "image/png"),
-                _ if id.starts_with('A') || id.starts_with('B') =>
+                _ if id.starts_with('A') || id.starts_with('B') || id.starts_with('W') =>
                     ("wiiu", "coverHQ", "jpg", "image/jpeg"),
                 _ => ("wii", "cover", "png", "image/png"),
             }
@@ -846,15 +856,14 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         };
 
         if !console_type.is_empty() {
-            let primary_region = if id.len() == 6 {
-                match id.chars().nth(3) {
-                    Some('E') => "US",
-                    Some('P') => "EN",
-                    Some('J') => "JA",
-                    Some('K') => "KO",
-                    _ => "EN",
-                }
-            } else { "EN" };
+            // Region char position: 3 for 6-char disc IDs (RSPP01 → P), 3 for 4-char (WDKE → E).
+            let primary_region = match id.chars().nth(3) {
+                Some('E') => "US",
+                Some('P') => "EN",
+                Some('J') => "JA",
+                Some('K') => "KO",
+                _ => "EN",
+            };
 
             let mut regions = vec![primary_region];
             for r in &["EN", "US", "FR", "DE", "JA", "ES", "IT"] {
@@ -1156,12 +1165,13 @@ fn resolve_title_id(name: &str) -> Option<String> {
         // Switch — extra entries for common filenames
         (&["1.2.switch"], "01000320000CC000"),
         (&["tomodachi life living"], "010051F0207B2000"),
-        // Wii U HD remasters — GameTDB disc IDs (6 chars, not 16-hex Title IDs)
-        (&["zelda", "wind waker"], "AMAP01"),         // Wind Waker HD (EUR)
+        // Wii U HD remasters — GameTDB disc IDs (4-char or 6-char, not 16-hex Title IDs)
+        (&["zelda", "wind waker"], "WDKE"),           // Wind Waker HD (US; EUR = WDKP, JP = WDKJ)
         (&["zelda", "twilight princess"], "BCZP01"),  // Twilight Princess HD (EUR)
         (&["mario kart 8"], "AMKP01"),
         (&["super mario 3d world"], "ARDP01"),
         (&["new super mario bros u"], "ARPP01"),
+        (&["super mario maker"], "AMAP01"),           // Wii U Super Mario Maker (was incorrectly mapped to Wind Waker)
         // Wii (Redump/nkit family often lacks bracketed IDs)
         (&["wii sports resort"], "RZTP01"),           // Wii Sports Resort (EUR)
         (&["wii sports"], "RSPP01"),                  // Wii Sports (EUR)

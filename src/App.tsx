@@ -221,12 +221,13 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchCover = useCallback(async () => {
+  const fetchCover = useCallback(async (forceRefresh = false) => {
     try {
       setLoading(true);
       const dataUrl: string = await invoke("fetch_boxart", {
         gameName: rom.name,
-        console: rom.console
+        console: rom.console,
+        forceRefresh,
       });
       setCover(dataUrl);
     } catch (e) {
@@ -258,8 +259,8 @@ const GameCard = ({ rom, onLaunch, onDelete }: {
             <div className="game-card__placeholder-title">{rom.name}</div>
             <button
               className="game-card__retry"
-              onClick={(e) => { e.stopPropagation(); fetchCover(); }}
-              title="Retry cover fetch"
+              onClick={(e) => { e.stopPropagation(); fetchCover(true); }}
+              title="Retry cover fetch (bypass cache)"
             >
               <RefreshCw size={12} /> Retry
             </button>
