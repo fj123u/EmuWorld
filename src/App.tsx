@@ -3048,7 +3048,9 @@ export default function App() {
                     <button
                       className="btn btn--ghost btn--sm public-profile-toggle__view"
                       onClick={async () => {
-                        const url = `https://emuworld.alwaysdata.net/u/${encodeURIComponent(profile.username!)}`;
+                        // Hash route (#/u/...) — alwaysdata only serves index.html,
+                        // so path-based /u/<pseudo> returns a 404.
+                        const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
                         await openUrl(url).catch(() => window.open(url, "_blank"));
                       }}
                     >
@@ -3093,10 +3095,9 @@ export default function App() {
                     if (!session) return;
                     // Token handoff lives on the `#` fragment; the SPA router reads it once
                     // via `consumeTokenHandoff` and then navigates to whichever route follows.
-                    // Target route: /u/<pseudo> when public + named, else /leaderboard fallback.
-                    const target = profile?.public_profile && profile?.username
-                      ? `/u/${encodeURIComponent(profile.username)}`
-                      : "/leaderboard";
+                    // `/account` is the web equivalent of the in-app account modal —
+                    // the SPA lands you on your own profile and auto-opens the edit modal.
+                    const target = "/account";
                     // Timestamp in the query so Firefox can't silently focus an already-open
                     // EmuWorld tab (which still has `#/u/...` from a previous handoff) and
                     // skip navigating to the new URL — otherwise the tokens in the fragment

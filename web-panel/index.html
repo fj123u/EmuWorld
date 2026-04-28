@@ -525,6 +525,7 @@
       if (!h) return { name: 'home' };
       if (h.startsWith('u/')) return { name: 'profile', username: decodeURIComponent(h.slice(2)) };
       if (h === 'leaderboard') return { name: 'leaderboard' };
+      if (h === 'account') return { name: 'account' };
       return { name: 'home' };
     }
 
@@ -536,6 +537,22 @@
       const route = parseRoute();
       if (route.name === 'profile') return renderProfile(route.username);
       if (route.name === 'leaderboard') return renderLeaderboard();
+      if (route.name === 'account') {
+        // Special: land on the user's own profile and auto-open the Account
+        // modal so "Manage on Web" feels like a deep-link.
+        if (currentUser && currentProfile?.username) {
+          // Swap the hash *without* re-rendering — we're already rendering now.
+          history.replaceState(null, '', window.location.pathname + `#/u/${encodeURIComponent(currentProfile.username)}`);
+          await renderProfile(currentProfile.username);
+        } else {
+          await renderLeaderboard();
+        }
+        // Open modal after render so the markup exists.
+        document.getElementById('account-username').value = currentProfile?.username || '';
+        document.getElementById('account-status').textContent = '';
+        document.getElementById('account-modal').classList.add('open');
+        return;
+      }
       return renderHome();
     }
 
