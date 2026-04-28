@@ -354,12 +354,27 @@
     // only. The "Me" bubble still works via `setSession(…)` on the token
     // handoff, it just doesn't survive a reload (which is fine — the
     // desktop button always re-issues a fresh token).
+    // Tiny in-memory Storage shim: supabase-js needs a storage backend to
+    // keep the session alive between setSession() and getUser(). localStorage
+    // forces a cross-tab Web Lock on every read which races with our parallel
+    // queries. An in-memory Map satisfies the interface, survives the tab
+    // lifecycle, and dies on reload (which is fine — the desktop app always
+    // re-issues fresh tokens when you click "Manage on Web").
+    const memStorage = (() => {
+      const m = new Map();
+      return {
+        getItem: (k) => (m.has(k) ? m.get(k) : null),
+        setItem: (k, v) => { m.set(k, String(v)); },
+        removeItem: (k) => { m.delete(k); },
+      };
+    })();
     const noopLock = (_name, _acquireTimeout, fn) => fn();
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         detectSessionInUrl: false,
-        persistSession: false,
+        persistSession: true,
         autoRefreshToken: false,
+        storage: memStorage,
         lock: noopLock,
       },
     });
