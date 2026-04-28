@@ -18,4 +18,5 @@ export type Profile = {
   avatar_url: string | null;
   full_name: string | null;
   updated_at: string | null;
+  public_profile?: boolean;
 };

@@ -2760,3 +2760,59 @@ body::before {
   color: rgba(255, 255, 255, 0.55);
   font-size: 0.75rem;
 }
+
+/* Public profile switch inside the Account modal */
+.public-profile-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.public-profile-toggle__info { flex: 1; min-width: 0; }
+.public-profile-toggle__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #e9e6ff;
+}
+.public-profile-toggle__desc {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 0.2rem;
+}
+.public-profile-toggle__switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  flex-shrink: 0;
+}
+.public-profile-toggle__switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.public-profile-toggle__switch--on {
+  background: linear-gradient(135deg, #8b5cf6, #3b82f6);
+  border-color: rgba(139, 92, 246, 0.6);
+}
+.public-profile-toggle__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+.public-profile-toggle__switch--on .public-profile-toggle__knob {
+  transform: translateX(20px);
+}
+.public-profile-toggle__view {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+}

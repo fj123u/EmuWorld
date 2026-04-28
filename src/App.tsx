@@ -1114,6 +1114,7 @@ export default function App() {
             `Session saved: ${event.payload.name} (${mins >= 1 ? `${mins} min` : `${event.payload.seconds}s`})`,
             "success"
           );
+          scheduleCloudSync();
         }
         loadPlaytime();
       }
@@ -1125,10 +1126,101 @@ export default function App() {
     try {
       await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
       loadPlaytime();
+      scheduleCloudSync();
     } catch (err: any) {
       showToast(`Favorite failed: ${err}`, "error");
     }
   }, [loadPlaytime, showToast]);
+
+  // ---- Cloud sync (Supabase) ----
+  // Debounced upsert of the local playtime store to Supabase. Only runs when
+  // the user is signed in. No-op otherwise — stats still work fully offline.
+  const cloudSyncTimer = useRef<number | null>(null);
+  const isSyncingCloud = useRef(false);
+
+  const syncPlaytimeToCloud = useCallback(async () => {
+    if (!user || isSyncingCloud.current) return;
+    isSyncingCloud.current = true;
+    try {
+      // Always pull the freshest store from Rust rather than relying on React state
+      const pt = await invoke<PlaytimeStore>("get_playtime");
+
+      const gameRows = Object.values(pt.games).map((g) => ({
+        user_id: user.id,
+        console: g.console,
+        name: g.name,
+        seconds: g.seconds,
+        launches: g.launches,
+        last_played: g.last_played,
+        first_played: g.first_played,
+        favorite: g.favorite,
+        last_emulator_id: g.last_emulator_id,
+      }));
+      const emuRows = Object.entries(pt.emulators).map(([id, seconds]) => ({
+        user_id: user.id,
+        emulator_id: id,
+        seconds,
+      }));
+
+      if (gameRows.length > 0) {
+        const { error } = await supabase
+          .from("playtime_games")
+          .upsert(gameRows, { onConflict: "user_id,console,name" });
+        if (error) throw error;
+      }
+      if (emuRows.length > 0) {
+        const { error } = await supabase
+          .from("playtime_emulators")
+          .upsert(emuRows, { onConflict: "user_id,emulator_id" });
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      console.error("[EmuWorld] Cloud sync failed:", err?.message || err);
+    } finally {
+      isSyncingCloud.current = false;
+    }
+  }, [user]);
+
+  // Coalesce many quick updates (ex: rapid favorite toggles) into a single network call.
+  const scheduleCloudSync = useCallback(() => {
+    if (cloudSyncTimer.current !== null) {
+      window.clearTimeout(cloudSyncTimer.current);
+    }
+    cloudSyncTimer.current = window.setTimeout(() => {
+      cloudSyncTimer.current = null;
+      void syncPlaytimeToCloud();
+    }, 2000);
+  }, [syncPlaytimeToCloud]);
+
+  // One initial push after login, so a fresh machine uploads any local data
+  // captured while offline.
+  useEffect(() => {
+    if (user) {
+      void syncPlaytimeToCloud();
+    }
+  }, [user, syncPlaytimeToCloud]);
+
+  const [isTogglingPublic, setIsTogglingPublic] = useState(false);
+  const handleTogglePublicProfile = useCallback(async () => {
+    if (!user) return;
+    setIsTogglingPublic(true);
+    const next = !profile?.public_profile;
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ public_profile: next, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      if (error) throw error;
+      await fetchProfile(user.id);
+      showToast(next ? "Profile is now public 🌐" : "Profile is now private 🔒", "success");
+      // If we just went public and haven't uploaded yet, push now.
+      if (next) void syncPlaytimeToCloud();
+    } catch (err: any) {
+      showToast(`Update failed: ${err?.message || err}`, "error");
+    } finally {
+      setIsTogglingPublic(false);
+    }
+  }, [user, profile?.public_profile, fetchProfile, showToast, syncPlaytimeToCloud]);
 
   // ---- ROM Store ----
   const loadStoreData = useCallback(async () => {
@@ -3028,6 +3120,42 @@ export default function App() {
                       {isUpdatingProfile ? <RefreshCw size={14} className="animate-spin" /> : "Save"}
                     </button>
                   </div>
+                </div>
+
+                {/* Cloud & public profile */}
+                <div className="account-modal__section">
+                  <label className="account-modal__label">Public Profile</label>
+                  <div className="public-profile-toggle">
+                    <div className="public-profile-toggle__info">
+                      <div className="public-profile-toggle__title">
+                        {profile?.public_profile ? "🌐 Public" : "🔒 Private"}
+                      </div>
+                      <div className="public-profile-toggle__desc">
+                        {profile?.public_profile
+                          ? "Your playtime stats and favorites are visible to anyone with your profile link."
+                          : "Only you can see your stats. Flip this on to get a shareable profile URL."}
+                      </div>
+                    </div>
+                    <button
+                      className={`public-profile-toggle__switch ${profile?.public_profile ? "public-profile-toggle__switch--on" : ""}`}
+                      onClick={handleTogglePublicProfile}
+                      disabled={isTogglingPublic}
+                      title="Toggle public profile"
+                    >
+                      <span className="public-profile-toggle__knob" />
+                    </button>
+                  </div>
+                  {profile?.public_profile && profile.username && (
+                    <button
+                      className="btn btn--ghost btn--sm public-profile-toggle__view"
+                      onClick={async () => {
+                        const url = `https://emuworld.alwaysdata.net/u/${encodeURIComponent(profile.username!)}`;
+                        await openUrl(url).catch(() => window.open(url, "_blank"));
+                      }}
+                    >
+                      <ExternalLink size={12} /> View on web
+                    </button>
+                  )}
                 </div>
 
                 {/* Linked Accounts Section */}
