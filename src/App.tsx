@@ -3116,13 +3116,18 @@ export default function App() {
                   <LogOut size={16} />
                   Sign Out
                 </button>
-                <button 
-                  className="account-modal__web-btn" 
+                <button
+                  className="account-modal__web-btn"
                   onClick={async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session) return;
-                    // Format plus standard pour Supabase
-                    const url = `https://emuworld.alwaysdata.net/#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&type=recovery`;
+                    // Token handoff lives on the `#` fragment; the SPA router reads it once
+                    // via `consumeTokenHandoff` and then navigates to whichever route follows.
+                    // Target route: /u/<pseudo> when public + named, else /leaderboard fallback.
+                    const target = profile?.public_profile && profile?.username
+                      ? `/u/${encodeURIComponent(profile.username)}`
+                      : "/leaderboard";
+                    const url = `https://emuworld.alwaysdata.net/?handoff#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
                     await openUrl(url);
                   }}
                 >
