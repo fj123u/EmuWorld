@@ -3097,10 +3097,11 @@ export default function App() {
                     const target = profile?.public_profile && profile?.username
                       ? `/u/${encodeURIComponent(profile.username)}`
                       : "/leaderboard";
-                    // Append a versioned query param so the browser can't serve a stale
-                    // cached index.html on the handoff. Bumped whenever the SPA ships a
-                    // breaking change to the token handshake.
-                    const url = `https://emuworld.alwaysdata.net/?v=3#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
+                    // Timestamp in the query so Firefox can't silently focus an already-open
+                    // EmuWorld tab (which still has `#/u/...` from a previous handoff) and
+                    // skip navigating to the new URL — otherwise the tokens in the fragment
+                    // never get loaded.
+                    const url = `https://emuworld.alwaysdata.net/?h=${Date.now()}#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
                     await openUrl(url);
                   }}
                 >

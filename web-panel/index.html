@@ -354,12 +354,15 @@
     // only. The "Me" bubble still works via `setSession(…)` on the token
     // handoff, it just doesn't survive a reload (which is fine — the
     // desktop button always re-issues a fresh token).
-    // Tiny in-memory Storage shim: supabase-js needs a storage backend to
-    // keep the session alive between setSession() and getUser(). localStorage
-    // forces a cross-tab Web Lock on every read which races with our parallel
-    // queries. An in-memory Map satisfies the interface, survives the tab
-    // lifecycle, and dies on reload (which is fine — the desktop app always
-    // re-issues fresh tokens when you click "Manage on Web").
+    // The Web Lock supabase-js uses keys off the storage key. Even with a
+    // custom in-memory storage, if another Supabase client on the same
+    // origin (e.g. the dev app reloaded in dev mode in the same browser)
+    // still writes the default `sb-<ref>-auth-token` key, the lock
+    // contention is cross-client and we lose setSession.
+    //
+    // Fix: give this tab its own unique storageKey + an in-memory storage
+    // backend, and override the lock to a no-op. The storageKey makes the
+    // lock name unique so nothing else can steal it.
     const memStorage = (() => {
       const m = new Map();
       return {
@@ -374,6 +377,7 @@
         detectSessionInUrl: false,
         persistSession: true,
         autoRefreshToken: false,
+        storageKey: 'emuworld-web-' + Math.random().toString(36).slice(2),
         storage: memStorage,
         lock: noopLock,
       },
