@@ -3127,7 +3127,7 @@ export default function App() {
                     const target = profile?.public_profile && profile?.username
                       ? `/u/${encodeURIComponent(profile.username)}`
                       : "/leaderboard";
-                    const url = `https://emuworld.alwaysdata.net/?handoff#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
+                    const url = `https://emuworld.alwaysdata.net/#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
                     await openUrl(url);
                   }}
                 >

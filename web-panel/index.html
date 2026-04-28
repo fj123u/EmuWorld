@@ -328,7 +328,12 @@
     // ============================================================
     const SUPABASE_URL = 'https://yizxrntlerzfniqkdvfg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpenhybnRsZXJ6Zm5pcWtkdmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ4OTU1NjcsImV4cCI6MjA5MDQ3MTU2N30.cfZhqeB8IntRnefIS3DirXzwIJ3-u5XZPPXr7g1rO-w';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // detectSessionInUrl defaults to true and tries to auto-parse the hash — it fights
+    // with our manual handoff (no `type` param) and leaves the tokens in the URL. Turn it
+    // off so our `consumeTokenHandoff()` is the single source of truth.
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { detectSessionInUrl: false, persistSession: true, autoRefreshToken: true },
+    });
 
     const view = document.getElementById('view');
     let currentUser = null;
@@ -363,13 +368,21 @@
       const access_token = params.get('access_token');
       const refresh_token = params.get('refresh_token');
       const next = params.get('next'); // optional route to hop to after auth
-      if (access_token && refresh_token) {
-        await sb.auth.setSession({ access_token, refresh_token });
-        // Replace the hash with the intended route (or clear it) so a reload
-        // doesn't replay the same tokens.
-        const cleanHash = next ? `#${next.startsWith('/') ? next : '/' + next}` : '';
-        history.replaceState(null, '', window.location.pathname + window.location.search + cleanHash);
+      if (!access_token || !refresh_token) return;
+      try {
+        const { data, error } = await sb.auth.setSession({ access_token, refresh_token });
+        if (error) {
+          console.error('[EmuWorld] setSession failed:', error);
+        } else {
+          console.log('[EmuWorld] session established for', data?.user?.email);
+        }
+      } catch (e) {
+        console.error('[EmuWorld] setSession threw:', e);
       }
+      // Strip tokens out of the URL whether it worked or not — we never want
+      // to leave them in history for a reload to replay.
+      const cleanHash = next ? `#${next.startsWith('/') ? next : '/' + next}` : '';
+      history.replaceState(null, '', window.location.pathname + cleanHash);
     }
 
     async function refreshSession() {
