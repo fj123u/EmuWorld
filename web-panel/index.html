@@ -476,7 +476,10 @@
                 document.getElementById('username-input').value = profile.username;
             }
             if (profile.avatar_url) {
-                document.getElementById('avatar-preview').src = `${profile.avatar_url}?t=${new Date().getTime()}`;
+                // No cache-buster on initial load — the same URL across renders lets the
+                // browser cache the avatar and stops Supabase's egress from re-serving
+                // the same file on every page open.
+                document.getElementById('avatar-preview').src = profile.avatar_url;
             }
         }
 
@@ -562,12 +565,14 @@
 
                 const { error: uploadError } = await supabaseClient.storage
                     .from('avatars')
-                    .upload(filePath, file);
+                    .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
                 if (uploadError) throw uploadError;
 
                 const { data } = supabaseClient.storage.from('avatars').getPublicUrl(filePath);
-                const publicUrl = `${data.publicUrl}?t=${new Date().getTime()}`;
+                // Cache-buster only here (right after upload) so the preview shows the
+                // new file immediately without re-fetching on every subsequent render.
+                const publicUrl = `${data.publicUrl}?v=${Date.now()}`;
 
                 await supabaseClient.from('profiles')
                     .upsert({

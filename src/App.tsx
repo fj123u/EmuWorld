@@ -769,6 +769,10 @@ export default function App() {
   // ---- AUTH STATE ----
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  // Cache-buster for the avatar <img>. Only changes when the user uploads a
+  // new avatar — otherwise the browser can cache the URL across renders and
+  // we stop re-downloading the same file from Supabase every frame.
+  const [avatarCacheKey, setAvatarCacheKey] = useState<string>("");
   const [authLoading, setAuthLoading] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
@@ -939,10 +943,12 @@ export default function App() {
       const fileName = `${user.id}-${Math.random()}.${fileExt}`;
       const filePath = `${fileName}`;
 
-      // 1. Upload to Storage
+      // 1. Upload to Storage. We set a 1-year cacheControl because the file is
+      // named with a random suffix — it's immutable, so browsers and CDN can
+      // hold onto it indefinitely and we stop paying egress on every view.
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(filePath, file);
+        .upload(filePath, file, { cacheControl: '31536000', upsert: false });
 
       if (uploadError) throw uploadError;
 
@@ -961,8 +967,10 @@ export default function App() {
         });
 
       if (updateError) throw updateError;
-      
-      // Force refresh with a slight delay and add cache buster to URL if needed
+
+      // Only bump the cache key on actual upload, so the <img> fetches the new
+      // file exactly once and the browser can cache subsequent renders.
+      setAvatarCacheKey(Date.now().toString());
       await fetchProfile(user.id);
       showToast('Avatar updated! 📸', 'success');
     } catch (e: any) {
@@ -1890,7 +1898,7 @@ export default function App() {
               <div className="sidebar__user-info" onClick={() => { setNewPseudo(profile?.username || ""); setShowAccountModal(true); }}>
                 <div className="sidebar__user-avatar">
                   {profile?.avatar_url ? (
-                    <img src={`${profile.avatar_url}?t=${new Date().getTime()}`} alt="avatar" />
+                    <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt="avatar" />
                   ) : (
                     <UserIcon size={20} />
                   )}
@@ -2881,7 +2889,7 @@ export default function App() {
                   <div className="account-modal__avatar-container">
                     <div className="account-modal__avatar-wrapper">
                       {profile?.avatar_url ? (
-                        <img src={`${profile.avatar_url}?t=${new Date().getTime()}`} alt="Avatar" className="account-modal__avatar" />
+                        <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt="Avatar" className="account-modal__avatar" />
                       ) : (
                         <div className="account-modal__avatar-placeholder">
                           <UserIcon size={32} />
