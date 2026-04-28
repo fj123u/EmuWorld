@@ -160,6 +160,15 @@
     .row:last-child { border-bottom: none; }
     .row__label { color: var(--muted); font-size: 13px; min-width: 130px; }
     .row__value { flex: 1; min-width: 0; text-align: right; }
+    .row__value--with-cover {
+      display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+    }
+    .row__cover {
+      width: 40px; height: 56px; object-fit: cover; border-radius: 6px;
+      background: rgba(255,255,255,0.05); flex-shrink: 0;
+      border: 1px solid var(--border);
+    }
+    .row__text { min-width: 0; text-align: right; }
     .row__name {
       display: block; font-weight: 600;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -375,6 +384,56 @@
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const initials = (name) => (name || 'U').trim().slice(0, 2).toUpperCase();
 
+    // Strip scene tags / title IDs / version markers so "Celeste [01002B30028F6000][v0](nsw2u)"
+    // renders as "Celeste". Matches what the desktop app shows next to a rom.
+    const cleanGameName = (raw) => {
+      let s = String(raw || '');
+      s = s.replace(/\.(xci|nsp|nca|iso|wbfs|rvz|chd|cue|bin|nes|sfc|smc|gba|gbc|gb|nds|n64|z64|7z|zip|gz|wud|wux|rpx)$/i, '');
+      s = s.replace(/\[[^\]]*\]/g, '');   // [01002B30...], [v0]
+      s = s.replace(/\([^)]*\)/g, '');    // (nsw2u), (USA), (Rev 1)
+      s = s.replace(/\s+/g, ' ').trim();
+      // Collapse dots/underscores used as separators in scene releases.
+      s = s.replace(/[._]+/g, ' ');
+      return s.replace(/\s+/g, ' ').trim();
+    };
+
+    // Best-effort cover URL for a given game. Mirrors the Rust fetch_boxart
+    // priority: tinfoil for Switch title IDs, GameTDB for Wii/Wii U disc IDs,
+    // Libretro thumbnails for retro systems. Falls back to onerror → hide.
+    const coverUrlFor = (console, name) => {
+      // 1. Switch: detect a 16-hex title id inside brackets.
+      const tidMatch = String(name || '').match(/\[(0100[0-9A-Fa-f]{12})\]/);
+      if (tidMatch) return `https://tinfoil.media/ti/${tidMatch[1].toUpperCase()}/256/256`;
+
+      // 2. Libretro thumbnail by system + cleaned name (without trailing tags).
+      const SYSTEMS = {
+        'NES': 'Nintendo - Nintendo Entertainment System',
+        'Super Nintendo': 'Nintendo - Super Nintendo Entertainment System',
+        'SNES': 'Nintendo - Super Nintendo Entertainment System',
+        'Nintendo 64': 'Nintendo - Nintendo 64',
+        'N64': 'Nintendo - Nintendo 64',
+        'Game Boy': 'Nintendo - Game Boy',
+        'Game Boy Color': 'Nintendo - Game Boy Color',
+        'Game Boy Advance': 'Nintendo - Game Boy Advance',
+        'Nintendo DS': 'Nintendo - Nintendo DS',
+        'GameCube': 'Nintendo - GameCube',
+        'GameCube / Wii': 'Nintendo - Wii',
+        'Wii': 'Nintendo - Wii',
+        'Wii U': 'Nintendo - Wii U',
+        'Nintendo Switch': 'Nintendo - Nintendo Switch',
+        'PlayStation 1': 'Sony - PlayStation',
+        'PlayStation 2': 'Sony - PlayStation 2',
+        'Mega Drive': 'Sega - Mega Drive - Genesis',
+        'Dreamcast': 'Sega - Dreamcast',
+      };
+      const sys = SYSTEMS[console];
+      if (!sys) return null;
+      const cleaned = cleanGameName(name);
+      if (!cleaned) return null;
+      const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
+      return `https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`;
+    };
+
     const setView = (html) => { view.innerHTML = html; window.scrollTo(0, 0); };
     const loading = () => `<div class="loading"><div class="loading__spinner"></div>Loading…</div>`;
 
@@ -541,8 +600,18 @@
         : `<div class="profile-hero__avatar">${esc(initials(profile.username))}</div>`;
 
       const rows = [];
-      if (mostPlayed) rows.push({ label: '🏆 Most played', name: mostPlayed.name, meta: `${mostPlayed.console} · ${fmtTime(mostPlayed.seconds)}` });
-      if (favorite) rows.push({ label: '★ Favorite', name: favorite.name, meta: `${favorite.console}${favorite.seconds > 0 ? ' · ' + fmtTime(favorite.seconds) : ''}` });
+      if (mostPlayed) rows.push({
+        label: '🏆 Most played',
+        name: cleanGameName(mostPlayed.name),
+        meta: `${mostPlayed.console} · ${fmtTime(mostPlayed.seconds)}`,
+        cover: coverUrlFor(mostPlayed.console, mostPlayed.name),
+      });
+      if (favorite) rows.push({
+        label: '★ Favorite',
+        name: cleanGameName(favorite.name),
+        meta: `${favorite.console}${favorite.seconds > 0 ? ' · ' + fmtTime(favorite.seconds) : ''}`,
+        cover: coverUrlFor(favorite.console, favorite.name),
+      });
       if (topEmu) rows.push({ label: '🕹 Top emulator', name: topEmu.emulator_id, meta: fmtTime(topEmu.seconds) });
       if (topConsole) rows.push({ label: '🎮 Top console', name: topConsole[0], meta: fmtTime(topConsole[1]) });
       if (firstPlayed) rows.push({ label: '📅 First played', name: fmtDate(firstPlayed), meta: '' });
@@ -550,9 +619,12 @@
       const rowsHtml = rows.map((r) => `
         <div class="row">
           <div class="row__label">${r.label}</div>
-          <div class="row__value">
-            <span class="row__name">${esc(r.name)}</span>
-            ${r.meta ? `<span class="row__meta">${esc(r.meta)}</span>` : ''}
+          <div class="row__value row__value--with-cover">
+            ${r.cover ? `<img class="row__cover" src="${esc(r.cover)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : ''}
+            <div class="row__text">
+              <span class="row__name">${esc(r.name)}</span>
+              ${r.meta ? `<span class="row__meta">${esc(r.meta)}</span>` : ''}
+            </div>
           </div>
         </div>
       `).join('');
@@ -564,7 +636,7 @@
             ${topGames.map((g, i) => `
               <li>
                 <span class="top-list__rank">${i + 1}</span>
-                <span class="top-list__name">${esc(g.name)} <span class="top-list__meta">· ${esc(g.console)}</span></span>
+                <span class="top-list__name">${esc(cleanGameName(g.name))} <span class="top-list__meta">· ${esc(g.console)}</span></span>
                 <span class="top-list__time">${fmtTime(g.seconds)}</span>
               </li>
             `).join('')}

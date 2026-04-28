@@ -805,62 +805,32 @@ export default function App() {
     }
   }, []);
 
-  // Check session and setup real-time sync
+  // Check session. Realtime postgres_changes were removed — the login-modal
+  // banner ("cannot add postgres_changes callbacks after subscribe()") came
+  // from Strict Mode re-mounting the effect and trying to attach a second
+  // listener to the same channel. We already call fetchProfile() manually
+  // after every mutation (username, avatar, public toggle), so the
+  // realtime subscription added no real value.
   useEffect(() => {
-    let profileChannel: any = null;
-
-    const setupRealtime = (userId: string) => {
-      if (profileChannel) {
-        supabase.removeChannel(profileChannel);
-      }
-      
-      const channelName = `profiles-updates-${userId}`;
-      profileChannel = supabase
-        .channel(channelName)
-        .on(
-          'postgres_changes',
-          { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'profiles', 
-            filter: `id=eq.${userId}` 
-          },
-          (payload) => {
-            console.log("[EmuWorld] Realtime profile update:", payload.new);
-            setProfile(payload.new as Profile);
-          }
-        );
-      
-      profileChannel.subscribe();
-    };
-
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(session.user);
         fetchProfile(session.user.id);
-        setupRealtime(session.user.id);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      
       if (currentUser) {
         fetchProfile(currentUser.id);
-        setupRealtime(currentUser.id);
       } else {
         setProfile(null);
-        if (profileChannel) {
-          supabase.removeChannel(profileChannel);
-          profileChannel = null;
-        }
       }
     });
 
     return () => {
       subscription.unsubscribe();
-      if (profileChannel) supabase.removeChannel(profileChannel);
     };
   }, [fetchProfile]);
 
