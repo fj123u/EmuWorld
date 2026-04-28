@@ -460,6 +460,7 @@
     // ============================================================
     async function renderProfile(username) {
       setView(loading());
+      console.log('[EmuWorld] renderProfile(', username, ')');
 
       // 1. Resolve the profile by username (public rows only via RLS).
       const { data: profile, error: pErr } = await sb
@@ -467,6 +468,7 @@
         .select('id, username, avatar_url, public_profile, updated_at')
         .eq('username', username)
         .maybeSingle();
+      console.log('[EmuWorld] profile query →', { profile, pErr });
 
       if (pErr || !profile) {
         setView(`
@@ -720,9 +722,27 @@
     });
 
     (async () => {
-      await consumeTokenHandoff();
-      await refreshSession();
-      await render();
+      console.log('[EmuWorld] boot — URL:', window.location.href);
+      try {
+        await consumeTokenHandoff();
+        console.log('[EmuWorld] handoff done — URL is now:', window.location.href);
+      } catch (e) {
+        console.error('[EmuWorld] handoff failed:', e);
+      }
+      try {
+        await refreshSession();
+        console.log('[EmuWorld] refreshSession done — user:', currentUser?.email || 'none', 'profile:', currentProfile);
+      } catch (e) {
+        console.error('[EmuWorld] refreshSession failed:', e);
+      }
+      try {
+        console.log('[EmuWorld] parseRoute →', parseRoute());
+        await render();
+        console.log('[EmuWorld] render done');
+      } catch (e) {
+        console.error('[EmuWorld] render failed:', e);
+        setView(`<div class="empty"><div class="empty__icon">⚠️</div><div class="empty__title">Something went wrong</div><div class="empty__text">${esc(e && e.message ? e.message : String(e))}</div></div>`);
+      }
     })();
   </script>
 </body>
