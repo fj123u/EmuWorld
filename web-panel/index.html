@@ -337,12 +337,20 @@
     // with itself (setSession + the autoRefreshToken both grab the lock),
     // producing "Lock … was released because another request stole it" on
     // boot. A no-op lock is safe here.
+    // autoRefreshToken spawns a background worker that grabs the auth lock
+    // while our handoff `setSession` is still holding it. Combined with the
+    // default Web Locks serialization that produces
+    // "Lock … was released because another request stole it" and blanks the
+    // page. Disable both: we get a fresh token from the desktop app on every
+    // handoff and tokens are long enough (~1h) that we don't need auto-refresh
+    // in this short-lived tab. `lock` is also forced to a no-op in case some
+    // code path (e.g. onAuthStateChange) still tries to acquire it.
     const noopLock = (_name, _acquireTimeout, fn) => fn();
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         detectSessionInUrl: false,
         persistSession: true,
-        autoRefreshToken: true,
+        autoRefreshToken: false,
         lock: noopLock,
       },
     });
