@@ -331,8 +331,20 @@
     // detectSessionInUrl defaults to true and tries to auto-parse the hash — it fights
     // with our manual handoff (no `type` param) and leaves the tokens in the URL. Turn it
     // off so our `consumeTokenHandoff()` is the single source of truth.
+    // `lock: () => fn()` bypasses the default Web Locks serialization that
+    // Supabase uses to coordinate multiple tabs. On this site there is
+    // exactly one Supabase client per tab, and the default lock was racing
+    // with itself (setSession + the autoRefreshToken both grab the lock),
+    // producing "Lock … was released because another request stole it" on
+    // boot. A no-op lock is safe here.
+    const noopLock = (_name, _acquireTimeout, fn) => fn();
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { detectSessionInUrl: false, persistSession: true, autoRefreshToken: true },
+      auth: {
+        detectSessionInUrl: false,
+        persistSession: true,
+        autoRefreshToken: true,
+        lock: noopLock,
+      },
     });
 
     const view = document.getElementById('view');
