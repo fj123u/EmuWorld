@@ -1206,21 +1206,32 @@ export default function App() {
     setIsTogglingPublic(true);
     const next = !profile?.public_profile;
     try {
+      // upsert (not update) so the row is created on the fly if this user
+      // has never had a `profiles` entry yet — otherwise `.update().eq()`
+      // succeeds with 0 rows affected and nothing changes.
       const { error } = await supabase
         .from("profiles")
-        .update({ public_profile: next, updated_at: new Date().toISOString() })
-        .eq("id", user.id);
+        .upsert(
+          {
+            id: user.id,
+            username: profile?.username ?? null,
+            avatar_url: profile?.avatar_url ?? null,
+            public_profile: next,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "id" }
+        );
       if (error) throw error;
       await fetchProfile(user.id);
       showToast(next ? "Profile is now public 🌐" : "Profile is now private 🔒", "success");
-      // If we just went public and haven't uploaded yet, push now.
       if (next) void syncPlaytimeToCloud();
     } catch (err: any) {
+      console.error("[EmuWorld] togglePublic error:", err);
       showToast(`Update failed: ${err?.message || err}`, "error");
     } finally {
       setIsTogglingPublic(false);
     }
-  }, [user, profile?.public_profile, fetchProfile, showToast, syncPlaytimeToCloud]);
+  }, [user, profile?.public_profile, profile?.username, profile?.avatar_url, fetchProfile, showToast, syncPlaytimeToCloud]);
 
   // ---- ROM Store ----
   const loadStoreData = useCallback(async () => {
@@ -2999,7 +3010,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Gaming Profile Section */}
+                {/* Gaming Profile Section — kept minimal here; full stats live on the web profile */}
                 {profileStats && (profileStats.total_seconds > 0 || profileStats.favorite_count > 0) && (
                   <div className="account-modal__section">
                     <label className="account-modal__label">Gaming Profile</label>
@@ -3013,89 +3024,7 @@ export default function App() {
                           <div className="gaming-profile__tile-value">{profileStats.games_played}</div>
                           <div className="gaming-profile__tile-label">Games played</div>
                         </div>
-                        <div className="gaming-profile__tile">
-                          <div className="gaming-profile__tile-value">{profileStats.total_launches}</div>
-                          <div className="gaming-profile__tile-label">Launches</div>
-                        </div>
-                        <div className="gaming-profile__tile">
-                          <div className="gaming-profile__tile-value">🔥 {profileStats.streak_days}</div>
-                          <div className="gaming-profile__tile-label">Day streak</div>
-                        </div>
                       </div>
-
-                      {profileStats.most_played && (
-                        <div className="gaming-profile__row">
-                          <div className="gaming-profile__row-label">🏆 Most played</div>
-                          <div className="gaming-profile__row-value">
-                            <span className="gaming-profile__row-name">{profileStats.most_played.name}</span>
-                            <span className="gaming-profile__row-meta">
-                              {profileStats.most_played.console} · {formatPlaytime(profileStats.most_played.seconds)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {profileStats.favorite_game && (
-                        <div className="gaming-profile__row">
-                          <div className="gaming-profile__row-label">★ Favorite</div>
-                          <div className="gaming-profile__row-value">
-                            <span className="gaming-profile__row-name">{profileStats.favorite_game.name}</span>
-                            <span className="gaming-profile__row-meta">
-                              {profileStats.favorite_game.console} · {formatPlaytime(profileStats.favorite_game.seconds)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {profileStats.top_emulator_id && (() => {
-                        const emu = catalog.find((e) => e.id === profileStats.top_emulator_id);
-                        const emuSeconds = playtime.emulators[profileStats.top_emulator_id] || 0;
-                        return (
-                          <div className="gaming-profile__row">
-                            <div className="gaming-profile__row-label">🕹 Top emulator</div>
-                            <div className="gaming-profile__row-value">
-                              <span className="gaming-profile__row-name">{emu?.name || profileStats.top_emulator_id}</span>
-                              <span className="gaming-profile__row-meta">
-                                {emu?.console || ""} · {formatPlaytime(emuSeconds)}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {profileStats.top_console && (
-                        <div className="gaming-profile__row">
-                          <div className="gaming-profile__row-label">🎮 Top console</div>
-                          <div className="gaming-profile__row-value">
-                            <span className="gaming-profile__row-name">{profileStats.top_console}</span>
-                            <span className="gaming-profile__row-meta">
-                              {formatPlaytime(profileStats.top_console_seconds)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {profileStats.first_played && (
-                        <div className="gaming-profile__row">
-                          <div className="gaming-profile__row-label">📅 First played</div>
-                          <div className="gaming-profile__row-value">
-                            <span className="gaming-profile__row-name">
-                              {new Date(profileStats.first_played).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {profileStats.top_games.length > 1 && (
-                        <div className="gaming-profile__top">
-                          <div className="gaming-profile__top-label">Top games</div>
-                          <ol className="gaming-profile__top-list">
-                            {profileStats.top_games.map((g, i) => (
-                              <li key={`${g.console}::${g.name}`}>
-                                <span className="gaming-profile__top-rank">{i + 1}</span>
-                                <span className="gaming-profile__top-name">{g.name}</span>
-                                <span className="gaming-profile__top-time">{formatPlaytime(g.seconds)}</span>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
