@@ -1,6 +1,6 @@
-# OAuth Setup (Google / Discord / GitHub)
+# OAuth Setup (Google / Discord)
 
-Guide pour faire marcher les 3 providers sociaux dans l'app desktop.
+Guide pour faire marcher les 2 providers sociaux dans l'app desktop.
 Le flow : app → ouvre le navigateur chez le provider → redirect vers Supabase →
 Supabase redirect vers `emuworld://auth-callback` → Windows rappelle EmuWorld →
 `oauth-callback` event → `exchangeCodeForSession` → utilisateur connecté.
@@ -47,17 +47,6 @@ Dashboard Supabase → **Authentication → Providers** :
 4. Save Changes
 5. Copie le **Client ID** (page principale) et **Client Secret** (OAuth2 → reset secret si nécessaire)
 6. Supabase → **Discord** provider → colle les deux → Save
-
-### GitHub
-1. [github.com/settings/developers](https://github.com/settings/developers) → **OAuth Apps → New OAuth App**
-2. Application name: `EmuWorld`
-3. Homepage URL: `https://emuworld.alwaysdata.net`
-4. **Authorization callback URL** :
-   ```
-   https://yizxrntlerzfniqkdvfg.supabase.co/auth/v1/callback
-   ```
-5. Register → copie **Client ID**, génère un **Client Secret**, copie-le
-6. Supabase → **GitHub** provider → colle les deux → Save
 
 ## 3 · Vérifier le scheme `emuworld://` côté OS
 

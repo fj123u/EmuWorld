@@ -1696,7 +1696,6 @@ body {
 .login-modal__social-btn:hover { transform: translateY(-2px); border-color: var(--border-hover); }
 .login-modal__social-btn--discord:hover { background: rgba(88, 101, 242, 0.15); border-color: rgba(88, 101, 242, 0.4); color: #7289da; }
 .login-modal__social-btn--google:hover { background: rgba(66, 133, 244, 0.1); border-color: rgba(66, 133, 244, 0.3); }
-.login-modal__social-btn--github:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); }
 .login-modal__social-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
 .login-modal__divider {
