@@ -51,6 +51,28 @@ import {
 } from "lucide-react";
 
 /* ============================
+   Clock — titlebar date/time widget. Updates every 30 s so the minute
+   stays in sync without spinning a per-second interval.
+   ============================ */
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    // Align the first tick to the next minute boundary, then every 30 s.
+    const id = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+  const time = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const date = now.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }).replace(".", "");
+  return (
+    <div className="titlebar__clock" data-tauri-drag-region>
+      <span className="titlebar__clock-time">{time}</span>
+      <span className="titlebar__clock-sep">·</span>
+      <span className="titlebar__clock-date">{date}</span>
+    </div>
+  );
+}
+
+/* ============================
    Types
    ============================ */
 interface EmulatorInfo {
@@ -1733,6 +1755,7 @@ export default function App() {
           <div className="titlebar__logo-icon">🎮</div>
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
+        <Clock />
         <div className="titlebar__controls">
           <button className="titlebar__btn" onClick={minimize} title="Réduire"><Minus size={14} /></button>
           <button className="titlebar__btn" onClick={maximize} title="Agrandir / Restaurer">
