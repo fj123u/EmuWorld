@@ -28,8 +28,9 @@
 ## 🐛 Bugs
 
 - [ ] **Covers qui restent manquantes** sur certains jeux (lesquels déjà ? faudrait lister les noms)
-- [ ] **OAuth Google / Discord** — fix côté code : `register_all()` ajouté au boot pour que Windows reconnaisse le scheme `emuworld://` en dev. Bouton GitHub retiré de l'UI. Reste à configurer côté Supabase dashboard + portails Google/Discord. Guide complet dans [scratch/oauth_setup.md](scratch/oauth_setup.md)
+- [x] **OAuth Google / Discord** — `register_all()` au boot, page bounce sur alwaysdata pour que l'onglet se ferme proprement, playtime réinitialisé au switch de compte, et fix du listener `game-closed` qui tournait dans le vide.
 - [ ] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
+- [x] **Chargement Infini** page de connexion — page bounce `/auth-callback.html` affiche un message "tu peux fermer cette fenêtre".
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 
