@@ -52,6 +52,20 @@ pub fn save(store: &PlaytimeStore) -> Result<(), String> {
     std::fs::write(&path, data).map_err(|e| e.to_string())
 }
 
+/// Reset the local store entirely. Called on sign-out so the next user
+/// starts from an empty slate, and on sign-in right before we rehydrate
+/// from the cloud — otherwise the previous account's stats would leak
+/// into the new one via the next sync.
+pub fn clear() -> Result<(), String> {
+    save(&PlaytimeStore::default())
+}
+
+/// Replace the local store with whatever the frontend gives us. Used to
+/// pull the signed-in user's cloud data and use it as the source of truth.
+pub fn overwrite(store: PlaytimeStore) -> Result<(), String> {
+    save(&store)
+}
+
 fn key(console: &str, name: &str) -> String {
     format!("{}::{}", console, name)
 }

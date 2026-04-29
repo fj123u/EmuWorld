@@ -2467,6 +2467,22 @@ fn get_profile_stats() -> playtime::ProfileStats {
     playtime::compute_stats()
 }
 
+/// Wipe the local playtime store. Called on sign-out so the next user
+/// who signs in on this machine starts from a blank file instead of
+/// inheriting the previous user's history.
+#[tauri::command]
+fn clear_playtime() -> Result<(), String> {
+    playtime::clear()
+}
+
+/// Replace the local store with data coming from Supabase. Called right
+/// after sign-in so the local file matches what the cloud has for this
+/// user, before any further sync runs.
+#[tauri::command]
+fn overwrite_playtime(store: playtime::PlaytimeStore) -> Result<(), String> {
+    playtime::overwrite(store)
+}
+
 #[tauri::command]
 fn clear_cover_cache() -> Result<(), String> {
     let config = get_config();
@@ -2543,6 +2559,8 @@ pub fn run() {
             get_playtime,
             toggle_favorite,
             get_profile_stats,
+            clear_playtime,
+            overwrite_playtime,
             clear_cover_cache,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,

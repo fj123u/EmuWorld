@@ -978,10 +978,14 @@ export default function App() {
     setAuthLoading(true);
     setAuthError(null);
     try {
+      // Redirect through a lightweight web page that forwards the tokens
+      // back to the desktop app via the emuworld:// scheme. Going straight
+      // to emuworld:// leaves the browser tab stuck on an unreachable URL,
+      // so the bounce page shows a "you can close this tab" UI instead.
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: 'emuworld://auth-callback',
+          redirectTo: 'https://emuworld.alwaysdata.net/auth-callback.html',
           skipBrowserRedirect: true,
         },
       });
@@ -1192,13 +1196,52 @@ export default function App() {
     }, 2000);
   }, [syncPlaytimeToCloud]);
 
-  // One initial push after login, so a fresh machine uploads any local data
-  // captured while offline.
+  // Sign-in / sign-out transitions reset the local playtime file so two
+  // users on the same machine never inherit each other's stats. On sign-in
+  // we pull the cloud rows for this user and overwrite the local store with
+  // them, then refresh UI state. On sign-out we wipe the file.
+  const lastSyncedUserId = useRef<string | null>(null);
   useEffect(() => {
-    if (user) {
-      void syncPlaytimeToCloud();
-    }
-  }, [user, syncPlaytimeToCloud]);
+    const currentId = user?.id ?? null;
+    if (currentId === lastSyncedUserId.current) return;
+    lastSyncedUserId.current = currentId;
+
+    (async () => {
+      if (!currentId) {
+        // Sign-out: drop local history so the next signed-in user gets a clean slate.
+        await invoke("clear_playtime").catch(() => {});
+        await loadPlaytime();
+        return;
+      }
+      // Sign-in: fetch this user's rows and replace the local store with them.
+      try {
+        const [gamesRes, emusRes] = await Promise.all([
+          supabase.from("playtime_games").select("*").eq("user_id", currentId),
+          supabase.from("playtime_emulators").select("*").eq("user_id", currentId),
+        ]);
+        const cloud: PlaytimeStore = { games: {}, emulators: {} };
+        for (const row of gamesRes.data || []) {
+          cloud.games[`${row.console}::${row.name}`] = {
+            console: row.console,
+            name: row.name,
+            seconds: row.seconds || 0,
+            launches: row.launches || 0,
+            last_played: row.last_played,
+            first_played: row.first_played,
+            favorite: !!row.favorite,
+            last_emulator_id: row.last_emulator_id,
+          };
+        }
+        for (const row of emusRes.data || []) {
+          cloud.emulators[row.emulator_id] = row.seconds || 0;
+        }
+        await invoke("overwrite_playtime", { store: cloud });
+        await loadPlaytime();
+      } catch (err) {
+        console.error("[EmuWorld] Cloud pull failed:", err);
+      }
+    })();
+  }, [user, loadPlaytime]);
 
   const [isTogglingPublic, setIsTogglingPublic] = useState(false);
   const handleTogglePublicProfile = useCallback(async () => {
