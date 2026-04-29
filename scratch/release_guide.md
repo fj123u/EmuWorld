@@ -21,7 +21,12 @@ Sur GitHub → **repo → Settings → Secrets and variables → Actions → New
 | Secret name                          | Valeur                                         |
 |--------------------------------------|------------------------------------------------|
 | `TAURI_SIGNING_PRIVATE_KEY`          | Le **contenu** entier du fichier `.key`        |
-| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Chaîne vide (ou le password si tu en as mis un)|
+
+Un seul secret suffit — la clé a été générée sans password, le workflow
+force `TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""` directement. Si tu décides
+plus tard de protéger la clé par un password, ajoute un secret
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` et remplace la valeur `""` dans
+le workflow par `${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}`.
 
 ⚠️ **Ne commit JAMAIS** `emuworld.key` dans le repo. La publique `.pub` est
 déjà dans `tauri.conf.json` et c'est elle qui compte.

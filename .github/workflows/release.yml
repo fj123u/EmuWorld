@@ -43,12 +43,14 @@ jobs:
 
       - name: Build + bundle + sign
         env:
-          # These two come from repo Secrets. The private key was generated
-          # locally with `npx @tauri-apps/cli signer generate`. The password
-          # is an empty string in dev/alpha but still must be declared
-          # (can be left blank in the secret value).
+          # The private key was generated locally with
+          # `npx @tauri-apps/cli signer generate` and lives in the repo
+          # secret `TAURI_SIGNING_PRIVATE_KEY`. No password was set at
+          # generation time, so the PASSWORD env var is forced to an
+          # empty string here — GitHub Secrets don't accept empty values
+          # so we inline it instead of going through another secret.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: npx @tauri-apps/cli build
 
       - name: Locate artefacts
