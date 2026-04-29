@@ -1646,11 +1646,8 @@ export default function App() {
       showToast(`Launching ${rom.name}...`, "success");
       // Announce to Discord — EmuWorld stays the big image so it reads as
       // "Playing <game> via EmuWorld" in the friend list.
-      if (rom.name && rom.console) {
-        invoke("discord_set_playing", {
-          gameName: rom.name,
-          console: rom.console,
-        }).catch(() => {});
+      if (rom.name) {
+        invoke("discord_set_playing", { gameName: rom.name }).catch(() => {});
       }
     } catch (err: any) {
       console.error("Launch Exception:", err);

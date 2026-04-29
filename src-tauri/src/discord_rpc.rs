@@ -90,14 +90,13 @@ pub fn discord_set_idle(state: tauri::State<'_, RpcState>) -> Result<(), String>
     })
 }
 
-// Playing presence — shown while a game is running.
-// Large image stays EmuWorld (brand persistence). Small image is the console
-// or game-specific asset if available; fallback to "playing" generic.
+// Playing presence — shown while a game is running. Keeps EmuWorld as the
+// large image (brand persistence); game name is the big text, "via
+// EmuWorld" the subtitle. No console badge — kept deliberately minimal.
 #[tauri::command]
 pub fn discord_set_playing(
     state: tauri::State<'_, RpcState>,
     game_name: String,
-    console: String,
 ) -> Result<(), String> {
     // Reset session start so the elapsed timer begins now.
     let now = unix_ts();
@@ -106,25 +105,15 @@ pub fn discord_set_playing(
         *start_lock = Some(now);
     }
 
-    // Console-specific small icons match asset keys uploaded to the Discord
-    // dev portal. Fall back to a generic gamepad if unknown.
-    let small_key = console_icon_key(&console);
-    let console_label = console.clone();
-
     with_client(&state, move |client| {
-        let mut assets = activity::Assets::new()
+        let assets = activity::Assets::new()
             .large_image("emuworld_logo")
-            .large_text("via EmuWorld");
-        assets = assets
-            .small_image(small_key)
-            .small_text(console_label.as_str());
+            .large_text("EmuWorld — retro emulation launcher");
 
-        // Clone `game_name` into owned strings the activity can borrow from.
-        let state_line = format!("via EmuWorld · {}", console_label);
         let details_line = game_name.clone();
 
         let activity = activity::Activity::new()
-            .state(state_line.as_str())
+            .state("via EmuWorld")
             .details(details_line.as_str())
             .assets(assets)
             .timestamps(activity::Timestamps::new().start(now));
@@ -148,56 +137,3 @@ pub fn discord_clear(state: tauri::State<'_, RpcState>) -> Result<(), String> {
     })
 }
 
-// Map our console names to Discord asset keys. The user will need to upload
-// matching assets to their Discord application; missing keys silently fall
-// back to `playing_generic` (which should always exist).
-fn console_icon_key(console: &str) -> &'static str {
-    let c = console.to_lowercase();
-    if c.contains("switch") {
-        "console_switch"
-    } else if c.contains("wii u") {
-        "console_wiiu"
-    } else if c.contains("wii") {
-        "console_wii"
-    } else if c.contains("3ds") {
-        "console_3ds"
-    } else if c.contains("ds") {
-        "console_ds"
-    } else if c.contains("gamecube") {
-        "console_gamecube"
-    } else if c.contains("n64") || c.contains("64") {
-        "console_n64"
-    } else if c.contains("gba") || c.contains("advance") {
-        "console_gba"
-    } else if c.contains("gbc") || c.contains("color") {
-        "console_gbc"
-    } else if c.contains("gb") || c.contains("game boy") {
-        "console_gb"
-    } else if c.contains("nes") {
-        "console_nes"
-    } else if c.contains("snes") {
-        "console_snes"
-    } else if c.contains("ps5") {
-        "console_ps5"
-    } else if c.contains("ps4") {
-        "console_ps4"
-    } else if c.contains("ps3") {
-        "console_ps3"
-    } else if c.contains("ps2") {
-        "console_ps2"
-    } else if c.contains("psp") {
-        "console_psp"
-    } else if c.contains("ps") {
-        "console_ps1"
-    } else if c.contains("xbox") {
-        "console_xbox"
-    } else if c.contains("dreamcast") {
-        "console_dreamcast"
-    } else if c.contains("saturn") {
-        "console_saturn"
-    } else if c.contains("mega drive") || c.contains("genesis") {
-        "console_megadrive"
-    } else {
-        "playing_generic"
-    }
-}
