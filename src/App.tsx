@@ -2146,6 +2146,50 @@ export default function App() {
                       )}
                     </div>
 
+                    {/* ---- Continue playing (only on landing, no search / no drill-down) ---- */}
+                    {!categoryFilter && !consoleFilter && search.trim().length < 2 && (() => {
+                      const favEntry = Object.values(playtime.games).find((g) => g.favorite);
+                      const favRom = favEntry ? roms.find((r) => r.console === favEntry.console && r.name === favEntry.name) : undefined;
+                      const recent = Object.values(playtime.games)
+                        .filter((g) => g.last_played)
+                        .sort((a, b) => (b.last_played || "").localeCompare(a.last_played || ""))
+                        .slice(0, favEntry ? 4 : 3)
+                        .map((g) => ({ entry: g, rom: roms.find((r) => r.console === g.console && r.name === g.name) }))
+                        .filter((x) => x.rom) as { entry: GameEntry; rom: RomFile }[];
+                      const recentWithoutFav = recent.filter((x) => !(favEntry && x.entry.console === favEntry.console && x.entry.name === favEntry.name)).slice(0, 3);
+                      if (!favRom && recentWithoutFav.length === 0) return null;
+                      return (
+                        <div className="continue-playing">
+                          <div className="continue-playing__header">
+                            <h2 className="continue-playing__title">Jump back in</h2>
+                            <span className="continue-playing__sub">Your favorite and the 3 latest sessions</span>
+                          </div>
+                          <div className="continue-playing__row">
+                            {favRom && (
+                              <GameCard
+                                key={`fav-${favRom.console}::${favRom.name}`}
+                                rom={favRom}
+                                onLaunch={handleLaunch}
+                                onDelete={handleDeleteRom}
+                                entry={playtime.games[`${favRom.console}::${favRom.name}`]}
+                                onToggleFavorite={handleToggleFavorite}
+                              />
+                            )}
+                            {recentWithoutFav.map(({ rom }) => (
+                              <GameCard
+                                key={`recent-${rom.console}::${rom.name}`}
+                                rom={rom}
+                                onLaunch={handleLaunch}
+                                onDelete={handleDeleteRom}
+                                entry={playtime.games[`${rom.console}::${rom.name}`]}
+                                onToggleFavorite={handleToggleFavorite}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {search.trim().length >= 2 ? (
                       /* ---- Global search bypasses drill-down ---- */
                       <>
