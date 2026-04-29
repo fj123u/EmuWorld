@@ -467,20 +467,29 @@
       const refresh_token = params.get('refresh_token');
       const next = params.get('next'); // optional route to hop to after auth
       if (!access_token || !refresh_token) return;
+      // Strip tokens FIRST — if setSession hangs, we still want the URL clean
+      // and the router to see `#/account` instead of the raw token hash.
+      const cleanHash = next ? `#${next.startsWith('/') ? next : '/' + next}` : '';
+      history.replaceState(null, '', window.location.pathname + cleanHash);
+      // Race setSession against a 5 s timeout. supabase-js 2.x has hung on
+      // setSession in some browsers when it tries to resolve the user via
+      // /auth/v1/user during the call — timing out lets the page finish
+      // booting so the user at least sees the profile even if the session
+      // didn't land.
       try {
-        const { data, error } = await sb.auth.setSession({ access_token, refresh_token });
-        if (error) {
-          console.error('[EmuWorld] setSession failed:', error);
+        const timed = new Promise((_, rej) => setTimeout(() => rej(new Error('setSession timeout (5s)')), 5000));
+        const result = await Promise.race([
+          sb.auth.setSession({ access_token, refresh_token }),
+          timed,
+        ]);
+        if (result?.error) {
+          console.error('[EmuWorld] setSession failed:', result.error);
         } else {
-          console.log('[EmuWorld] session established for', data?.user?.email);
+          console.log('[EmuWorld] session established for', result?.data?.user?.email);
         }
       } catch (e) {
         console.error('[EmuWorld] setSession threw:', e);
       }
-      // Strip tokens out of the URL whether it worked or not — we never want
-      // to leave them in history for a reload to replay.
-      const cleanHash = next ? `#${next.startsWith('/') ? next : '/' + next}` : '';
-      history.replaceState(null, '', window.location.pathname + cleanHash);
     }
 
     async function refreshSession() {
