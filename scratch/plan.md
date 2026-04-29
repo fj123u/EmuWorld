@@ -3,7 +3,12 @@
 ## 🚀 Ajouts
 
 - [x] **Date / heure dans l'app** *(quick win ~10 min)* — horloge discrète dans la titlebar ou sidebar footer
-- [ ] **Discord Rich Presence** *(moyen)* — "Jouant à Mario Kart 8 • 14 h lifetime" avec cover en icône
+- [x] **Discord Rich Presence** *(moyen)* — "Jouant à Mario Kart 8 via EmuWorld" avec le logo EmuWorld en grand (brand persistant) et l'icône de la console en petit. Idle = "Browsing the library · In the launcher"
+
+  > ⚠️ Configuration requise côté Discord Developer Portal :
+  > 1. App actuelle : ID par défaut `1334862011723284510` dans `src-tauri/src/discord_rpc.rs` — remplace par le tien si tu veux être propriétaire
+  > 2. Uploader les assets avec ces keys exactes : `emuworld_logo` (grand), `playing_generic` (petit fallback), et `console_switch` / `console_wiiu` / `console_ps2` etc. (voir `console_icon_key` dans le module Rust pour la liste)
+  > 3. Sans assets, les icônes ne s'affichent pas mais le texte lui fonctionne quand même.
 - [ ] **Manette (navigation UI au pad)** *(gros)* — Gamepad API, highlight focus, D-pad → navigate, A → click, B → back
 - [ ] **Achievements in-app** *(gros)* — palier par installation, nb de ROMs, heures jouées, jeu favori, 10 consoles, etc. Notif in-app + badges sur le profil web
 - [ ] **RetroAchievements par jeu** *(gros)* — wrapper de l'API [retroachievements.org](https://retroachievements.org), rattachement du compte, progression affichée sur la fiche jeu

@@ -11,6 +11,7 @@ use std::io::Write;
 
 mod emulators;
 mod playtime;
+mod discord_rpc;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -2479,6 +2480,7 @@ fn clear_cover_cache() -> Result<(), String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(discord_rpc::RpcState::new())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -2533,6 +2535,9 @@ pub fn run() {
             toggle_favorite,
             get_profile_stats,
             clear_cover_cache,
+            discord_rpc::discord_set_idle,
+            discord_rpc::discord_set_playing,
+            discord_rpc::discord_clear,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

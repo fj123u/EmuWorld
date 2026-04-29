@@ -34,3 +34,4 @@ bytes = "1"
 scraper = "0.26.0"
 regex = "1"
 chrono = { version = "0.4.44", features = ["clock"] }
+discord-rich-presence = "1"

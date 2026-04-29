@@ -1095,6 +1095,12 @@ export default function App() {
 
   useEffect(() => { loadPlaytime(); }, [loadPlaytime]);
 
+  // Discord Rich Presence — idle pub on boot. Failures are expected when
+  // Discord is not running; swallow them so the app doesn't spam toasts.
+  useEffect(() => {
+    invoke("discord_set_idle").catch(() => {});
+  }, []);
+
   // Refresh playtime whenever an emulator child process exits.
   useEffect(() => {
     const unlisten = listen<{ console: string; name: string; seconds: number }>(
@@ -1109,6 +1115,8 @@ export default function App() {
           scheduleCloudSync();
         }
         loadPlaytime();
+        // Back to idle pub in Discord.
+        invoke("discord_set_idle").catch(() => {});
       }
     );
     return () => { unlisten.then((fn) => fn()); };
@@ -1636,6 +1644,14 @@ export default function App() {
       });
       console.log("Backend Launch Success:", res);
       showToast(`Launching ${rom.name}...`, "success");
+      // Announce to Discord — EmuWorld stays the big image so it reads as
+      // "Playing <game> via EmuWorld" in the friend list.
+      if (rom.name && rom.console) {
+        invoke("discord_set_playing", {
+          gameName: rom.name,
+          console: rom.console,
+        }).catch(() => {});
+      }
     } catch (err: any) {
       console.error("Launch Exception:", err);
       showToast(`Launch failed: ${err}`, "error");
