@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Blurple gradient (app theme) -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7b86f5"/>
+      <stop offset="1" stop-color="#4752c4"/>
+    </linearGradient>
+    <!-- Inner highlight for top edge -->
+    <linearGradient id="highlight" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.35" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Subtle dotted paper overlay -->
+    <pattern id="dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="3" cy="3" r="1.4" fill="rgba(255,255,255,0.04)"/>
+    </pattern>
+    <!-- Drop shadow for the controller -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#1b1f6a" flood-opacity="0.45"/>
+    </filter>
+    <!-- Pink button gradient -->
+    <radialGradient id="btnPink">
+      <stop offset="0" stop-color="#ff9ad0"/>
+      <stop offset="1" stop-color="#eb459e"/>
+    </radialGradient>
+    <!-- Cyan button gradient -->
+    <radialGradient id="btnCyan">
+      <stop offset="0" stop-color="#7fe4ef"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </radialGradient>
+    <!-- Orange bezel accent -->
+    <linearGradient id="orange" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffc48a"/>
+      <stop offset="1" stop-color="#e69a5c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square background (Wii U / iOS app icon style) -->
+  <rect x="16" y="16" width="480" height="480" rx="112" ry="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="112" ry="112" fill="url(#dots)"/>
+  <!-- Top highlight -->
+  <rect x="16" y="16" width="480" height="240" rx="112" ry="112" fill="url(#highlight)"/>
+  <!-- Outer rim -->
+  <rect x="18" y="18" width="476" height="476" rx="110" ry="110" fill="none"
+        stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+
+  <!-- Retro gamepad silhouette, centred -->
+  <g transform="translate(256 272)" filter="url(#shadow)">
+    <!-- Body: pill shape with rounded grips -->
+    <g>
+      <!-- Main body -->
+      <path d="
+        M -150,-46
+        Q -170,-70 -140,-82
+        L 140,-82
+        Q 170,-70 150,-46
+        L 138,30
+        Q 130,86 80,86
+        L 34,86
+        Q 22,86 14,74
+        L -14,74
+        Q -22,86 -34,86
+        L -80,86
+        Q -130,86 -138,30
+        Z
+      " fill="#1e1f22"
+        stroke="#0e0f11" stroke-width="3"/>
+
+      <!-- Screen bezel (Wii-U-like mini screen in the middle top) -->
+      <rect x="-52" y="-66" width="104" height="46" rx="9" ry="9"
+            fill="#313338" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
+      <!-- Screen content: tiny "E" mark -->
+      <rect x="-44" y="-60" width="88" height="34" rx="5" ry="5" fill="url(#orange)" opacity="0.9"/>
+      <text x="0" y="-32" font-family="Nunito, Arial Black, sans-serif"
+            font-size="28" font-weight="900" text-anchor="middle"
+            fill="#1e1f22" letter-spacing="0">E</text>
+
+      <!-- D-pad on the left -->
+      <g transform="translate(-96 18)">
+        <rect x="-24" y="-7" width="48" height="14" rx="3" fill="#404249"/>
+        <rect x="-7" y="-24" width="14" height="48" rx="3" fill="#404249"/>
+        <circle r="5" fill="#2b2d31"/>
+      </g>
+
+      <!-- ABXY on the right -->
+      <g transform="translate(96 18)">
+        <!-- Top (yellow) -->
+        <circle cx="0" cy="-22" r="10" fill="#f0b232"/>
+        <!-- Bottom (green) -->
+        <circle cx="0" cy="22" r="10" fill="#23a55a"/>
+        <!-- Left (pink) -->
+        <circle cx="-22" cy="0" r="10" fill="url(#btnPink)"/>
+        <!-- Right (cyan) -->
+        <circle cx="22" cy="0" r="10" fill="url(#btnCyan)"/>
+      </g>
+
+      <!-- Start / Select pills under screen -->
+      <rect x="-22" y="2" width="14" height="5" rx="2.5" fill="#404249"/>
+      <rect x="8" y="2" width="14" height="5" rx="2.5" fill="#404249"/>
+    </g>
+  </g>
+
+  <!-- Small sparkle orbs (world / galaxy feel) -->
+  <g fill="#ffffff" opacity="0.9">
+    <circle cx="96" cy="112" r="4"/>
+    <circle cx="420" cy="150" r="3"/>
+    <circle cx="432" cy="380" r="5"/>
+    <circle cx="80" cy="410" r="3"/>
+    <circle cx="384" cy="96" r="2.5"/>
+  </g>
+</svg>

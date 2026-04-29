@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 // For now we ship a placeholder — the user must create the app themselves and
 // drop the ID in the UI if they want rich presence to light up.
 // The default ID below is EmuWorld's public demo app (owned by the project).
-const DEFAULT_APP_ID: &str = "1334862011723284510";
+const DEFAULT_APP_ID: &str = "1488327345910710332";
 
 // Global presence state. Discord IPC clients are !Sync-unfriendly so we gate
 // access behind a plain std::sync::Mutex.
