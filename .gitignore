@@ -34,4 +34,9 @@ yarn-debug.log*
 # TypeScript
 *.tsbuildinfo
 
+# Tauri updater signing — NEVER commit the private key.
+# Public key is embedded in tauri.conf.json, no need for a file.
+*.key
+!*.key.pub
+
 # Lock files (keep package-lock.json)

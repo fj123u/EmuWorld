@@ -1,0 +1,116 @@
+name: Release
+
+# Triggered when we push a tag like `v0.1.0-alpha.1`. Builds the Windows
+# installer, signs it with the Tauri updater keypair, uploads artefacts
+# to a draft GitHub Release, and generates the `latest.json` the in-app
+# updater polls.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write # needed to create the Release and upload assets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build + bundle + sign
+        env:
+          # These two come from repo Secrets. The private key was generated
+          # locally with `npx @tauri-apps/cli signer generate`. The password
+          # is an empty string in dev/alpha but still must be declared
+          # (can be left blank in the secret value).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx @tauri-apps/cli build
+
+      - name: Locate artefacts
+        id: artefacts
+        shell: bash
+        run: |
+          set -e
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+          ls -R "$BUNDLE_DIR"
+
+          # Windows NSIS installer + its signature
+          NSIS_EXE=$(find "$BUNDLE_DIR/nsis" -name "*-setup.exe" -not -name "*.sig" | head -n1)
+          NSIS_SIG=$(find "$BUNDLE_DIR/nsis" -name "*-setup.exe.sig" | head -n1)
+
+          # Windows MSI + its signature
+          MSI=$(find "$BUNDLE_DIR/msi" -name "*.msi" -not -name "*.sig" 2>/dev/null | head -n1 || true)
+          MSI_SIG=$(find "$BUNDLE_DIR/msi" -name "*.msi.sig" 2>/dev/null | head -n1 || true)
+
+          echo "nsis_exe=$NSIS_EXE" >> $GITHUB_OUTPUT
+          echo "nsis_sig=$NSIS_SIG" >> $GITHUB_OUTPUT
+          echo "msi=$MSI" >> $GITHUB_OUTPUT
+          echo "msi_sig=$MSI_SIG" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json
+        shell: bash
+        run: |
+          set -e
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Read the NSIS signature contents — this is what the Tauri
+          # updater compares against the pubkey embedded in the binary.
+          SIG=$(cat "${{ steps.artefacts.outputs.nsis_sig }}")
+          SETUP_FILE=$(basename "${{ steps.artefacts.outputs.nsis_exe }}")
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${SETUP_FILE}"
+
+          cat > latest.json <<EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See the release page on GitHub for details.",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "windows-x86_64": {
+                "signature": "${SIG}",
+                "url": "${DOWNLOAD_URL}"
+              }
+            }
+          }
+          EOF
+
+          cat latest.json
+
+      - name: Create release + upload artefacts
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: true
+          files: |
+            ${{ steps.artefacts.outputs.nsis_exe }}
+            ${{ steps.artefacts.outputs.nsis_sig }}
+            ${{ steps.artefacts.outputs.msi }}
+            ${{ steps.artefacts.outputs.msi_sig }}
+            latest.json
+          generate_release_notes: true

@@ -8,6 +8,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { supabase, Profile } from "./supabase";
 import type { User, Provider } from "@supabase/supabase-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   Search,
   Settings,
@@ -685,6 +687,12 @@ export default function App() {
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // ---- App update state ----
+  // `null` = not checked yet / no update, object = newer version available
+  const [updateAvailable, setUpdateAvailable] = useState<{ version: string } | null>(null);
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "downloading" | "ready" | "error">("idle");
+  const [updateProgress, setUpdateProgress] = useState<{ done: number; total: number | null }>({ done: 0, total: null });
+
   // ---- ROM Store state ----
   const [storeRoms, setStoreRoms] = useState<RomStoreEntry[]>([]);
   const [storeSearch, setStoreSearch] = useState("");
@@ -1103,6 +1111,55 @@ export default function App() {
   // Discord is not running; swallow them so the app doesn't spam toasts.
   useEffect(() => {
     invoke("discord_set_idle").catch(() => {});
+  }, []);
+
+  // ---- Check for updates on boot ----
+  // Tauri updater polls our GitHub Releases endpoint (latest.json). If a
+  // newer version is published, we just expose it via a banner — nothing
+  // downloads until the user clicks "Install".
+  useEffect(() => {
+    (async () => {
+      try {
+        const update = await checkForUpdate();
+        if (update) {
+          console.log("[EmuWorld] update available:", update.version);
+          setUpdateAvailable({ version: update.version });
+        }
+      } catch (err) {
+        // Offline, endpoint down, or running in dev mode without a signed
+        // build. Non-fatal — silently swallow.
+        console.log("[EmuWorld] update check skipped:", err);
+      }
+    })();
+  }, []);
+
+  const handleInstallUpdate = useCallback(async () => {
+    setUpdateStatus("downloading");
+    try {
+      const update = await checkForUpdate();
+      if (!update) {
+        setUpdateStatus("idle");
+        setUpdateAvailable(null);
+        return;
+      }
+      await update.downloadAndInstall((event) => {
+        if (event.event === "Started") {
+          setUpdateProgress({ done: 0, total: event.data.contentLength ?? null });
+        } else if (event.event === "Progress") {
+          setUpdateProgress((prev) => ({
+            done: prev.done + event.data.chunkLength,
+            total: prev.total,
+          }));
+        } else if (event.event === "Finished") {
+          setUpdateStatus("ready");
+        }
+      });
+      // Relaunch the app to swap in the new binary.
+      await relaunch();
+    } catch (err) {
+      console.error("[EmuWorld] update install failed:", err);
+      setUpdateStatus("error");
+    }
   }, []);
 
   // ---- Cloud sync (Supabase) ----
@@ -1819,6 +1876,29 @@ export default function App() {
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
+        {updateAvailable && (
+          <button
+            className="titlebar__update"
+            onClick={handleInstallUpdate}
+            disabled={updateStatus === "downloading"}
+            title={`Version ${updateAvailable.version} disponible — clique pour installer`}
+          >
+            {updateStatus === "downloading" ? (
+              <>
+                <span className="spinner" />
+                {updateProgress.total
+                  ? `${Math.round((updateProgress.done / updateProgress.total) * 100)}%`
+                  : "Téléchargement…"}
+              </>
+            ) : updateStatus === "ready" ? (
+              <>↻ Redémarrage…</>
+            ) : updateStatus === "error" ? (
+              <>⚠ Échec · réessayer</>
+            ) : (
+              <>✨ Mise à jour {updateAvailable.version}</>
+            )}
+          </button>
+        )}
         <div className="titlebar__controls">
           <button className="titlebar__btn" onClick={minimize} title="Réduire"><Minus size={14} /></button>
           <button className="titlebar__btn" onClick={maximize} title="Agrandir / Restaurer">

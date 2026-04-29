@@ -191,6 +191,36 @@ body {
   opacity: 0.85;
 }
 
+/* Update-available pill — slips in next to the clock when a newer
+   version is detected. Shows download progress while installing. */
+.titlebar__update {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  right: 200px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+  background: linear-gradient(180deg, #6b77ff 0%, var(--accent-blue) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: transform 0.08s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 0 var(--accent-blue-deep), 0 4px 10px rgba(88, 101, 242, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+.titlebar__update:hover:not(:disabled) { transform: translateY(-1px); }
+.titlebar__update:disabled { opacity: 0.8; cursor: wait; }
+.titlebar__update .spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+}
+
 .titlebar__controls {
   display: flex;
   gap: 3px;

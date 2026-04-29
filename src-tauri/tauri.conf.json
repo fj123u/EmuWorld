@@ -50,6 +50,16 @@
     "deep-link": {
       "schemes": ["emuworld"]
     },
-    "single-instance": null
+    "single-instance": null,
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/fj123u/EmuWorld/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGNDAwNDQ0QzQxOUYyQkIKUldTNzhobkVSQVJBUDR4SUMyYnJrY2pGMGh3d0F2VEc5cCtqRjRDZVp0MVVzLzZFMTNKbGQ2MmcK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
