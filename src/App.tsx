@@ -1105,40 +1105,11 @@ export default function App() {
     invoke("discord_set_idle").catch(() => {});
   }, []);
 
-  // Refresh playtime whenever an emulator child process exits.
-  useEffect(() => {
-    const unlisten = listen<{ console: string; name: string; seconds: number }>(
-      "game-closed",
-      (event) => {
-        const mins = Math.floor(event.payload.seconds / 60);
-        if (event.payload.seconds >= 3) {
-          showToast(
-            `Session saved: ${event.payload.name} (${mins >= 1 ? `${mins} min` : `${event.payload.seconds}s`})`,
-            "success"
-          );
-          scheduleCloudSync();
-        }
-        loadPlaytime();
-        // Back to idle pub in Discord.
-        invoke("discord_set_idle").catch(() => {});
-      }
-    );
-    return () => { unlisten.then((fn) => fn()); };
-  }, [loadPlaytime, showToast]);
-
-  const handleToggleFavorite = useCallback(async (rom: RomFile) => {
-    try {
-      await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
-      loadPlaytime();
-      scheduleCloudSync();
-    } catch (err: any) {
-      showToast(`Favorite failed: ${err}`, "error");
-    }
-  }, [loadPlaytime, showToast]);
-
   // ---- Cloud sync (Supabase) ----
   // Debounced upsert of the local playtime store to Supabase. Only runs when
   // the user is signed in. No-op otherwise — stats still work fully offline.
+  // Must be declared BEFORE any effect/callback that references
+  // scheduleCloudSync so the closures get the up-to-date version.
   const cloudSyncTimer = useRef<number | null>(null);
   const isSyncingCloud = useRef(false);
 
@@ -1148,6 +1119,7 @@ export default function App() {
     try {
       // Always pull the freshest store from Rust rather than relying on React state
       const pt = await invoke<PlaytimeStore>("get_playtime");
+      console.log("[EmuWorld] syncPlaytimeToCloud · user", user.id, "games", Object.keys(pt.games).length);
 
       const gameRows = Object.values(pt.games).map((g) => ({
         user_id: user.id,
@@ -1178,6 +1150,7 @@ export default function App() {
           .upsert(emuRows, { onConflict: "user_id,emulator_id" });
         if (error) throw error;
       }
+      console.log("[EmuWorld] sync ok — pushed", gameRows.length, "games,", emuRows.length, "emulators");
     } catch (err: any) {
       console.error("[EmuWorld] Cloud sync failed:", err?.message || err);
     } finally {
@@ -1195,6 +1168,40 @@ export default function App() {
       void syncPlaytimeToCloud();
     }, 2000);
   }, [syncPlaytimeToCloud]);
+
+  // Refresh playtime whenever an emulator child process exits.
+  // `scheduleCloudSync` has to be in the dep array — otherwise the closure
+  // captures the version from before login (when user was null) and every
+  // sync becomes a no-op because of the `if (!user) return;` early exit.
+  useEffect(() => {
+    const unlisten = listen<{ console: string; name: string; seconds: number }>(
+      "game-closed",
+      (event) => {
+        const mins = Math.floor(event.payload.seconds / 60);
+        if (event.payload.seconds >= 3) {
+          showToast(
+            `Session saved: ${event.payload.name} (${mins >= 1 ? `${mins} min` : `${event.payload.seconds}s`})`,
+            "success"
+          );
+          scheduleCloudSync();
+        }
+        loadPlaytime();
+        // Back to idle pub in Discord.
+        invoke("discord_set_idle").catch(() => {});
+      }
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [loadPlaytime, showToast, scheduleCloudSync]);
+
+  const handleToggleFavorite = useCallback(async (rom: RomFile) => {
+    try {
+      await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
+      loadPlaytime();
+      scheduleCloudSync();
+    } catch (err: any) {
+      showToast(`Favorite failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast, scheduleCloudSync]);
 
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
