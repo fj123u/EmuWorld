@@ -372,16 +372,47 @@
       };
     })();
     const noopLock = (_name, _acquireTimeout, fn) => fn();
+    // `sb` is anon-only (public reads). When a user arrives via the handoff
+    // we build a second authenticated client (`sbAuth`) whose `Authorization`
+    // header carries the access token directly — this skips supabase-js's
+    // setSession() entirely, which has a habit of hanging on its internal
+    // lock / /user round-trip and leaving the page stuck on "boot".
     const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
         detectSessionInUrl: false,
-        persistSession: true,
+        persistSession: false,
         autoRefreshToken: false,
-        storageKey: 'emuworld-web-' + Math.random().toString(36).slice(2),
+        storageKey: 'emuworld-web-anon-' + Math.random().toString(36).slice(2),
         storage: memStorage,
         lock: noopLock,
       },
     });
+    let sbAuth = null; // authenticated client, created after handoff
+    function makeAuthClient(accessToken) {
+      return supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: {
+          detectSessionInUrl: false,
+          persistSession: false,
+          autoRefreshToken: false,
+          storageKey: 'emuworld-web-auth-' + Math.random().toString(36).slice(2),
+          storage: memStorage,
+          lock: noopLock,
+        },
+        global: {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        },
+      });
+    }
+    function decodeJwt(token) {
+      try {
+        const payload = token.split('.')[1];
+        const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+        return JSON.parse(decodeURIComponent(escape(json)));
+      } catch (e) {
+        console.error('[EmuWorld] JWT decode failed', e);
+        return null;
+      }
+    }
 
     const view = document.getElementById('view');
     let currentUser = null;
@@ -465,39 +496,47 @@
       const params = new URLSearchParams(hash);
       const access_token = params.get('access_token');
       const refresh_token = params.get('refresh_token');
-      const next = params.get('next'); // optional route to hop to after auth
-      if (!access_token || !refresh_token) return;
-      // Strip tokens FIRST — if setSession hangs, we still want the URL clean
-      // and the router to see `#/account` instead of the raw token hash.
+      const next = params.get('next');
+      if (!access_token) return;
+      // Clean the URL first so a reload can't replay the tokens and the
+      // router sees the real route.
       const cleanHash = next ? `#${next.startsWith('/') ? next : '/' + next}` : '';
       history.replaceState(null, '', window.location.pathname + cleanHash);
-      // Race setSession against a 5 s timeout. supabase-js 2.x has hung on
-      // setSession in some browsers when it tries to resolve the user via
-      // /auth/v1/user during the call — timing out lets the page finish
-      // booting so the user at least sees the profile even if the session
-      // didn't land.
-      try {
-        const timed = new Promise((_, rej) => setTimeout(() => rej(new Error('setSession timeout (5s)')), 5000));
-        const result = await Promise.race([
-          sb.auth.setSession({ access_token, refresh_token }),
-          timed,
-        ]);
-        if (result?.error) {
-          console.error('[EmuWorld] setSession failed:', result.error);
-        } else {
-          console.log('[EmuWorld] session established for', result?.data?.user?.email);
-        }
-      } catch (e) {
-        console.error('[EmuWorld] setSession threw:', e);
+      // Decode the JWT locally and build an authenticated client that carries
+      // the token directly in its Authorization header. This sidesteps
+      // setSession() which has been hanging on its internal lock.
+      const payload = decodeJwt(access_token);
+      if (!payload || !payload.sub) {
+        console.error('[EmuWorld] could not decode JWT — handoff aborted');
+        return;
       }
+      currentUser = {
+        id: payload.sub,
+        email: payload.email,
+        app_metadata: payload.app_metadata || {},
+        user_metadata: payload.user_metadata || {},
+      };
+      sbAuth = makeAuthClient(access_token);
+      console.log('[EmuWorld] authenticated as', currentUser.email, '(via JWT, no setSession)');
     }
 
     async function refreshSession() {
-      const { data: { user } } = await sb.auth.getUser();
-      currentUser = user;
-      if (user) {
-        const { data } = await sb.from('profiles').select('*').eq('id', user.id).maybeSingle();
-        currentProfile = data || { id: user.id, username: null, avatar_url: null, public_profile: false };
+      // currentUser is either already set by consumeTokenHandoff() (JWT-based,
+      // no Supabase session) or null (anonymous). If null, try reading a
+      // session from the Sign in form flow; otherwise we're done.
+      if (!currentUser) {
+        try {
+          const { data: { user } } = await sb.auth.getUser();
+          if (user) {
+            currentUser = user;
+            // sbAuth not created via signIn path — skip, will fall back to anon
+          }
+        } catch (_) {}
+      }
+      if (currentUser) {
+        const client = sbAuth || sb;
+        const { data } = await client.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+        currentProfile = data || { id: currentUser.id, username: null, avatar_url: null, public_profile: false };
       } else {
         currentProfile = null;
       }
@@ -586,8 +625,13 @@
       setView(loading());
       console.log('[EmuWorld] renderProfile(', username, ')');
 
-      // 1. Resolve the profile by username (public rows only via RLS).
-      const { data: profile, error: pErr } = await sb
+      // Prefer the authenticated client when available — lets a user view
+      // their own profile even if it's set to private.
+      const client = sbAuth || sb;
+
+      // 1. Resolve the profile by username (public rows only via RLS,
+      //    unless we're the owner using sbAuth).
+      const { data: profile, error: pErr } = await client
         .from('profiles')
         .select('id, username, avatar_url, public_profile, updated_at')
         .eq('username', username)
@@ -607,8 +651,8 @@
 
       // 2. Pull all games + emulators for this user (RLS already filters).
       const [gamesRes, emusRes] = await Promise.all([
-        sb.from('playtime_games').select('*').eq('user_id', profile.id),
-        sb.from('playtime_emulators').select('*').eq('user_id', profile.id),
+        client.from('playtime_games').select('*').eq('user_id', profile.id),
+        client.from('playtime_emulators').select('*').eq('user_id', profile.id),
       ]);
       const games = gamesRes.data || [];
       const emus = emusRes.data || [];
@@ -814,9 +858,13 @@
     });
     document.getElementById('account-close').addEventListener('click', () => accountModal.classList.remove('open'));
     document.getElementById('account-logout').addEventListener('click', async () => {
-      await sb.auth.signOut();
+      try { await sb.auth.signOut(); } catch (_) {}
+      // JWT-only session: clear manually as signOut() doesn't know about it.
+      currentUser = null;
+      currentProfile = null;
+      sbAuth = null;
       accountModal.classList.remove('open');
-      await refreshSession();
+      renderNav();
       navigate('/');
       render();
     });
@@ -824,7 +872,8 @@
       const status = document.getElementById('account-status');
       const newName = document.getElementById('account-username').value.trim();
       if (!newName) { status.className = 'status err'; status.textContent = 'Username cannot be empty.'; return; }
-      const { error } = await sb.from('profiles')
+      if (!sbAuth) { status.className = 'status err'; status.textContent = 'Not authenticated.'; return; }
+      const { error } = await sbAuth.from('profiles')
         .upsert({ id: currentUser.id, username: newName, updated_at: new Date().toISOString() }, { onConflict: 'id' });
       if (error) { status.className = 'status err'; status.textContent = error.message; return; }
       status.className = 'status ok'; status.textContent = 'Saved ✅';
@@ -842,8 +891,12 @@
       const email = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value;
       status.className = 'status'; status.textContent = 'Signing in…';
-      const { error } = await sb.auth.signInWithPassword({ email, password });
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) { status.className = 'status err'; status.textContent = error.message; return; }
+      if (data?.session?.access_token) {
+        sbAuth = makeAuthClient(data.session.access_token);
+        currentUser = data.user;
+      }
       loginModal.classList.remove('open');
       await refreshSession();
       render();
@@ -853,10 +906,6 @@
     // Boot
     // ============================================================
     window.addEventListener('hashchange', render);
-    sb.auth.onAuthStateChange(async () => {
-      await refreshSession();
-      render();
-    });
 
     (async () => {
       console.log('[EmuWorld] boot — URL:', window.location.href);
