@@ -2498,6 +2498,15 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
+
+                // Register `emuworld://` with the OS at runtime. The scheme is
+                // declared in tauri.conf.json but on Windows in dev mode the
+                // installer step is skipped — without this the browser can't
+                // hand the callback back to us after OAuth.
+                if let Err(e) = app.deep_link().register_all() {
+                    eprintln!("[deep-link] register_all failed: {}", e);
+                }
+
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     if let Some(url) = event.urls().first() {

@@ -28,7 +28,7 @@
 ## 🐛 Bugs
 
 - [ ] **Covers qui restent manquantes** sur certains jeux (lesquels déjà ? faudrait lister les noms)
-- [ ] **OAuth Google / Discord / GitHub** — probablement un souci de redirect URL dans Supabase + config dans `src-tauri/tauri.conf.json` deep-link
+- [ ] **OAuth Google / Discord / GitHub** — fix côté code : `register_all()` ajouté au boot pour que Windows reconnaisse le scheme `emuworld://` en dev. Reste à configurer côté Supabase dashboard + portails providers. Guide complet dans [scratch/oauth_setup.md](scratch/oauth_setup.md)
 - [ ] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
