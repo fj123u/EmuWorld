@@ -53,7 +53,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
         run: npx @tauri-apps/cli build
 
-      - name: Locate artefacts
+      - name: Locate artefacts + build latest.json
         id: artefacts
         shell: bash
         run: |
@@ -82,23 +82,14 @@ jobs:
             exit 1
           fi
 
-          echo "nsis_exe=$NSIS_EXE" >> $GITHUB_OUTPUT
-          echo "nsis_sig=$NSIS_SIG" >> $GITHUB_OUTPUT
-          echo "msi=$MSI" >> $GITHUB_OUTPUT
-          echo "msi_sig=$MSI_SIG" >> $GITHUB_OUTPUT
-
-      - name: Generate latest.json
-        shell: bash
-        run: |
-          set -e
+          # Build latest.json right here so we still have clean paths in
+          # shell vars — passing them through GITHUB_OUTPUT to another
+          # step was eating the values on Windows runners.
           TAG="${GITHUB_REF#refs/tags/}"
           VERSION="${TAG#v}"
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-          # Read the NSIS signature contents — this is what the Tauri
-          # updater compares against the pubkey embedded in the binary.
-          SIG=$(cat "${{ steps.artefacts.outputs.nsis_sig }}")
-          SETUP_FILE=$(basename "${{ steps.artefacts.outputs.nsis_exe }}")
+          SIG=$(cat "$NSIS_SIG")
+          SETUP_FILE=$(basename "$NSIS_EXE")
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${SETUP_FILE}"
 
           cat > latest.json <<EOF
@@ -115,7 +106,14 @@ jobs:
           }
           EOF
 
+          echo "::group::latest.json"
           cat latest.json
+          echo "::endgroup::"
+
+          echo "nsis_exe=$NSIS_EXE" >> $GITHUB_OUTPUT
+          echo "nsis_sig=$NSIS_SIG" >> $GITHUB_OUTPUT
+          echo "msi=$MSI" >> $GITHUB_OUTPUT
+          echo "msi_sig=$MSI_SIG" >> $GITHUB_OUTPUT
 
       - name: Create release + upload artefacts
         uses: softprops/action-gh-release@v2
