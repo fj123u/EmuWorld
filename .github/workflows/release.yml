@@ -41,6 +41,19 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Sanity-check signing key is present
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::Repo secret TAURI_SIGNING_PRIVATE_KEY is empty or missing — updates won't sign"
+            exit 1
+          fi
+          echo "Signing key length: ${#KEY} chars"
+          # Minisign/rsign private keys start with a known header.
+          echo "First 32 chars: ${KEY:0:32}"
+
       - name: Build + bundle + sign
         env:
           # The private key was generated locally with
@@ -51,7 +64,7 @@ jobs:
           # so we inline it instead of going through another secret.
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: npx @tauri-apps/cli build
+        run: npx @tauri-apps/cli build --verbose
 
       - name: Locate artefacts + build latest.json
         id: artefacts
