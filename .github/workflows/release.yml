@@ -59,15 +59,28 @@ jobs:
         run: |
           set -e
           BUNDLE_DIR="src-tauri/target/release/bundle"
-          ls -R "$BUNDLE_DIR"
+          echo "::group::Full bundle tree"
+          ls -R "$BUNDLE_DIR" || echo "bundle dir missing"
+          echo "::endgroup::"
 
-          # Windows NSIS installer + its signature
-          NSIS_EXE=$(find "$BUNDLE_DIR/nsis" -name "*-setup.exe" -not -name "*.sig" | head -n1)
-          NSIS_SIG=$(find "$BUNDLE_DIR/nsis" -name "*-setup.exe.sig" | head -n1)
+          # Match any .exe under bundle/nsis and its .sig counterpart. The
+          # exact file name depends on Tauri's bundle config (productName
+          # + version + target triple) so we don't pin the prefix.
+          NSIS_EXE=$(find "$BUNDLE_DIR/nsis" -maxdepth 1 -type f -name "*.exe" ! -name "*.sig" | head -n1 || true)
+          NSIS_SIG=$(find "$BUNDLE_DIR/nsis" -maxdepth 1 -type f -name "*.exe.sig" | head -n1 || true)
 
-          # Windows MSI + its signature
-          MSI=$(find "$BUNDLE_DIR/msi" -name "*.msi" -not -name "*.sig" 2>/dev/null | head -n1 || true)
-          MSI_SIG=$(find "$BUNDLE_DIR/msi" -name "*.msi.sig" 2>/dev/null | head -n1 || true)
+          MSI=$(find "$BUNDLE_DIR/msi" -maxdepth 1 -type f -name "*.msi" ! -name "*.sig" 2>/dev/null | head -n1 || true)
+          MSI_SIG=$(find "$BUNDLE_DIR/msi" -maxdepth 1 -type f -name "*.msi.sig" 2>/dev/null | head -n1 || true)
+
+          echo "resolved nsis_exe=$NSIS_EXE"
+          echo "resolved nsis_sig=$NSIS_SIG"
+          echo "resolved msi=$MSI"
+          echo "resolved msi_sig=$MSI_SIG"
+
+          if [ -z "$NSIS_EXE" ] || [ -z "$NSIS_SIG" ]; then
+            echo "::error::Could not locate NSIS installer or its signature"
+            exit 1
+          fi
 
           echo "nsis_exe=$NSIS_EXE" >> $GITHUB_OUTPUT
           echo "nsis_sig=$NSIS_SIG" >> $GITHUB_OUTPUT
@@ -109,6 +122,7 @@ jobs:
         with:
           draft: true
           prerelease: true
+          # softprops ignores blank lines, so empty MSI outputs won't break.
           files: |
             ${{ steps.artefacts.outputs.nsis_exe }}
             ${{ steps.artefacts.outputs.nsis_sig }}
