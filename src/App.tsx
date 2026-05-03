@@ -1191,6 +1191,28 @@ export default function App() {
     }
   }, [user]);
 
+  const syncAllAchievementsToCloud = useCallback(async () => {
+    if (!user) return;
+    const unlocked = achievements.filter(a => a.unlocked && a.unlocked_at);
+    if (unlocked.length === 0) return;
+    try {
+      const rows = unlocked.map(a => ({
+        user_id: user.id,
+        achievement_id: a.id,
+        unlocked_at: a.unlocked_at,
+      }));
+      await supabase.from("user_achievements").upsert(rows, { onConflict: "user_id,achievement_id" });
+    } catch (err) {
+      console.error("Bulk achievement sync failed:", err);
+    }
+  }, [user, achievements]);
+
+  useEffect(() => {
+    if (user && achievements.length > 0) {
+      syncAllAchievementsToCloud();
+    }
+  }, [user, achievements.length, syncAllAchievementsToCloud]);
+
   const triggerHiddenAchievement = useCallback(async (id: string) => {
     try {
       const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
