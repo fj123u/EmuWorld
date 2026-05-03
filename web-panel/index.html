@@ -273,6 +273,69 @@
     .status { text-align: center; margin-top: 10px; font-size: 13px; min-height: 18px; }
     .status.ok { color: #22c55e; }
     .status.err { color: var(--red); }
+
+    /* ---- Achievements section ---- */
+    .achievements-section { margin-bottom: 20px; }
+    .achievements-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .achievements-rank {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 14px;
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.15), rgba(34, 211, 238, 0.1));
+      border: 1px solid var(--border-strong);
+      border-radius: 999px;
+      font-size: 13px; font-weight: 700;
+    }
+    .achievements-rank__icon { font-size: 18px; }
+    .achievements-rank__label { color: var(--text); }
+    .achievements-rank__count { color: var(--muted); font-weight: 400; }
+    .achievements-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 10px;
+    }
+    .ach-card {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      transition: all 0.2s ease;
+    }
+    .ach-card--locked {
+      opacity: 0.4;
+      filter: grayscale(0.8);
+    }
+    .ach-card--hidden {
+      opacity: 0.25;
+      border-style: dashed;
+      filter: grayscale(1) blur(0.3px);
+    }
+    .ach-card--unlocked {
+      border-color: rgba(168, 85, 247, 0.4);
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.06), transparent);
+    }
+    .ach-card__icon { font-size: 1.6rem; flex-shrink: 0; }
+    .ach-card__info { flex: 1; min-width: 0; }
+    .ach-card__name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+    .ach-card__desc { font-size: 11px; color: var(--muted); line-height: 1.3; }
+    .ach-card__rarity {
+      font-size: 11px; color: var(--cyan); font-weight: 600;
+      flex-shrink: 0; text-align: right;
+    }
+    .ach-card__date { font-size: 10px; color: var(--muted); }
+    .profile-hero__badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px;
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      border-radius: 999px;
+      font-size: 12px; font-weight: 600;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -484,6 +547,51 @@
       return `https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`;
     };
 
+    // Achievement definitions — mirrors achievements.rs
+    const ACHIEVEMENTS = [
+      { id: "library_10", name: "Collectionneur", description: "10 jeux dans la bibliothèque", icon: "📚", hidden: false },
+      { id: "library_50", name: "Bibliophile", description: "50 jeux dans la bibliothèque", icon: "🏛️", hidden: false },
+      { id: "library_100", name: "Archiviste", description: "100 jeux dans la bibliothèque", icon: "🗄️", hidden: false },
+      { id: "library_500", name: "Musée vivant", description: "500 jeux dans la bibliothèque", icon: "🏆", hidden: false },
+      { id: "playtime_1h", name: "Première heure", description: "1 heure de jeu au total", icon: "⏱️", hidden: false },
+      { id: "playtime_10h", name: "Joueur assidu", description: "10 heures de jeu au total", icon: "🎮", hidden: false },
+      { id: "playtime_50h", name: "Vétéran", description: "50 heures de jeu au total", icon: "🎖️", hidden: false },
+      { id: "playtime_100h", name: "Hardcore", description: "100 heures de jeu au total", icon: "💎", hidden: false },
+      { id: "playtime_500h", name: "Légende", description: "500 heures de jeu au total", icon: "👑", hidden: false },
+      { id: "launches_10", name: "Habitué", description: "10 sessions de jeu", icon: "🚀", hidden: false },
+      { id: "launches_50", name: "Régulier", description: "50 sessions de jeu", icon: "🔥", hidden: false },
+      { id: "launches_100", name: "Infatigable", description: "100 sessions de jeu", icon: "⚡", hidden: false },
+      { id: "launches_500", name: "Machine", description: "500 sessions de jeu", icon: "🤖", hidden: false },
+      { id: "consoles_3", name: "Curieux", description: "3 consoles différentes jouées", icon: "🕹️", hidden: false },
+      { id: "consoles_5", name: "Multi-plateformes", description: "5 consoles différentes jouées", icon: "🌐", hidden: false },
+      { id: "consoles_10", name: "Omni-gamer", description: "10 consoles différentes jouées", icon: "🌟", hidden: false },
+      { id: "emulators_3", name: "Équipé", description: "3 émulateurs installés", icon: "🔧", hidden: false },
+      { id: "emulators_5", name: "Arsenal", description: "5 émulateurs installés", icon: "🛠️", hidden: false },
+      { id: "streak_3", name: "Trilogie", description: "3 jours de jeu consécutifs", icon: "📅", hidden: false },
+      { id: "streak_7", name: "Semaine parfaite", description: "7 jours de jeu consécutifs", icon: "🗓️", hidden: false },
+      { id: "streak_30", name: "Mois de feu", description: "30 jours de jeu consécutifs", icon: "🔥", hidden: false },
+      { id: "first_favorite", name: "Coup de cœur", description: "Mettre un jeu en favori", icon: "❤️", hidden: true, hint: "Montrez votre amour pour un jeu..." },
+      { id: "first_download", name: "Première prise", description: "Télécharger un jeu depuis le store", icon: "⬇️", hidden: true, hint: "Le store regorge de trésors..." },
+      { id: "login_discord", name: "Discord Gang", description: "Se connecter avec Discord", icon: "🟣", hidden: true, hint: "Un réseau social violet..." },
+      { id: "login_google", name: "Googler", description: "Se connecter avec Google", icon: "🔵", hidden: true, hint: "Le géant de la recherche..." },
+      { id: "change_roms_dir", name: "À ma façon", description: "Changer l'emplacement des ROMs", icon: "📂", hidden: true, hint: "Personnalisez votre espace..." },
+      { id: "change_avatar", name: "Nouveau look", description: "Changer sa photo de profil", icon: "📸", hidden: true, hint: "Une question d'image..." },
+      { id: "night_owl", name: "Oiseau de nuit", description: "Lancer un jeu entre 2h et 5h du matin", icon: "🦉", hidden: true, hint: "Les heures sombres cachent des secrets..." },
+      { id: "speed_runner", name: "Speed Runner", description: "Lancer et fermer un jeu en moins de 30s", icon: "⚡", hidden: true, hint: "Parfois, quelques secondes suffisent..." },
+      { id: "marathon", name: "Marathon", description: "Session de jeu de plus de 4 heures", icon: "🏃", hidden: true, hint: "L'endurance est une vertu..." },
+      { id: "install_update", name: "À jour !", description: "Installer une mise à jour de EmuWorld", icon: "✨", hidden: true, hint: "Rester à la pointe..." },
+      { id: "ten_favorites", name: "Fan absolu", description: "Avoir 10 jeux en favoris", icon: "💕", hidden: true, hint: "Pourquoi choisir quand on peut tout aimer ?" },
+      { id: "clear_covers", name: "Ménage de printemps", description: "Vider le cache des covers", icon: "🧹", hidden: true, hint: "Parfois il faut faire place nette..." },
+    ];
+
+    function getRankInfo(count) {
+      if (count >= 15) return { rank: "Diamant", icon: "💎" };
+      if (count >= 10) return { rank: "Platine", icon: "💠" };
+      if (count >= 6) return { rank: "Or", icon: "🥇" };
+      if (count >= 3) return { rank: "Argent", icon: "🥈" };
+      return { rank: "Bronze", icon: "🥉" };
+    }
+
     const setView = (html) => { view.innerHTML = html; window.scrollTo(0, 0); };
     const loading = () => `<div class="loading"><div class="loading__spinner"></div>Loading…</div>`;
 
@@ -657,6 +765,18 @@
       const games = gamesRes.data || [];
       const emus = emusRes.data || [];
 
+      // 2b. Pull achievements for this user + rarity stats
+      const [achRes, rarityRes] = await Promise.all([
+        client.from('user_achievements').select('achievement_id, unlocked_at').eq('user_id', profile.id),
+        client.from('achievement_rarity').select('*'),
+      ]);
+      const userAchievements = achRes.data || [];
+      const rarityData = rarityRes.data || [];
+      const rarityMap = {};
+      for (const r of rarityData) rarityMap[r.achievement_id] = r;
+      const userAchMap = {};
+      for (const a of userAchievements) userAchMap[a.achievement_id] = a;
+
       // 3. Derive stats client-side (same shape as the Rust playtime::compute_stats).
       const totalSeconds = games.reduce((a, g) => a + (g.seconds || 0), 0);
       const totalLaunches = games.reduce((a, g) => a + (g.launches || 0), 0);
@@ -733,14 +853,58 @@
         </div>
       ` : '';
 
+      // Build achievements section
+      const achCount = userAchievements.length;
+      const achTotal = ACHIEVEMENTS.length;
+      const rankInfo = getRankInfo(achCount);
+
+      const achCardsHtml = ACHIEVEMENTS.map((def) => {
+        const unlocked = userAchMap[def.id];
+        const rarity = rarityMap[def.id];
+        const rarityPct = rarity ? `${rarity.unlock_percent}%` : '—';
+        const rarityCount = rarity ? rarity.unlock_count : 0;
+
+        if (def.hidden && !unlocked) {
+          return `
+            <div class="ach-card ach-card--hidden" title="Achievement secret">
+              <div class="ach-card__icon">❓</div>
+              <div class="ach-card__info">
+                <div class="ach-card__name">???</div>
+                <div class="ach-card__desc">${esc(def.hint || 'Un mystère à découvrir...')}</div>
+              </div>
+            </div>
+          `;
+        }
+
+        const stateClass = unlocked ? 'ach-card--unlocked' : 'ach-card--locked';
+        return `
+          <div class="ach-card ${stateClass}">
+            <div class="ach-card__icon">${def.icon}</div>
+            <div class="ach-card__info">
+              <div class="ach-card__name">${esc(def.name)}</div>
+              <div class="ach-card__desc">${esc(def.description)}</div>
+              ${unlocked ? `<div class="ach-card__date">Débloqué le ${fmtDate(unlocked.unlocked_at)}</div>` : ''}
+            </div>
+            <div class="ach-card__rarity">
+              <div>${rarityPct}</div>
+              <div style="font-size:10px;color:var(--muted)">${rarityCount} joueur${rarityCount > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
       setView(`
         <header class="profile-hero">
           ${avatar}
           <div>
-            <h1 class="profile-hero__name">${esc(profile.username)}</h1>
+            <h1 class="profile-hero__name">
+              ${esc(profile.username)}
+              <span class="profile-hero__badge">${rankInfo.icon} ${rankInfo.rank}</span>
+            </h1>
             <div class="profile-hero__meta">
               ${gamesPlayed} game${gamesPlayed === 1 ? '' : 's'} · ${fmtTime(totalSeconds)} total
               ${streak > 0 ? ` · 🔥 ${streak} day streak` : ''}
+              · ${achCount}/${achTotal} achievements
             </div>
             <div class="profile-hero__url">Share: <code>emuworld.alwaysdata.net/#/u/${esc(profile.username)}</code></div>
           </div>
@@ -756,6 +920,20 @@
         ${rows.length ? `<section class="section"><h3 class="section__title">Highlights</h3>${rowsHtml}</section>` : ''}
 
         ${topGamesHtml}
+
+        <section class="section achievements-section">
+          <div class="achievements-header">
+            <h3 class="section__title" style="margin:0">Achievements</h3>
+            <div class="achievements-rank">
+              <span class="achievements-rank__icon">${rankInfo.icon}</span>
+              <span class="achievements-rank__label">${rankInfo.rank}</span>
+              <span class="achievements-rank__count">${achCount}/${achTotal}</span>
+            </div>
+          </div>
+          <div class="achievements-grid">
+            ${achCardsHtml}
+          </div>
+        </section>
 
         ${games.length === 0 ? `
           <div class="empty">

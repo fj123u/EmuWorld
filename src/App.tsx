@@ -156,6 +156,23 @@ interface ProfileStats {
   first_played: string | null;
   streak_days: number;
 }
+interface AchievementItem {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlocked: boolean;
+  unlocked_at: string | null;
+  hidden: boolean;
+}
+
+interface AchievementRank {
+  count: number;
+  total: number;
+  rank: string;
+  icon: string;
+}
+
 interface RomStoreEntry {
   id: string;
   name: string;
@@ -228,6 +245,21 @@ interface VimmGame {
   rating: string;
   box_url: string;
   page_url: string;
+}
+
+interface MyrientConsole {
+  id: string;
+  name: string;
+  url: string;
+  manufacturer: string;
+  target_console: string;
+}
+
+interface MyrientFile {
+  name: string;
+  url: string;
+  size: string;
+  console: string;
 }
 
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
@@ -672,6 +704,8 @@ export default function App() {
   // Playtime / profile
   const [playtime, setPlaytime] = useState<PlaytimeStore>({ games: {}, emulators: {} });
   const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
+  const [achievements, setAchievements] = useState<AchievementItem[]>([]);
+  const [achievementRank, setAchievementRank] = useState<AchievementRank>({ count: 0, total: 23, rank: "Bronze", icon: "🥉" });
   const [config, setConfig] = useState<AppConfig>({
     roms_directory: "",
     emulators_directory: "",
@@ -705,7 +739,15 @@ export default function App() {
   const [isSearchingStore, setIsSearchingStore] = useState(false);
 
   // ---- Store state ----
-  const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
+  const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm" | "myrient">("myrient");
+
+  const [myrientConsoles, setMyrientConsoles] = useState<MyrientConsole[]>([]);
+  const [selectedMyrientConsole, setSelectedMyrientConsole] = useState<MyrientConsole | null>(null);
+  const [myrientFiles, setMyrientFiles] = useState<MyrientFile[]>([]);
+  const [myrientLoading, setMyrientLoading] = useState(false);
+  const [myrientSearch, setMyrientSearch] = useState("");
+  const [myrientDownloading, setMyrientDownloading] = useState<string[]>([]);
+  const [myrientDownloadProgress, setMyrientDownloadProgress] = useState<Record<string, { progress: number; speed_bps: number; eta: number }>>({});
   // ---- Vimm's Lair state ----
   const [vimmConsoles, setVimmConsoles] = useState<VimmConsole[]>([]);
   const [selectedVimmConsole, setSelectedVimmConsole] = useState<VimmConsole | null>(null);
@@ -729,6 +771,16 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.3.0", date: "2026-05-03", changes: [
+      "🏆 Achievements: 33 succès (21 milestones + 12 cachés) avec détection en temps réel",
+      "🎖️ Badge de rang à côté de la photo de profil (Bronze → Argent → Or → Platine → Diamant)",
+      "☁️ Synchronisation cloud des achievements via Supabase",
+      "🌐 Achievements visibles sur le profil web avec rareté % et indices pour les secrets",
+      "🎮 Store Myrient: téléchargement de ROMs à l'unité (16 consoles supportées)",
+      "🔍 Recherche instantanée dans le catalogue Myrient",
+      "📊 Barre de progression pour les téléchargements Myrient",
+      "🦉 Succès cachés uniques: Oiseau de nuit, Speed Runner, Marathon, et plus"
+    ] },
     { version: "1.2.0", date: "2026-04-28", changes: [
       "📊 Gaming Profile: total playtime, launches, games played and day streak now show in the Account panel",
       "🏆 Stats: most-played game, favorite, top emulator, top console and first-played date, with a top-5 podium",
@@ -854,6 +906,9 @@ export default function App() {
       setUser(currentUser);
       if (currentUser) {
         fetchProfile(currentUser.id);
+        const provider = currentUser.app_metadata?.provider;
+        if (provider === "discord") triggerHiddenAchievement("login_discord");
+        if (provider === "google") triggerHiddenAchievement("login_google");
       } else {
         setProfile(null);
       }
@@ -973,6 +1028,7 @@ export default function App() {
       setAvatarCacheKey(Date.now().toString());
       await fetchProfile(user.id);
       showToast('Avatar updated! 📸', 'success');
+      triggerHiddenAchievement("change_avatar");
     } catch (e: any) {
       console.error("[EmuWorld] Avatar upload error:", e);
       showToast(`Upload error: ${e.message}`, 'error');
@@ -1107,6 +1163,71 @@ export default function App() {
 
   useEffect(() => { loadPlaytime(); }, [loadPlaytime]);
 
+  const loadAchievements = useCallback(async () => {
+    try {
+      const [items, rank] = await Promise.all([
+        invoke<AchievementItem[]>("get_achievements"),
+        invoke<AchievementRank>("get_achievement_rank"),
+      ]);
+      setAchievements(items);
+      setAchievementRank(rank);
+    } catch (err) {
+      console.error("Failed to load achievements:", err);
+    }
+  }, []);
+
+  useEffect(() => { loadAchievements(); }, [loadAchievements]);
+
+  const syncAchievementToCloud = useCallback(async (achievement: AchievementItem) => {
+    if (!user) return;
+    try {
+      await supabase.from("user_achievements").upsert({
+        user_id: user.id,
+        achievement_id: achievement.id,
+        unlocked_at: achievement.unlocked_at,
+      }, { onConflict: "user_id,achievement_id" });
+    } catch (err) {
+      console.error("Achievement cloud sync failed:", err);
+    }
+  }, [user]);
+
+  const triggerHiddenAchievement = useCallback(async (id: string) => {
+    try {
+      const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
+      if (result) {
+        showToast(`${result.icon} Achievement secret débloqué : ${result.name}`, "success");
+        await loadAchievements();
+        syncAchievementToCloud(result);
+      }
+    } catch (err) {
+      console.error("Hidden achievement unlock failed:", err);
+    }
+  }, [showToast, loadAchievements, syncAchievementToCloud]);
+
+  const checkAchievements = useCallback(async () => {
+    try {
+      const libraryCount = roms.length;
+      const emulatorsInstalled = installed.length;
+      const hasDownloaded = roms.length > 0;
+      const newlyUnlocked = await invoke<AchievementItem[]>("check_achievements", {
+        libraryCount,
+        emulatorsInstalled,
+        hasDownloaded,
+      });
+      if (newlyUnlocked.length > 0) {
+        for (const a of newlyUnlocked) {
+          showToast(`${a.icon} Achievement débloqué : ${a.name}`, "success");
+          syncAchievementToCloud(a);
+        }
+        await loadAchievements();
+      }
+    } catch (err) {
+      console.error("Achievement check failed:", err);
+    }
+  }, [roms.length, installed.length, showToast, loadAchievements, syncAchievementToCloud]);
+
+  useEffect(() => { checkAchievements(); }, [checkAchievements]);
+
   // Discord Rich Presence — idle pub on boot. Failures are expected when
   // Discord is not running; swallow them so the app doesn't spam toasts.
   useEffect(() => {
@@ -1154,13 +1275,13 @@ export default function App() {
           setUpdateStatus("ready");
         }
       });
-      // Relaunch the app to swap in the new binary.
+      triggerHiddenAchievement("install_update");
       await relaunch();
     } catch (err) {
       console.error("[EmuWorld] update install failed:", err);
       setUpdateStatus("error");
     }
-  }, []);
+  }, [triggerHiddenAchievement]);
 
   // ---- Cloud sync (Supabase) ----
   // Debounced upsert of the local playtime store to Supabase. Only runs when
@@ -1243,22 +1364,40 @@ export default function App() {
           scheduleCloudSync();
         }
         loadPlaytime();
-        // Back to idle pub in Discord.
         invoke("discord_set_idle").catch(() => {});
+        // Check achievements after session ends
+        setTimeout(() => checkAchievements(), 500);
+        // Hidden: speed_runner (< 30s session)
+        if (event.payload.seconds > 0 && event.payload.seconds < 30) {
+          triggerHiddenAchievement("speed_runner");
+        }
+        // Hidden: marathon (> 4h session)
+        if (event.payload.seconds >= 14400) {
+          triggerHiddenAchievement("marathon");
+        }
+        // Hidden: night_owl (2h-5h du matin)
+        const hour = new Date().getHours();
+        if (hour >= 2 && hour < 5) {
+          triggerHiddenAchievement("night_owl");
+        }
       }
     );
     return () => { unlisten.then((fn) => fn()); };
-  }, [loadPlaytime, showToast, scheduleCloudSync]);
+  }, [loadPlaytime, showToast, scheduleCloudSync, checkAchievements, triggerHiddenAchievement]);
 
   const handleToggleFavorite = useCallback(async (rom: RomFile) => {
     try {
-      await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
+      const isFav = await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
       loadPlaytime();
       scheduleCloudSync();
+      if (isFav) {
+        triggerHiddenAchievement("first_favorite");
+        setTimeout(() => checkAchievements(), 300);
+      }
     } catch (err: any) {
       showToast(`Favorite failed: ${err}`, "error");
     }
-  }, [loadPlaytime, showToast, scheduleCloudSync]);
+  }, [loadPlaytime, showToast, scheduleCloudSync, triggerHiddenAchievement, checkAchievements]);
 
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
@@ -1577,7 +1716,8 @@ export default function App() {
         storeId: rom.id,
       });
       showToast(`${rom.name} downloaded! 🎮`, "success");
-      loadData(); // This will trigger the reactive useEffect to update 'downloaded' state
+      loadData();
+      triggerHiddenAchievement("first_download");
     } catch (err: any) {
       showToast(`Download failed: ${err}`, "error");
     } finally {
@@ -1681,6 +1821,75 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [vimmSearch, selectedVimmConsole]);
 
+  // ---- Myrient ----
+  const loadMyrientConsoles = useCallback(async () => {
+    try {
+      const data = await invoke<MyrientConsole[]>("get_myrient_consoles");
+      setMyrientConsoles(data);
+    } catch (e) {
+      console.error("Failed to load Myrient consoles:", e);
+    }
+  }, []);
+
+  useEffect(() => { loadMyrientConsoles(); }, [loadMyrientConsoles]);
+
+  const handleSelectMyrientConsole = useCallback(async (c: MyrientConsole) => {
+    setSelectedMyrientConsole(c);
+    setMyrientFiles([]);
+    setMyrientSearch("");
+    setMyrientLoading(true);
+    try {
+      const data = await invoke<MyrientFile[]>("browse_myrient", {
+        consoleUrl: c.url,
+        consoleId: c.id,
+      });
+      setMyrientFiles(data);
+    } catch (e) {
+      console.error("Myrient browse failed:", e);
+    } finally {
+      setMyrientLoading(false);
+    }
+  }, []);
+
+  const handleDownloadMyrientRom = useCallback(async (file: MyrientFile) => {
+    if (myrientDownloading.includes(file.name)) return;
+    setMyrientDownloading((prev) => [...prev, file.name]);
+    try {
+      await invoke("download_myrient_rom", {
+        url: file.url,
+        console: file.console,
+        fileName: file.name,
+      });
+      showToast(`${file.name} téléchargé !`, "success");
+      await loadData();
+      triggerHiddenAchievement("first_download");
+    } catch (e: any) {
+      showToast(`Échec : ${e}`, "error");
+    } finally {
+      setMyrientDownloading((prev) => prev.filter((n) => n !== file.name));
+      setMyrientDownloadProgress((prev) => { const next = { ...prev }; delete next[file.name]; return next; });
+    }
+  }, [myrientDownloading, showToast, loadData, triggerHiddenAchievement]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<{ game: string; status: string; progress: number; speed_bps: number; eta: number }>(
+        "myrient-download-progress",
+        (event) => {
+          const { game, status, progress, speed_bps, eta } = event.payload;
+          if (status === "done") {
+            setMyrientDownloadProgress((prev) => { const next = { ...prev }; delete next[game]; return next; });
+          } else {
+            setMyrientDownloadProgress((prev) => ({ ...prev, [game]: { progress, speed_bps, eta } }));
+          }
+        }
+      );
+    })();
+    return () => { if (unlisten) unlisten(); };
+  }, []);
+
   // ---- Actions ----
   const handleInstall = async (id: string) => {
     setInstalling((prev) => [...prev, id]);
@@ -1719,6 +1928,7 @@ export default function App() {
       await invoke("clear_cover_cache");
       showToast("Cover cache cleared! Re-scanning...", "success");
       await loadData();
+      triggerHiddenAchievement("clear_covers");
     } catch (e: any) {
       showToast(`Error: ${e.message}`, "error");
     }
@@ -1778,6 +1988,7 @@ export default function App() {
     if (selected) {
       const newConfig = { ...config, [field]: selected as string };
       handleSaveConfig(newConfig);
+      if (field === "roms_directory") triggerHiddenAchievement("change_roms_dir");
     }
   };
 
@@ -2141,6 +2352,9 @@ export default function App() {
                   ) : (
                     <UserIcon size={20} />
                   )}
+                  <span className="sidebar__user-badge" title={`${achievementRank.rank} — ${achievementRank.count}/${achievementRank.total}`}>
+                    {achievementRank.icon}
+                  </span>
                 </div>
                 <div className="sidebar__user-details">
                   <div className="sidebar__user-name">{profile?.username || user.email?.split('@')[0] || 'User'}</div>
@@ -2442,6 +2656,12 @@ export default function App() {
               {page === "store" && (
                 <div className="store-source-toggle">
                   <button
+                    className={`store-source-toggle__btn ${storeMode === "myrient" ? "store-source-toggle__btn--active" : ""}`}
+                    onClick={() => setStoreMode("myrient")}
+                  >
+                    🎯 Jeux à l'unité (Myrient)
+                  </button>
+                  <button
                     className={`store-source-toggle__btn ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("vimm")}
                   >
@@ -2453,6 +2673,126 @@ export default function App() {
                   >
                     📦 Complete packs (RetroGameSets)
                   </button>
+                </div>
+              )}
+
+              {page === "store" && storeMode === "myrient" && (
+                <div className="rgs-page">
+                  <div className="rgs-breadcrumb">
+                    <button
+                      className={`rgs-breadcrumb__item ${!selectedMyrientConsole ? "rgs-breadcrumb__item--active" : ""}`}
+                      onClick={() => { setSelectedMyrientConsole(null); setMyrientFiles([]); setMyrientSearch(""); }}
+                    >
+                      <Globe size={14} /> Toutes les consoles
+                    </button>
+                    {selectedMyrientConsole && (
+                      <>
+                        <ChevronRight size={14} className="rgs-breadcrumb__sep" />
+                        <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
+                          {selectedMyrientConsole.name}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {selectedMyrientConsole && (
+                    <div className="rgs-search-header">
+                      <div className="search-bar search-bar--glow">
+                        <Search size={18} className="search-bar__icon" />
+                        <input
+                          type="text"
+                          className="search-bar__input"
+                          placeholder={`Rechercher sur ${selectedMyrientConsole.name}...`}
+                          value={myrientSearch}
+                          onChange={(e) => setMyrientSearch(e.target.value)}
+                          autoFocus
+                        />
+                        {myrientLoading && <RefreshCw size={14} className="animate-spin text-cyan" />}
+                      </div>
+                    </div>
+                  )}
+
+                  {!selectedMyrientConsole ? (
+                    <div className="rgs-console-grid">
+                      {myrientConsoles.map((c) => (
+                        <motion.div
+                          key={c.id}
+                          className="rgs-console-card"
+                          whileHover={{ scale: 1.03, y: -4 }}
+                          whileTap={{ scale: 0.97 }}
+                          onClick={() => handleSelectMyrientConsole(c)}
+                        >
+                          <div className="rgs-console-card__img">
+                            <div className="vimm-console-card__fallback">
+                              <ConsoleLogo name={c.target_console} />
+                            </div>
+                          </div>
+                          <div className="rgs-console-card__info">
+                            <div className="rgs-console-card__name">{c.name}</div>
+                            <div className="rgs-console-card__meta">{c.manufacturer}</div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : myrientLoading ? (
+                    <div className="empty-state">
+                      <RefreshCw size={48} className="animate-spin" />
+                      <h3 className="empty-state__title">Chargement de {selectedMyrientConsole.name}...</h3>
+                    </div>
+                  ) : (
+                    (() => {
+                      const filtered = myrientFiles.filter((f) =>
+                        !myrientSearch.trim() || f.name.toLowerCase().includes(myrientSearch.toLowerCase())
+                      );
+                      return filtered.length === 0 ? (
+                        <div className="empty-state">
+                          <div className="empty-state__icon">🔍</div>
+                          <div className="empty-state__title">Aucun résultat</div>
+                          {myrientSearch && (
+                            <p className="empty-state__text">Aucun jeu ne correspond à "{myrientSearch}"</p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="rgs-folder-view">
+                          <div className="rgs-folder-header">
+                            <div className="rgs-folder-count">{filtered.length} fichier{filtered.length > 1 ? "s" : ""}</div>
+                          </div>
+                          <div className="rgs-files-grid">
+                            {filtered.map((file, idx) => {
+                              const prog = myrientDownloadProgress[file.name];
+                              const isDownloading = myrientDownloading.includes(file.name);
+                              return (
+                                <motion.div
+                                  key={file.url}
+                                  className="rgs-file-row"
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: Math.min(idx * 0.005, 0.3) }}
+                                >
+                                  <div className="rgs-file-name" title={file.name}>{file.name}</div>
+                                  <div className="rgs-file-size">{file.size}</div>
+                                  {isDownloading && prog ? (
+                                    <div className="myrient-progress">
+                                      <div className="myrient-progress__bar" style={{ width: `${prog.progress}%` }} />
+                                      <span className="myrient-progress__label">{prog.progress}%</span>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      className="btn btn--primary btn--sm"
+                                      disabled={isDownloading}
+                                      onClick={() => handleDownloadMyrientRom(file)}
+                                    >
+                                      {isDownloading ? "..." : "Télécharger"}
+                                    </button>
+                                  )}
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               )}
 
@@ -3208,6 +3548,25 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* Achievements Section */}
+                <div className="account-modal__section">
+                  <label className="account-modal__label">
+                    Achievements {achievementRank.icon} {achievementRank.rank} — {achievementRank.count}/{achievementRank.total}
+                  </label>
+                  <div className="achievements-grid">
+                    {achievements.map((a) => (
+                      <div
+                        key={a.id}
+                        className={`achievement-badge ${a.unlocked ? "achievement-badge--unlocked" : ""} ${a.hidden && !a.unlocked ? "achievement-badge--hidden" : ""}`}
+                        title={a.hidden && !a.unlocked ? "Achievement secret — ???" : a.unlocked ? `${a.name} — ${a.description}\nDébloqué le ${a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString("fr-FR") : ""}` : `${a.name} — ${a.description}`}
+                      >
+                        <span className="achievement-badge__icon">{a.hidden && !a.unlocked ? "❓" : a.icon}</span>
+                        <span className="achievement-badge__name">{a.hidden && !a.unlocked ? "???" : a.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Username Section */}
                 <div className="account-modal__section">

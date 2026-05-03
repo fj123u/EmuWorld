@@ -12,6 +12,7 @@ use std::io::Write;
 mod emulators;
 mod playtime;
 mod discord_rpc;
+mod achievements;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -2236,6 +2237,205 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
 }
 
 // ============================================================
+// ============================================================
+// MYRIENT — individual ROM downloads from myrient.erista.me
+// Apache-indexed HTTP listing, one file per ROM, No-Intro / Redump.
+// ============================================================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MyrientConsole {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+    pub manufacturer: String,
+    pub target_console: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MyrientFile {
+    pub name: String,
+    pub url: String,
+    pub size: String,
+    pub console: String,
+}
+
+fn myrient_consoles_catalog() -> Vec<MyrientConsole> {
+    let entries: &[(&str, &str, &str, &str, &str)] = &[
+        // (id, name, url, manufacturer, target_console)
+        ("nes",        "NES",               "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20Entertainment%20System%20%28Headered%29/",         "Nintendo", "NES"),
+        ("snes",       "Super Nintendo",    "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/",                   "Nintendo", "Super Nintendo"),
+        ("n64",        "Nintendo 64",       "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%2064%20%28BigEndian%29/",                             "Nintendo", "Nintendo 64"),
+        ("gb",         "Game Boy",          "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy/",                                                  "Nintendo", "Game Boy"),
+        ("gbc",        "Game Boy Color",    "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Color/",                                          "Nintendo", "Game Boy Color"),
+        ("gba",        "Game Boy Advance",  "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Game%20Boy%20Advance/",                                        "Nintendo", "Game Boy Advance"),
+        ("nds",        "Nintendo DS",       "https://myrient.erista.me/files/No-Intro/Nintendo%20-%20Nintendo%20DS%20%28Decrypted%29/",                             "Nintendo", "Nintendo DS"),
+        ("gamecube",   "GameCube",          "https://myrient.erista.me/files/Redump/Nintendo%20-%20GameCube%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",               "Nintendo", "GameCube"),
+        ("wii",        "Wii",               "https://myrient.erista.me/files/Redump/Nintendo%20-%20Wii%20-%20NKit%20RVZ%20%5Bzstd-19-128k%5D/",                    "Nintendo", "Wii"),
+        ("ps1",        "PlayStation 1",     "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation/",                                                       "Sony",     "PlayStation 1"),
+        ("ps2",        "PlayStation 2",     "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%202/",                                                   "Sony",     "PlayStation 2"),
+        ("psp",        "PSP",               "https://myrient.erista.me/files/Redump/Sony%20-%20PlayStation%20Portable/",                                            "Sony",     "PSP"),
+        ("megadrive",  "Mega Drive",        "https://myrient.erista.me/files/No-Intro/Sega%20-%20Mega%20Drive%20-%20Genesis/",                                      "Sega",     "Mega Drive"),
+        ("mastersys",  "Master System",     "https://myrient.erista.me/files/No-Intro/Sega%20-%20Master%20System%20-%20Mark%20III/",                                "Sega",     "Master System"),
+        ("dreamcast",  "Dreamcast",         "https://myrient.erista.me/files/Redump/Sega%20-%20Dreamcast/",                                                         "Sega",     "Dreamcast"),
+        ("saturn",     "Saturn",            "https://myrient.erista.me/files/Redump/Sega%20-%20Saturn/",                                                            "Sega",     "Saturn"),
+    ];
+    entries.iter().map(|(id, name, url, manuf, target)| MyrientConsole {
+        id: id.to_string(),
+        name: name.to_string(),
+        url: url.to_string(),
+        manufacturer: manuf.to_string(),
+        target_console: target.to_string(),
+    }).collect()
+}
+
+#[tauri::command]
+fn get_myrient_consoles() -> Result<Vec<MyrientConsole>, String> {
+    Ok(myrient_consoles_catalog())
+}
+
+#[tauri::command]
+async fn browse_myrient(console_url: String, console_id: String) -> Result<Vec<MyrientFile>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let response = client.get(&console_url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Myrient returned HTTP {}", response.status()));
+    }
+    let html = response.text().await.map_err(|e| e.to_string())?;
+
+    use scraper::{Html, Selector};
+    let document = Html::parse_document(&html);
+
+    // Apache index: table rows with <td><a href="...">name</a></td> <td>date</td> <td>size</td>
+    let row_sel = Selector::parse("table tr").map_err(|_| "Invalid row selector")?;
+    let link_sel = Selector::parse("td a").map_err(|_| "Invalid link selector")?;
+    let td_sel  = Selector::parse("td").map_err(|_| "Invalid td selector")?;
+
+    let catalog = myrient_consoles_catalog();
+    let target_console = catalog.iter()
+        .find(|c| c.id == console_id)
+        .map(|c| c.target_console.clone())
+        .unwrap_or_default();
+
+    let mut files = Vec::new();
+    for row in document.select(&row_sel) {
+        let tds: Vec<_> = row.select(&td_sel).collect();
+        if tds.len() < 2 { continue; }
+
+        let link = match row.select(&link_sel).next() { Some(l) => l, None => continue };
+        let href = link.value().attr("href").unwrap_or("");
+
+        // Skip directories (end with "/") and parent link
+        if href.ends_with('/') || href == "../" || href.starts_with("?") || href.is_empty() { continue; }
+
+        let name = link.text().collect::<Vec<_>>().join("").trim().to_string();
+        if name.is_empty() { continue; }
+
+        let size = tds.get(2)
+            .map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string())
+            .unwrap_or_default();
+
+        // Build absolute URL (href is just the filename, already URL-encoded by Apache)
+        let file_url = if href.starts_with("http") {
+            href.to_string()
+        } else {
+            format!("{}{}", console_url, href)
+        };
+
+        files.push(MyrientFile {
+            name,
+            url: file_url,
+            size,
+            console: target_console.clone(),
+        });
+    }
+
+    Ok(files)
+}
+
+#[tauri::command]
+async fn download_myrient_rom(
+    app_handle: tauri::AppHandle,
+    url: String,
+    console: String,
+    file_name: String,
+) -> Result<String, String> {
+    use tauri::Emitter;
+    let config = get_config();
+    let roms_dir = std::path::PathBuf::from(&config.roms_directory);
+    let dest_dir = roms_dir.join(&console);
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
+    }
+
+    let dest = dest_dir.join(&file_name);
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut response = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", response.status()));
+    }
+
+    let total_size = response.content_length().unwrap_or(0);
+    let mut downloaded_bytes = 0u64;
+    let mut last_emit = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
+
+    let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    use std::io::Write;
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded_bytes += chunk.len() as u64;
+
+        if last_emit.elapsed().as_millis() >= 400 {
+            let progress = if total_size > 0 {
+                (downloaded_bytes as f64 / total_size as f64 * 100.0) as u32
+            } else { 0 };
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let speed_bps = if elapsed > 0.0 { downloaded_bytes as f64 / elapsed } else { 0.0 };
+            let eta = if speed_bps > 0.0 && total_size > downloaded_bytes {
+                ((total_size - downloaded_bytes) as f64 / speed_bps) as u64
+            } else { 0 };
+            let _ = app_handle.emit("myrient-download-progress", serde_json::json!({
+                "game": file_name,
+                "status": "downloading",
+                "progress": progress,
+                "downloaded_bytes": downloaded_bytes,
+                "total_bytes": total_size,
+                "speed_bps": speed_bps as u64,
+                "eta": eta
+            }));
+            last_emit = std::time::Instant::now();
+        }
+    }
+    drop(file);
+
+    // Auto-extract ZIP
+    if file_name.to_lowercase().ends_with(".zip") || is_zip_file(&dest) {
+        match extract_rom_zip(&dest, &dest_dir) {
+            Ok(_) => { let _ = fs::remove_file(&dest); }
+            Err(_) => {}
+        }
+    }
+
+    let _ = app_handle.emit("myrient-download-progress", serde_json::json!({
+        "game": file_name,
+        "status": "done",
+        "progress": 100
+    }));
+
+    Ok(format!("Downloaded to {}", dest_dir.display()))
+}
+
 // VIMM'S LAIR — individual ROM downloads from vimm.net
 // Classic vault, one ROM per game, box art for each entry.
 // Downloads happen in the system browser (anti-bot on direct POST).
@@ -2494,6 +2694,60 @@ fn clear_cover_cache() -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================
+// ACHIEVEMENTS — in-app progression badges
+// ============================================================
+
+#[tauri::command]
+fn get_achievements() -> Vec<achievements::Achievement> {
+    achievements::get_all_with_status()
+}
+
+#[tauri::command]
+fn get_achievement_rank() -> serde_json::Value {
+    let count = achievements::unlocked_count();
+    serde_json::json!({
+        "count": count,
+        "total": achievements::all_achievements().len(),
+        "rank": achievements::rank_label(count),
+        "icon": achievements::rank_icon(count),
+    })
+}
+
+#[tauri::command]
+fn check_achievements(
+    library_count: u32,
+    emulators_installed: u32,
+    has_downloaded: bool,
+) -> Vec<achievements::Achievement> {
+    let stats = playtime::compute_stats();
+    let consoles_played = {
+        let store = playtime::load();
+        let mut consoles: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for entry in store.games.values() {
+            if entry.seconds > 0 {
+                consoles.insert(entry.console.clone());
+            }
+        }
+        consoles.len() as u32
+    };
+    achievements::check_and_unlock(
+        library_count,
+        stats.total_seconds,
+        stats.total_launches,
+        consoles_played,
+        stats.favorite_count,
+        emulators_installed,
+        stats.streak_days,
+        has_downloaded,
+    )
+}
+
+#[tauri::command]
+fn unlock_achievement(id: String) -> Option<achievements::Achievement> {
+    achievements::unlock_single(&id)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(discord_rpc::RpcState::new())
@@ -2555,6 +2809,9 @@ pub fn run() {
             search_rgs,
             scrape_1fichier_dir,
             finalize_rgs_import,
+            get_myrient_consoles,
+            browse_myrient,
+            download_myrient_rom,
             get_vimm_consoles,
             browse_vimm,
             search_vimm,
@@ -2564,6 +2821,10 @@ pub fn run() {
             clear_playtime,
             overwrite_playtime,
             clear_cover_cache,
+            get_achievements,
+            get_achievement_rank,
+            check_achievements,
+            unlock_achievement,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

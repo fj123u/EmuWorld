@@ -1257,6 +1257,7 @@ body {
 }
 
 .sidebar__user-avatar {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: 14px;
@@ -1266,7 +1267,7 @@ body {
   justify-content: center;
   color: #fff;
   font-weight: 900;
-  overflow: hidden;
+  overflow: visible;
   flex-shrink: 0;
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
@@ -1275,6 +1276,7 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 14px;
 }
 
 .sidebar__user-details {
@@ -2961,4 +2963,101 @@ body {
 .public-profile-toggle__view {
   margin-top: 0.5rem;
   align-self: flex-start;
+}
+
+/* Myrient download progress inline bar */
+.myrient-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+}
+
+.myrient-progress__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent-blue);
+  transition: width 0.3s ease;
+  flex: 1;
+}
+
+.myrient-progress__label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Achievement badge next to avatar in sidebar */
+.sidebar__user-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -4px;
+  font-size: 0.7rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--bg-primary);
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Achievements grid in account modal */
+.achievements-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.achievement-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  opacity: 0.35;
+  filter: grayscale(1);
+  transition: all 0.2s ease;
+}
+
+.achievement-badge--unlocked {
+  opacity: 1;
+  filter: none;
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 8%, var(--bg-primary));
+}
+
+.achievement-badge--unlocked:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.2);
+}
+
+.achievement-badge__icon {
+  font-size: 1.4rem;
+}
+
+.achievement-badge__name {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.achievement-badge--unlocked .achievement-badge__name {
+  color: var(--text-primary);
+}
+
+.achievement-badge--hidden {
+  opacity: 0.25;
+  filter: grayscale(1) blur(0.5px);
+  border-style: dashed;
 }
