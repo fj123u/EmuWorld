@@ -848,13 +848,13 @@ export default function App() {
   ]);
 
   // ---- Gamepad / Controller state ----
-  const [gamepads, setGamepads] = useState<(Gamepad | null)[]>([]);
   const [gamepadConfig, setGamepadConfig] = useState<GamepadConfig>({
     selectedIndex: 0,
     deadzone: 0.15,
     mappings: [...DEFAULT_GAMEPAD_MAPPINGS],
   });
   const [gamepadActive, setGamepadActive] = useState(false);
+  const [gamepadName, setGamepadName] = useState("");
   const [focusIndex, setFocusIndex] = useState(0);
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
   const [gamepadContextMenu, setGamepadContextMenu] = useState<{ romPath: string; x: number; y: number } | null>(null);
@@ -1300,76 +1300,11 @@ export default function App() {
 
   useEffect(() => { checkAchievements(); }, [checkAchievements]);
 
-  // ---- Gamepad detection (runs once, never re-creates) ----
-  const gamepadActiveRef = useRef(false);
-  useEffect(() => {
-    const scan = () => {
-      const pads = navigator.getGamepads();
-      const connected = [...pads].filter(Boolean);
-      const isActive = connected.length > 0;
-
-      if (isActive && !ghostDetectedRef.current) {
-        const gp = connected[0]!;
-        ghostButtonsRef.current = new Set(
-          gp.buttons.map((b, i) => b.pressed ? i : -1).filter(i => i >= 0)
-        );
-        ghostDetectedRef.current = true;
-        lastGamepadButtonsRef.current = gp.buttons.map(b => b.pressed);
-      }
-
-      if (isActive !== gamepadActiveRef.current) {
-        gamepadActiveRef.current = isActive;
-        setGamepadActive(isActive);
-      }
-      if (isActive) {
-        setGamepads([...pads]);
-      }
-    };
-
-    const handleConnect = () => {
-      ghostDetectedRef.current = false;
-      ghostButtonsRef.current.clear();
-      scan();
-    };
-    const handleDisconnect = () => {
-      ghostDetectedRef.current = false;
-      ghostButtonsRef.current.clear();
-      lastGamepadButtonsRef.current = [];
-      scan();
-    };
-
-    window.addEventListener("gamepadconnected", handleConnect);
-    window.addEventListener("gamepaddisconnected", handleDisconnect);
-    window.addEventListener("pointerdown", scan);
-    window.addEventListener("keydown", scan);
-
-    const pollId = setInterval(scan, 300);
-    scan();
-
-    return () => {
-      window.removeEventListener("gamepadconnected", handleConnect);
-      window.removeEventListener("gamepaddisconnected", handleDisconnect);
-      window.removeEventListener("pointerdown", scan);
-      window.removeEventListener("keydown", scan);
-      clearInterval(pollId);
-    };
-  }, []);
-
-  // Tick for live controller display
-  useEffect(() => {
-    if (page !== "controller" || !gamepadActive) return;
-    const id = setInterval(() => setGamepadTick(t => t + 1), 50);
-    return () => clearInterval(id);
-  }, [page, gamepadActive]);
-
   // Load gamepad config from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("emuworld_gamepad_config");
     if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setGamepadConfig(parsed);
-      } catch { /* ignore */ }
+      try { setGamepadConfig(JSON.parse(saved)); } catch { /* ignore */ }
     }
   }, []);
 
@@ -1378,46 +1313,77 @@ export default function App() {
     localStorage.setItem("emuworld_gamepad_config", JSON.stringify(gamepadConfig));
   }, [gamepadConfig]);
 
-  // Unified gamepad input polling via setInterval (more reliable than rAF in WebView2)
+  // === SINGLE gamepad loop: detection + input + live display ===
+  // Runs once on mount, never tears down. Uses refs for all mutable state.
   const gamepadConfigRef = useRef(gamepadConfig);
   gamepadConfigRef.current = gamepadConfig;
   const remappingActionRef = useRef(remappingAction);
   remappingActionRef.current = remappingAction;
+  const pageRef = useRef(page);
+  pageRef.current = page;
 
   useEffect(() => {
-    if (!gamepadActive) return;
-
     const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "settings", "changelogs"];
     let navCooldown = 0;
+    let wasActive = false;
+    let tick = 0;
 
     const id = setInterval(() => {
       const config = gamepadConfigRef.current;
       const pads = navigator.getGamepads();
-      const gp = pads[config.selectedIndex];
-      if (!gp) return;
+      const gp = pads[config.selectedIndex] ?? [...pads].find(Boolean);
+      const isActive = gp != null && gp.connected;
 
-      const currentButtons = gp.buttons.map(b => b.pressed);
+      // Detection: update state only on transitions
+      if (isActive && !wasActive) {
+        wasActive = true;
+        setGamepadActive(true);
+        setGamepadName(gp!.id);
+        // Snapshot ghost buttons
+        ghostButtonsRef.current = new Set(
+          gp!.buttons.map((b, i) => b.pressed ? i : -1).filter(i => i >= 0)
+        );
+        lastGamepadButtonsRef.current = gp!.buttons.map(b => b.pressed);
+        return; // skip this tick to let ghost snapshot settle
+      }
+      if (!isActive && wasActive) {
+        wasActive = false;
+        setGamepadActive(false);
+        setGamepadName("");
+        ghostButtonsRef.current.clear();
+        lastGamepadButtonsRef.current = [];
+        return;
+      }
+      if (!isActive) return;
+
+      // Live display tick (controller page only)
+      tick++;
+      if (tick % 3 === 0 && pageRef.current === "controller") {
+        setGamepadTick(t => t + 1);
+      }
+
+      const currentButtons = gp!.buttons.map(b => b.pressed);
       const prev = lastGamepadButtonsRef.current;
       const ghosts = ghostButtonsRef.current;
 
-      // If a ghost button is finally released, remove it from the ghost set
+      // Release ghost buttons when unpressed
       for (let i = 0; i < currentButtons.length; i++) {
         if (!currentButtons[i] && ghosts.has(i)) ghosts.delete(i);
       }
 
-      // justPressed = rising edge, excluding ghost buttons
+      // Rising edge, excluding ghosts
       const justPressed = currentButtons.map((pressed, i) =>
         pressed && !(prev[i] ?? false) && !ghosts.has(i)
       );
 
-      // Handle remap mode
+      // Remap mode
       if (remappingActionRef.current) {
         for (let i = 0; i < currentButtons.length; i++) {
           if (justPressed[i]) {
             const action = remappingActionRef.current;
-            setGamepadConfig(prev => ({
-              ...prev,
-              mappings: prev.mappings.map(m =>
+            setGamepadConfig(c => ({
+              ...c,
+              mappings: c.mappings.map(m =>
                 m.action === action ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
               ),
             }));
@@ -1429,21 +1395,21 @@ export default function App() {
         return;
       }
 
-      // Navigation
+      // Actions
       const getAction = (action: string) => {
         const mapping = config.mappings.find(m => m.action === action);
         return mapping ? justPressed[mapping.buttonIndex] ?? false : false;
       };
 
-      // D-pad (rising edge)
+      // D-pad
       const dpadDown = justPressed[13] ?? false;
       const dpadUp = justPressed[12] ?? false;
       const dpadRight = justPressed[15] ?? false;
       const dpadLeft = justPressed[14] ?? false;
 
-      // Stick: allow continuous movement with cooldown (every 150ms while held)
-      const rawX = gp.axes[0] ?? 0;
-      const rawY = gp.axes[1] ?? 0;
+      // Stick with cooldown
+      const rawX = gp!.axes[0] ?? 0;
+      const rawY = gp!.axes[1] ?? 0;
       const stickX = Math.abs(rawX) > config.deadzone ? rawX : 0;
       const stickY = Math.abs(rawY) > config.deadzone ? rawY : 0;
 
@@ -1464,8 +1430,8 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
-      const FOCUSABLE_SELECTOR = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
-      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      const FOCUSABLE = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
+      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE);
       if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
         const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
         if (moveDown) setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
@@ -1474,13 +1440,13 @@ export default function App() {
         if (moveLeft) setFocusIndex(p => Math.max(p - 1, 0));
       }
 
-      // A = confirm / click
+      // A = confirm
       if (getAction("confirm")) {
-        const el = document.querySelector<HTMLElement>(FOCUSABLE_SELECTOR.split(", ").map(s => s + ".gamepad-focused").join(", "));
+        const el = document.querySelector<HTMLElement>(FOCUSABLE.split(", ").map(s => s + ".gamepad-focused").join(", "));
         if (el) el.click();
       }
 
-      // B (button 1) = context menu on game cards
+      // B = context menu on game cards
       if (justPressed[1]) {
         const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
         if (el) {
@@ -1491,6 +1457,8 @@ export default function App() {
           }
         }
       }
+
+      // LB/RB = switch page
       if (getAction("prevPage")) {
         setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
       }
@@ -1506,7 +1474,7 @@ export default function App() {
     }, 50);
 
     return () => clearInterval(id);
-  }, [gamepadActive]);
+  }, []);
 
   // Apply focus highlight
   useEffect(() => {
@@ -3757,7 +3725,7 @@ export default function App() {
                   {/* Controller selection */}
                   <div className="settings__group">
                     <div className="settings__group-title"><Gamepad2 size={16} /> Manette active</div>
-                    {gamepads.filter(Boolean).length === 0 ? (
+                    {!gamepadActive ? (
                       <div className="controller-empty">
                         <div className="controller-empty__icon">🎮</div>
                         <p className="controller-empty__text">Connectez une manette pour commencer</p>
@@ -3765,18 +3733,12 @@ export default function App() {
                       </div>
                     ) : (
                       <div className="controller-select">
-                        {gamepads.filter(Boolean).map((gp, i) => gp && (
-                          <button
-                            key={gp.index}
-                            className={`controller-select__item ${gamepadConfig.selectedIndex === gp.index ? "controller-select__item--active" : ""}`}
-                            onClick={() => setGamepadConfig(prev => ({ ...prev, selectedIndex: gp.index }))}
-                          >
-                            <span className="controller-select__icon">🎮</span>
-                            <span className="controller-select__name">{gp.id}</span>
-                            <span className="controller-select__index">Player {i + 1}</span>
-                            {gamepadConfig.selectedIndex === gp.index && <Check size={16} className="controller-select__check" />}
-                          </button>
-                        ))}
+                        <button className="controller-select__item controller-select__item--active">
+                          <span className="controller-select__icon">🎮</span>
+                          <span className="controller-select__name">{gamepadName}</span>
+                          <span className="controller-select__index">Player 1</span>
+                          <Check size={16} className="controller-select__check" />
+                        </button>
                       </div>
                     )}
                   </div>
