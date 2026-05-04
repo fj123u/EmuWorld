@@ -1300,22 +1300,27 @@ export default function App() {
   useEffect(() => { checkAchievements(); }, [checkAchievements]);
 
   // ---- Gamepad polling & navigation ----
+  // WebView2 doesn't always fire gamepadconnected (especially Bluetooth).
+  // Poll navigator.getGamepads() every 500ms to detect connections reliably.
   useEffect(() => {
     const handleConnect = () => setGamepads([...navigator.getGamepads()]);
     const handleDisconnect = () => setGamepads([...navigator.getGamepads()]);
     window.addEventListener("gamepadconnected", handleConnect);
     window.addEventListener("gamepaddisconnected", handleDisconnect);
-    setGamepads([...navigator.getGamepads()]);
+
+    const pollId = setInterval(() => {
+      const pads = navigator.getGamepads();
+      const connected = pads.filter(Boolean);
+      setGamepads([...pads]);
+      setGamepadActive(connected.length > 0);
+    }, 500);
+
     return () => {
       window.removeEventListener("gamepadconnected", handleConnect);
       window.removeEventListener("gamepaddisconnected", handleDisconnect);
+      clearInterval(pollId);
     };
   }, []);
-
-  useEffect(() => {
-    const connectedPads = gamepads.filter(Boolean);
-    setGamepadActive(connectedPads.length > 0);
-  }, [gamepads]);
 
   // Tick for live controller display
   useEffect(() => {
