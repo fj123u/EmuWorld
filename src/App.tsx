@@ -1390,10 +1390,10 @@ export default function App() {
 
       let stickMoveDown = false, stickMoveUp = false, stickMoveRight = false, stickMoveLeft = false;
       if (navCooldown <= 0) {
-        if (stickY > 0.4) { stickMoveDown = true; navCooldown = 12; }
-        else if (stickY < -0.4) { stickMoveUp = true; navCooldown = 12; }
-        if (stickX > 0.4) { stickMoveRight = true; navCooldown = 12; }
-        else if (stickX < -0.4) { stickMoveLeft = true; navCooldown = 12; }
+        if (stickY > 0.4) { stickMoveDown = true; navCooldown = 8; }
+        else if (stickY < -0.4) { stickMoveUp = true; navCooldown = 8; }
+        if (stickX > 0.4) { stickMoveRight = true; navCooldown = 8; }
+        else if (stickX < -0.4) { stickMoveLeft = true; navCooldown = 8; }
       } else if (Math.abs(stickX) > 0.4 || Math.abs(stickY) > 0.4) {
         navCooldown--;
       } else {
@@ -1406,22 +1406,46 @@ export default function App() {
       const moveLeft = dpadLeft || stickMoveLeft;
 
       if (moveDown || moveUp || moveRight || moveLeft) {
-        const FOCUSABLE = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
-        const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE);
-        if (focusables.length > 0) {
-          const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
+        const SIDEBAR_SEL = ".sidebar__item";
+        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row";
+        const sidebarItems = document.querySelectorAll<HTMLElement>(SIDEBAR_SEL);
+        const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_SEL);
+        const allItems = [...sidebarItems, ...contentItems];
+
+        if (allItems.length > 0) {
           let idx = focusIndexRef.current;
-          const currentRow = Math.floor(idx / cols);
-          if (moveDown) idx = Math.min(idx + cols, focusables.length - 1);
-          if (moveUp) idx = Math.max(idx - cols, 0);
-          if (moveRight) {
-            const rowEnd = (currentRow + 1) * cols - 1;
-            idx = Math.min(idx + 1, Math.min(rowEnd, focusables.length - 1));
+          const inSidebar = idx < sidebarItems.length;
+
+          if (inSidebar) {
+            // In sidebar: up/down moves within sidebar, right jumps to content
+            if (moveDown) idx = Math.min(idx + 1, sidebarItems.length - 1);
+            if (moveUp) idx = Math.max(idx - 1, 0);
+            if (moveRight && contentItems.length > 0) idx = sidebarItems.length; // first content item
+          } else {
+            // In content: free movement with left/right + up/down by row
+            const contentIdx = idx - sidebarItems.length;
+            const firstContent = contentItems[0];
+            const cols = firstContent ? Math.max(1, Math.round((firstContent.parentElement?.clientWidth ?? 300) / Math.max(1, firstContent.clientWidth + 16))) : 1;
+            let newContentIdx = contentIdx;
+
+            if (moveDown) newContentIdx = Math.min(contentIdx + cols, contentItems.length - 1);
+            if (moveUp) newContentIdx = Math.max(contentIdx - cols, 0);
+            if (moveRight) newContentIdx = Math.min(contentIdx + 1, contentItems.length - 1);
+            if (moveLeft) {
+              if (contentIdx === 0 || contentIdx % cols === 0) {
+                // At left edge of content → go back to sidebar
+                idx = Math.min(Math.floor(contentIdx / cols), sidebarItems.length - 1);
+                focusIndexRef.current = idx;
+                setFocusIndex(idx);
+                lastGamepadButtonsRef.current = [...buttons];
+                return;
+              }
+              newContentIdx = contentIdx - 1;
+            }
+            idx = sidebarItems.length + newContentIdx;
           }
-          if (moveLeft) {
-            const rowStart = currentRow * cols;
-            idx = Math.max(idx - 1, rowStart);
-          }
+
+          idx = Math.max(0, Math.min(idx, allItems.length - 1));
           focusIndexRef.current = idx;
           setFocusIndex(idx);
         }
@@ -1433,15 +1457,23 @@ export default function App() {
         if (el) el.click();
       }
 
-      // B = context menu on game cards
+      // B = go back in navigation
       if (justPressed[1]) {
-        const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
-        if (el) {
-          const rect = el.getBoundingClientRect();
-          const romPath = el.getAttribute("data-rom-path") ?? "";
-          if (romPath) {
-            setGamepadContextMenu({ romPath, x: rect.left + rect.width / 2, y: rect.top });
-          }
+        if (document.querySelector(".account-overlay")) {
+          // Close modal
+          const closeBtn = document.querySelector<HTMLElement>(".account-modal__close");
+          if (closeBtn) closeBtn.click();
+        } else {
+          // Navigate back: clear console filter, or go to catalog
+          setConsoleFilter(prev => {
+            if (prev) return null;
+            setCategoryFilter(cf => {
+              if (cf) return null;
+              setPage(p => p !== "catalog" ? "catalog" : p);
+              return cf;
+            });
+            return prev;
+          });
         }
       }
 
@@ -1466,10 +1498,11 @@ export default function App() {
   const focusIndexRef = useRef(focusIndex);
   focusIndexRef.current = focusIndex;
   useEffect(() => {
-    const FOCUSABLE_SELECTOR = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
     const applyFocus = () => {
-      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-      focusables.forEach((el, i) => {
+      const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
+      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row");
+      const allItems = [...sidebarItems, ...contentItems];
+      allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
           el.classList.add("gamepad-focused");
           el.scrollIntoView({ block: "nearest", behavior: "smooth" });
