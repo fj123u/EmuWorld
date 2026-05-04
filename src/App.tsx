@@ -860,6 +860,7 @@ export default function App() {
   const [focusIndex, setFocusIndex] = useState(0);
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
   const [gamepadContextMenu, setGamepadContextMenu] = useState<{ type: "rom"; romPath: string; x: number; y: number } | { type: "emu"; emuId: string; x: number; y: number } | null>(null);
+  const [gamepadKeyboard, setGamepadKeyboard] = useState<{ inputEl: HTMLInputElement; keyIdx: number } | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
   const gamepadActiveRef = useRef(false);
@@ -1323,7 +1324,16 @@ export default function App() {
   pageRef.current = page;
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
+  const gamepadKeyboardRef = useRef(gamepadKeyboard);
+  gamepadKeyboardRef.current = gamepadKeyboard;
   const remapReadyRef = useRef(false);
+  const VIRTUAL_KB_KEYS = [
+    "a","b","c","d","e","f","g","h","i","j",
+    "k","l","m","n","o","p","q","r","s","t",
+    "u","v","w","x","y","z","0","1","2","3",
+    "4","5","6","7","8","9"," ","⌫","OK",
+  ];
+  const VIRTUAL_KB_COLS = 10;
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
@@ -1416,6 +1426,47 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
+      // Virtual keyboard navigation
+      if (gamepadKeyboardRef.current) {
+        const kb = gamepadKeyboardRef.current;
+        let keyIdx = kb.keyIdx;
+        const cols = VIRTUAL_KB_COLS;
+        if (moveRight) keyIdx = Math.min(keyIdx + 1, VIRTUAL_KB_KEYS.length - 1);
+        if (moveLeft) keyIdx = Math.max(keyIdx - 1, 0);
+        if (moveDown) keyIdx = Math.min(keyIdx + cols, VIRTUAL_KB_KEYS.length - 1);
+        if (moveUp) keyIdx = Math.max(keyIdx - cols, 0);
+        if (keyIdx !== kb.keyIdx) {
+          setGamepadKeyboard({ ...kb, keyIdx });
+        }
+        // A = type key
+        if (getAction("confirm")) {
+          const key = VIRTUAL_KB_KEYS[keyIdx];
+          if (key === "⌫") {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+            nativeInputValueSetter.call(kb.inputEl, kb.inputEl.value.slice(0, -1));
+            kb.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          } else if (key === "OK") {
+            setGamepadKeyboard(null);
+          } else {
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+            nativeInputValueSetter.call(kb.inputEl, kb.inputEl.value + key);
+            kb.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        }
+        // X = backspace shortcut
+        if (justPressed[2]) {
+          const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+          nativeInputValueSetter.call(kb.inputEl, kb.inputEl.value.slice(0, -1));
+          kb.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        // B = close keyboard
+        if (getAction("back")) {
+          setGamepadKeyboard(null);
+        }
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
       // If context menu is open, navigate within it + handle A/B
       if (gamepadContextMenuRef.current) {
         if (moveDown || moveUp) {
@@ -1465,8 +1516,9 @@ export default function App() {
           } else {
             // In content: free movement with left/right + up/down by row
             const contentIdx = idx - sidebarItems.length;
-            const firstContent = contentItems[0];
-            const cols = firstContent ? Math.max(1, Math.round((firstContent.parentElement?.clientWidth ?? 300) / Math.max(1, firstContent.clientWidth + 16))) : 1;
+            const currentContent = contentItems[contentIdx] ?? contentItems[0];
+            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("myrient-file-row") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card");
+            const cols = isLinear ? 1 : (currentContent ? Math.max(1, Math.round((currentContent.parentElement?.clientWidth ?? 300) / Math.max(1, currentContent.clientWidth + 16))) : 1);
             let newContentIdx = contentIdx;
 
             if (moveDown) newContentIdx = Math.min(contentIdx + cols, contentItems.length - 1);
@@ -1516,6 +1568,10 @@ export default function App() {
                 const rect = el.getBoundingClientRect();
                 setGamepadContextMenu({ type: "emu", emuId, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
               }
+            }
+            // Search bar → open virtual keyboard
+            else if (el.tagName === "INPUT" && el.classList.contains("search-bar__input")) {
+              setGamepadKeyboard({ inputEl: el as unknown as HTMLInputElement, keyIdx: 0 });
             }
             // Everything else → normal click
             else {
@@ -2815,7 +2871,7 @@ export default function App() {
                           <Search size={16} className="search-bar__icon" />
                         )}
                         <input
-                          className="search-bar__input"
+                          className="search-bar__input gamepad-nav-item"
                           placeholder={page === "store" ? "Search in Store..." : "Search..."}
                           value={page === "store" ? storeSearch : search}
                           onChange={(e) => {
@@ -3076,7 +3132,7 @@ export default function App() {
                         <Search size={18} className="search-bar__icon" />
                         <input
                           type="text"
-                          className="search-bar__input"
+                          className="search-bar__input gamepad-nav-item"
                           placeholder={`Rechercher sur ${selectedMyrientConsole.name}...`}
                           value={myrientSearch}
                           onChange={(e) => setMyrientSearch(e.target.value)}
@@ -3201,7 +3257,7 @@ export default function App() {
                       <Search size={18} className="search-bar__icon" />
                       <input
                         type="text"
-                        className="search-bar__input"
+                        className="search-bar__input gamepad-nav-item"
                         placeholder={selectedVimmConsole
                           ? `Search games on ${selectedVimmConsole.name}...`
                           : "Search Vimm's Lair (type at least 2 letters)"}
@@ -3375,7 +3431,7 @@ export default function App() {
                         <Search size={18} className="search-bar__icon" />
                         <input 
                           type="text" 
-                          className="search-bar__input" 
+                          className="search-bar__input gamepad-nav-item" 
                           placeholder="Search RetroGameSets (e.g. Mario, Zelda, PS1...)" 
                           value={rgsSearchQuery}
                           onChange={(e) => setRgsSearchQuery(e.target.value)}
@@ -3478,7 +3534,7 @@ export default function App() {
                           <Search size={16} className="search-bar__icon" />
                           <input 
                             type="text" 
-                            className="search-bar__input" 
+                            className="search-bar__input gamepad-nav-item" 
                             placeholder="Search in folder..." 
                             value={rgsFolderSearch}
                             onChange={(e) => setRgsFolderSearch(e.target.value)}
@@ -4065,6 +4121,59 @@ export default function App() {
             );
           }
         })()}
+      </AnimatePresence>
+
+      {/* Virtual keyboard for gamepad */}
+      <AnimatePresence>
+        {gamepadKeyboard && (
+          <motion.div
+            className="gamepad-keyboard-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setGamepadKeyboard(null)}
+          >
+            <motion.div
+              className="gamepad-keyboard"
+              initial={{ opacity: 0, y: 40 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 40 }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="gamepad-keyboard__preview">
+                {gamepadKeyboard.inputEl.value}<span className="gamepad-keyboard__cursor">|</span>
+              </div>
+              <div className="gamepad-keyboard__grid">
+                {VIRTUAL_KB_KEYS.map((key, i) => (
+                  <button
+                    key={i}
+                    className={`gamepad-keyboard__key ${i === gamepadKeyboard.keyIdx ? "gamepad-keyboard__key--focused" : ""} ${key === "⌫" ? "gamepad-keyboard__key--backspace" : ""} ${key === "OK" ? "gamepad-keyboard__key--ok" : ""} ${key === " " ? "gamepad-keyboard__key--space" : ""}`}
+                    onClick={() => {
+                      const kb = gamepadKeyboard;
+                      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!;
+                      if (key === "⌫") {
+                        nativeInputValueSetter.call(kb.inputEl, kb.inputEl.value.slice(0, -1));
+                      } else if (key === "OK") {
+                        setGamepadKeyboard(null);
+                        return;
+                      } else {
+                        nativeInputValueSetter.call(kb.inputEl, kb.inputEl.value + key);
+                      }
+                      kb.inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                    }}
+                  >
+                    {key === " " ? "␣" : key}
+                  </button>
+                ))}
+              </div>
+              <div className="gamepad-keyboard__hints">
+                <span>A = taper</span>
+                <span>X = effacer</span>
+                <span>B = fermer</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       <div className="toasts">
