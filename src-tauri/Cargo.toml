@@ -37,3 +37,4 @@ chrono = { version = "0.4.44", features = ["clock"] }
 discord-rich-presence = "1"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+gilrs = "0.11"

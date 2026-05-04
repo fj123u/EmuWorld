@@ -860,8 +860,7 @@ export default function App() {
   const [gamepadContextMenu, setGamepadContextMenu] = useState<{ romPath: string; x: number; y: number } | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
-  const ghostButtonsRef = useRef<Set<number>>(new Set());
-  const ghostDetectedRef = useRef(false);
+  const gamepadActiveRef = useRef(false);
   const lastAxisRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Synchronize 'downloaded' state with locally scanned 'roms'
@@ -1313,72 +1312,50 @@ export default function App() {
     localStorage.setItem("emuworld_gamepad_config", JSON.stringify(gamepadConfig));
   }, [gamepadConfig]);
 
-  // === SINGLE gamepad loop: detection + input + live display ===
-  // Runs once on mount, never tears down. Uses refs for all mutable state.
+  // === Gamepad via Rust (gilrs) — receives state via Tauri event ===
   const gamepadConfigRef = useRef(gamepadConfig);
   gamepadConfigRef.current = gamepadConfig;
   const remappingActionRef = useRef(remappingAction);
   remappingActionRef.current = remappingAction;
   const pageRef = useRef(page);
   pageRef.current = page;
+  const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
     const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "settings", "changelogs"];
     let navCooldown = 0;
-    let wasActive = false;
-    let tick = 0;
 
-    const id = setInterval(() => {
-      const config = gamepadConfigRef.current;
-      const pads = navigator.getGamepads();
-      const gp = pads[config.selectedIndex] ?? [...pads].find(Boolean);
-      const isActive = gp != null && gp.connected;
+    const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
+      const { connected, name, buttons, axes } = event.payload;
 
-      // Detection: update state only on transitions
-      if (isActive && !wasActive) {
-        wasActive = true;
+      // Connection state
+      if (connected && !gamepadActiveRef.current) {
+        gamepadActiveRef.current = true;
         setGamepadActive(true);
-        setGamepadName(gp!.id);
-        // Snapshot ghost buttons
-        ghostButtonsRef.current = new Set(
-          gp!.buttons.map((b, i) => b.pressed ? i : -1).filter(i => i >= 0)
-        );
-        lastGamepadButtonsRef.current = gp!.buttons.map(b => b.pressed);
-        return; // skip this tick to let ghost snapshot settle
-      }
-      if (!isActive && wasActive) {
-        wasActive = false;
+        setGamepadName(name);
+      } else if (!connected && gamepadActiveRef.current) {
+        gamepadActiveRef.current = false;
         setGamepadActive(false);
         setGamepadName("");
-        ghostButtonsRef.current.clear();
         lastGamepadButtonsRef.current = [];
+        gamepadStateRef.current = { buttons: [], axes: [] };
         return;
       }
-      if (!isActive) return;
+      if (!connected) return;
 
-      // Live display tick (controller page only)
-      tick++;
-      if (tick % 3 === 0 && pageRef.current === "controller") {
+      // Store raw state for live display
+      gamepadStateRef.current = { buttons, axes };
+      if (pageRef.current === "controller") {
         setGamepadTick(t => t + 1);
       }
 
-      const currentButtons = gp!.buttons.map(b => b.pressed);
+      const config = gamepadConfigRef.current;
       const prev = lastGamepadButtonsRef.current;
-      const ghosts = ghostButtonsRef.current;
-
-      // Release ghost buttons when unpressed
-      for (let i = 0; i < currentButtons.length; i++) {
-        if (!currentButtons[i] && ghosts.has(i)) ghosts.delete(i);
-      }
-
-      // Rising edge, excluding ghosts
-      const justPressed = currentButtons.map((pressed, i) =>
-        pressed && !(prev[i] ?? false) && !ghosts.has(i)
-      );
+      const justPressed = buttons.map((pressed, i) => pressed && !(prev[i] ?? false));
 
       // Remap mode
       if (remappingActionRef.current) {
-        for (let i = 0; i < currentButtons.length; i++) {
+        for (let i = 0; i < buttons.length; i++) {
           if (justPressed[i]) {
             const action = remappingActionRef.current;
             setGamepadConfig(c => ({
@@ -1391,27 +1368,25 @@ export default function App() {
             break;
           }
         }
-        lastGamepadButtonsRef.current = currentButtons;
+        lastGamepadButtonsRef.current = [...buttons];
         return;
       }
 
-      // Actions
+      // Navigation actions
       const getAction = (action: string) => {
         const mapping = config.mappings.find(m => m.action === action);
         return mapping ? justPressed[mapping.buttonIndex] ?? false : false;
       };
 
-      // D-pad
-      const dpadDown = justPressed[13] ?? false;
+      // D-pad (rising edge from buttons 12-15)
       const dpadUp = justPressed[12] ?? false;
-      const dpadRight = justPressed[15] ?? false;
+      const dpadDown = justPressed[13] ?? false;
       const dpadLeft = justPressed[14] ?? false;
+      const dpadRight = justPressed[15] ?? false;
 
-      // Stick with cooldown
-      const rawX = gp!.axes[0] ?? 0;
-      const rawY = gp!.axes[1] ?? 0;
-      const stickX = Math.abs(rawX) > config.deadzone ? rawX : 0;
-      const stickY = Math.abs(rawY) > config.deadzone ? rawY : 0;
+      // Stick navigation with cooldown
+      const stickX = Math.abs(axes[0] ?? 0) > config.deadzone ? axes[0] : 0;
+      const stickY = Math.abs(axes[1] ?? 0) > config.deadzone ? axes[1] : 0;
 
       let stickMoveDown = false, stickMoveUp = false, stickMoveRight = false, stickMoveLeft = false;
       if (navCooldown <= 0) {
@@ -1474,11 +1449,10 @@ export default function App() {
         setPage("controller");
       }
 
-      lastGamepadButtonsRef.current = currentButtons;
-      lastAxisRef.current = { x: stickX, y: stickY };
-    }, 50);
+      lastGamepadButtonsRef.current = [...buttons];
+    });
 
-    return () => clearInterval(id);
+    return () => { unlisten.then(f => f()); };
   }, []);
 
   // Apply focus highlight — done directly in DOM to avoid re-render dependency issues
@@ -3756,7 +3730,7 @@ export default function App() {
                   {/* Visual controller display */}
                   {gamepadActive && (() => {
                     void gamepadTick;
-                    const gp = navigator.getGamepads()[gamepadConfig.selectedIndex];
+                    const gpState = gamepadStateRef.current;
                     return (
                       <div className="settings__group">
                         <div className="settings__group-title"><Activity size={16} /> État en direct</div>
@@ -3768,7 +3742,7 @@ export default function App() {
                                 <div
                                   className="controller-live__stick-dot"
                                   style={{
-                                    transform: `translate(${(gp?.axes[0] ?? 0) * 20}px, ${(gp?.axes[1] ?? 0) * 20}px)`
+                                    transform: `translate(${(gpState.axes[0] ?? 0) * 20}px, ${(gpState.axes[1] ?? 0) * 20}px)`
                                   }}
                                 />
                               </div>
@@ -3779,15 +3753,15 @@ export default function App() {
                                 <div
                                   className="controller-live__stick-dot"
                                   style={{
-                                    transform: `translate(${(gp?.axes[2] ?? 0) * 20}px, ${(gp?.axes[3] ?? 0) * 20}px)`
+                                    transform: `translate(${(gpState.axes[2] ?? 0) * 20}px, ${(gpState.axes[3] ?? 0) * 20}px)`
                                   }}
                                 />
                               </div>
                             </div>
                           </div>
                           <div className="controller-live__buttons">
-                            {gp && gp.buttons.slice(0, 17).map((btn, i) => (
-                              <div key={i} className={`controller-live__btn ${btn.pressed ? "controller-live__btn--pressed" : ""}`}>
+                            {gpState.buttons.slice(0, 17).map((pressed, i) => (
+                              <div key={i} className={`controller-live__btn ${pressed ? "controller-live__btn--pressed" : ""}`}>
                                 {i}
                               </div>
                             ))}

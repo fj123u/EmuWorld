@@ -13,6 +13,7 @@ mod emulators;
 mod playtime;
 mod discord_rpc;
 mod achievements;
+mod gamepad;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -2785,6 +2786,10 @@ pub fn run() {
                         let _ = handle.emit("oauth-callback", url.to_string());
                     }
                 });
+
+                // Start gamepad polling thread
+                let gamepad_handle = app.handle().clone();
+                gamepad::start_gamepad_thread(gamepad_handle);
             }
             Ok(())
         })
