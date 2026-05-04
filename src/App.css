@@ -2411,6 +2411,36 @@ body {
   text-align: right;
 }
 
+.rgs-file-meta {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.vimm-tag {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.vimm-tag--region {
+  background: rgba(99,102,241,0.15);
+  color: #a5b4fc;
+}
+
+.vimm-tag--console {
+  background: rgba(34,197,94,0.12);
+  color: #86efac;
+}
+
+.vimm-tag--size {
+  background: rgba(251,191,36,0.12);
+  color: #fcd34d;
+}
+
 /* ---- WebView Modal ---- */
 .webview-overlay {
   position: fixed;

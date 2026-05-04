@@ -2475,6 +2475,8 @@ pub struct VimmGame {
     pub version: String,       // "1.0", "1.01"
     pub languages: String,     // language codes joined by space
     pub rating: String,        // "8.5" or "none"
+    pub size: String,          // file size e.g. "1.2 GB"
+    pub console_name: String,  // console display name from Vimm
     pub box_url: String,       // cover image URL
     pub page_url: String,      // page to open in system browser
 }
@@ -2599,6 +2601,8 @@ async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGam
             version,
             languages,
             rating,
+            size: String::new(),
+            console_name: String::new(),
             box_url: format!("https://dl.vimm.net/image.php?type=box&id={}", id),
             page_url: format!("https://vimm.net/vault/{}", id),
         });
@@ -2632,6 +2636,7 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
     let row_selector = Selector::parse("table.hovertable tr").map_err(|_| "Invalid row selector")?;
     let link_selector = Selector::parse("a").map_err(|_| "Invalid link selector")?;
     let td_selector = Selector::parse("td").map_err(|_| "Invalid td selector")?;
+    let img_selector = Selector::parse("img").map_err(|_| "Invalid img selector")?;
     let id_re = Regex::new(r"/vault/(\d+)").map_err(|e| e.to_string())?;
 
     let mut games = Vec::new();
@@ -2648,7 +2653,44 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
         if name.is_empty() { continue; }
 
         let tds: Vec<_> = row.select(&td_selector).collect();
-        let region = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+        let num_cols = tds.len();
+
+        // Helper: extract region from a td (either flag img title or text)
+        let extract_region = |td: &scraper::ElementRef| -> String {
+            if let Some(img) = td.select(&img_selector).next() {
+                if let Some(title) = img.value().attr("title") {
+                    return title.to_string();
+                }
+                if let Some(alt) = img.value().attr("alt") {
+                    return alt.to_string();
+                }
+            }
+            td.text().collect::<Vec<_>>().join("").trim().to_string()
+        };
+
+        // Columns: searching all consoles → Title | System | Region
+        // Searching within a console → Title | Region
+        let (console_name, region) = if num_cols >= 4 {
+            let c = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+            let r = tds.get(2).map(|td| extract_region(td)).unwrap_or_default();
+            (c, r)
+        } else if num_cols == 3 {
+            // Could be Name|System|Region or Name|Region|something else
+            let col1_text = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
+            let col1_has_flag = tds.get(1).map(|td| td.select(&img_selector).next().is_some()).unwrap_or(false);
+            if col1_has_flag {
+                // Name | Region(flag) | ...
+                let r = tds.get(1).map(|td| extract_region(td)).unwrap_or_default();
+                (String::new(), r)
+            } else {
+                // Name | System | Region(flag)
+                let r = tds.get(2).map(|td| extract_region(td)).unwrap_or_default();
+                (col1_text, r)
+            }
+        } else {
+            let r = tds.get(1).map(|td| extract_region(td)).unwrap_or_default();
+            (String::new(), r)
+        };
 
         games.push(VimmGame {
             id: id.clone(),
@@ -2657,6 +2699,8 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
             version: String::new(),
             languages: String::new(),
             rating: String::new(),
+            size: String::new(),
+            console_name,
             box_url: format!("https://dl.vimm.net/image.php?type=box&id={}", id),
             page_url: format!("https://vimm.net/vault/{}", id),
         });

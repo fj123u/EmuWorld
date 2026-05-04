@@ -243,6 +243,8 @@ interface VimmGame {
   version: string;
   languages: string;
   rating: string;
+  size: string;
+  console_name: string;
   box_url: string;
   page_url: string;
 }
@@ -3086,8 +3088,10 @@ export default function App() {
                               transition={{ delay: Math.min(idx * 0.01, 0.5) }}
                             >
                               <div className="rgs-file-name" title={game.name}>{game.name}</div>
-                              <div className="rgs-file-size">
-                                {game.region || "—"}{game.rating && game.rating !== "none" ? ` • ⭐ ${game.rating}` : ""}
+                              <div className="rgs-file-meta">
+                                {game.console_name && <span className="vimm-tag vimm-tag--console">{game.console_name}</span>}
+                                {game.region && <span className="vimm-tag vimm-tag--region">{game.region}</span>}
+                                {game.size && <span className="vimm-tag vimm-tag--size">{game.size}</span>}
                               </div>
                               <button
                                 className="btn btn--primary btn--sm"
