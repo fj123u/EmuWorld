@@ -863,8 +863,6 @@ export default function App() {
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
   const seenReleasedRef = useRef<Set<number>>(new Set());
   const lastAxisRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
-  const navRepeatRef = useRef<number>(0);
-  const gamepadFrameRef = useRef<number>(0);
 
   // Synchronize 'downloaded' state with locally scanned 'roms'
   useEffect(() => {
@@ -1348,55 +1346,27 @@ export default function App() {
     localStorage.setItem("emuworld_gamepad_config", JSON.stringify(gamepadConfig));
   }, [gamepadConfig]);
 
-  // Gamepad remap listener — only accept buttons that have been seen released
-  useEffect(() => {
-    if (!remappingAction) return;
-    const pollRemap = () => {
-      const pads = navigator.getGamepads();
-      const gp = pads[gamepadConfig.selectedIndex];
-      if (!gp) { gamepadFrameRef.current = requestAnimationFrame(pollRemap); return; }
-      for (let i = 0; i < gp.buttons.length; i++) {
-        if (!gp.buttons[i].pressed) seenReleasedRef.current.add(i);
-      }
-      for (let i = 0; i < gp.buttons.length; i++) {
-        if (gp.buttons[i].pressed && seenReleasedRef.current.has(i)) {
-          setGamepadConfig(prev => ({
-            ...prev,
-            mappings: prev.mappings.map(m =>
-              m.action === remappingAction ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
-            ),
-          }));
-          setRemappingAction(null);
-          return;
-        }
-      }
-      gamepadFrameRef.current = requestAnimationFrame(pollRemap);
-    };
-    gamepadFrameRef.current = requestAnimationFrame(pollRemap);
-    return () => cancelAnimationFrame(gamepadFrameRef.current);
-  }, [remappingAction, gamepadConfig.selectedIndex]);
+  // Unified gamepad input polling via setInterval (more reliable than rAF in WebView2)
+  const gamepadConfigRef = useRef(gamepadConfig);
+  gamepadConfigRef.current = gamepadConfig;
+  const remappingActionRef = useRef(remappingAction);
+  remappingActionRef.current = remappingAction;
 
-  // Gamepad navigation polling
   useEffect(() => {
-    if (!gamepadActive || remappingAction) return;
+    if (!gamepadActive) return;
 
     const pages: Page[] = ["catalog", "library", "installed", "store", "settings", "controller", "changelogs"];
-    let running = true;
-    const NAV_REPEAT_DELAY = 200; // ms between repeated moves when holding
 
-    const poll = () => {
-      if (!running) return;
+    const id = setInterval(() => {
+      const config = gamepadConfigRef.current;
       const pads = navigator.getGamepads();
-      const gp = pads[gamepadConfig.selectedIndex];
-      if (!gp) { gamepadFrameRef.current = requestAnimationFrame(poll); return; }
+      const gp = pads[config.selectedIndex];
+      if (!gp) return;
 
-      const now = performance.now();
       const currentButtons = gp.buttons.map(b => b.pressed);
       const prev = lastGamepadButtonsRef.current;
 
-      // Track which buttons have been seen released at least once.
-      // Buttons that are "stuck on" from connection (Pro Controller BT bug)
-      // won't count until they're released and re-pressed.
+      // Track buttons that have been released at least once (ghost button filter)
       for (let i = 0; i < currentButtons.length; i++) {
         if (!currentButtons[i]) seenReleasedRef.current.add(i);
       }
@@ -1405,41 +1375,56 @@ export default function App() {
         pressed && !(prev[i] ?? false) && seenReleasedRef.current.has(i)
       );
 
+      // Handle remap mode
+      if (remappingActionRef.current) {
+        for (let i = 0; i < currentButtons.length; i++) {
+          if (justPressed[i]) {
+            const action = remappingActionRef.current;
+            setGamepadConfig(prev => ({
+              ...prev,
+              mappings: prev.mappings.map(m =>
+                m.action === action ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
+              ),
+            }));
+            setRemappingAction(null);
+            break;
+          }
+        }
+        lastGamepadButtonsRef.current = currentButtons;
+        return;
+      }
+
+      // Navigation
       const getAction = (action: string) => {
-        const mapping = gamepadConfig.mappings.find(m => m.action === action);
+        const mapping = config.mappings.find(m => m.action === action);
         return mapping ? justPressed[mapping.buttonIndex] ?? false : false;
       };
 
-      // D-pad buttons (digital)
+      // D-pad (rising edge)
       const dpadDown = justPressed[13] ?? false;
       const dpadUp = justPressed[12] ?? false;
       const dpadRight = justPressed[15] ?? false;
       const dpadLeft = justPressed[14] ?? false;
 
-      // Stick with repeat logic
+      // Stick with repeat (interval already handles timing at ~60ms)
       const rawX = gp.axes[0] ?? 0;
       const rawY = gp.axes[1] ?? 0;
-      const stickX = Math.abs(rawX) > gamepadConfig.deadzone ? rawX : 0;
-      const stickY = Math.abs(rawY) > gamepadConfig.deadzone ? rawY : 0;
-      let stickMoveX = 0;
-      let stickMoveY = 0;
-      if (now - navRepeatRef.current > NAV_REPEAT_DELAY) {
-        if (stickY > 0.5) stickMoveY = 1;
-        else if (stickY < -0.5) stickMoveY = -1;
-        if (stickX > 0.5) stickMoveX = 1;
-        else if (stickX < -0.5) stickMoveX = -1;
-      }
+      const stickX = Math.abs(rawX) > config.deadzone ? rawX : 0;
+      const stickY = Math.abs(rawY) > config.deadzone ? rawY : 0;
+      const prevAxis = lastAxisRef.current;
+      const stickDown = stickY > 0.5 && prevAxis.y <= 0.5;
+      const stickUp = stickY < -0.5 && prevAxis.y >= -0.5;
+      const stickRight = stickX > 0.5 && prevAxis.x <= 0.5;
+      const stickLeft = stickX < -0.5 && prevAxis.x >= -0.5;
 
-      const moveDown = dpadDown || stickMoveY === 1;
-      const moveUp = dpadUp || stickMoveY === -1;
-      const moveRight = dpadRight || stickMoveX === 1;
-      const moveLeft = dpadLeft || stickMoveX === -1;
+      const moveDown = dpadDown || stickDown;
+      const moveUp = dpadUp || stickUp;
+      const moveRight = dpadRight || stickRight;
+      const moveLeft = dpadLeft || stickLeft;
 
       const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
       if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
         const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
-        navRepeatRef.current = now;
-
         if (moveDown) setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
         if (moveUp) setFocusIndex(p => Math.max(p - Math.round(cols), 0));
         if (moveRight) setFocusIndex(p => Math.min(p + 1, focusables.length - 1));
@@ -1450,30 +1435,25 @@ export default function App() {
         const el = document.querySelector<HTMLElement>("[data-focusable].gamepad-focused");
         if (el) el.click();
       }
-
       if (getAction("back")) {
         setPage(p => p !== "catalog" ? "catalog" : p);
       }
-
       if (getAction("prevPage")) {
         setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
       }
       if (getAction("nextPage")) {
         setPage(p => { const idx = pages.indexOf(p); return idx < pages.length - 1 ? pages[idx + 1] : p; });
       }
-
       if (getAction("settings")) {
         setPage("settings");
       }
 
       lastGamepadButtonsRef.current = currentButtons;
       lastAxisRef.current = { x: stickX, y: stickY };
-      gamepadFrameRef.current = requestAnimationFrame(poll);
-    };
+    }, 60);
 
-    gamepadFrameRef.current = requestAnimationFrame(poll);
-    return () => { running = false; cancelAnimationFrame(gamepadFrameRef.current); };
-  }, [gamepadActive, gamepadConfig, remappingAction]);
+    return () => clearInterval(id);
+  }, [gamepadActive]);
 
   // Apply focus highlight
   useEffect(() => {
