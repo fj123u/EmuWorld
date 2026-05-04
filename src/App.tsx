@@ -3091,6 +3091,7 @@ export default function App() {
                               <div className="rgs-file-meta">
                                 {game.console_name && <span className="vimm-tag vimm-tag--console">{game.console_name}</span>}
                                 {game.region && <span className="vimm-tag vimm-tag--region">{game.region}</span>}
+                                {game.version && <span className="vimm-tag vimm-tag--version">v{game.version}</span>}
                                 {game.size && <span className="vimm-tag vimm-tag--size">{game.size}</span>}
                               </div>
                               <button

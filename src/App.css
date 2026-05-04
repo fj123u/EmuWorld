@@ -2436,6 +2436,11 @@ body {
   color: #86efac;
 }
 
+.vimm-tag--version {
+  background: rgba(148,163,184,0.12);
+  color: #94a3b8;
+}
+
 .vimm-tag--size {
   background: rgba(251,191,36,0.12);
   color: #fcd34d;

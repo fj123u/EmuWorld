@@ -2653,50 +2653,49 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
         if name.is_empty() { continue; }
 
         let tds: Vec<_> = row.select(&td_selector).collect();
-        let num_cols = tds.len();
 
-        // Helper: extract region from a td (either flag img title or text)
-        let extract_region = |td: &scraper::ElementRef| -> String {
+        // Scan all columns (skip first = title) to find region (has <img>) and collect text values
+        let mut region = String::new();
+        let mut console_name = String::new();
+        let mut version = String::new();
+        let mut other_texts: Vec<String> = Vec::new();
+
+        for (ci, td) in tds.iter().enumerate().skip(1) {
+            // Check for flag image (region indicator)
             if let Some(img) = td.select(&img_selector).next() {
-                if let Some(title) = img.value().attr("title") {
-                    return title.to_string();
-                }
-                if let Some(alt) = img.value().attr("alt") {
-                    return alt.to_string();
+                let r = img.value().attr("title")
+                    .or_else(|| img.value().attr("alt"))
+                    .unwrap_or("")
+                    .to_string();
+                if !r.is_empty() && region.is_empty() {
+                    region = r;
+                    continue;
                 }
             }
-            td.text().collect::<Vec<_>>().join("").trim().to_string()
-        };
-
-        // Columns: searching all consoles → Title | System | Region
-        // Searching within a console → Title | Region
-        let (console_name, region) = if num_cols >= 4 {
-            let c = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
-            let r = tds.get(2).map(|td| extract_region(td)).unwrap_or_default();
-            (c, r)
-        } else if num_cols == 3 {
-            // Could be Name|System|Region or Name|Region|something else
-            let col1_text = tds.get(1).map(|td| td.text().collect::<Vec<_>>().join("").trim().to_string()).unwrap_or_default();
-            let col1_has_flag = tds.get(1).map(|td| td.select(&img_selector).next().is_some()).unwrap_or(false);
-            if col1_has_flag {
-                // Name | Region(flag) | ...
-                let r = tds.get(1).map(|td| extract_region(td)).unwrap_or_default();
-                (String::new(), r)
+            let text = td.text().collect::<Vec<_>>().join("").trim().to_string();
+            if text.is_empty() { continue; }
+            // Heuristic: if it looks like a version number (digits and dots only)
+            if text.chars().all(|c| c.is_ascii_digit() || c == '.') && version.is_empty() {
+                version = text;
+            } else if ci == 1 && console_slug.is_none() {
+                // First non-title text col in global search is likely the console name
+                console_name = text;
             } else {
-                // Name | System | Region(flag)
-                let r = tds.get(2).map(|td| extract_region(td)).unwrap_or_default();
-                (col1_text, r)
+                other_texts.push(text);
             }
-        } else {
-            let r = tds.get(1).map(|td| extract_region(td)).unwrap_or_default();
-            (String::new(), r)
-        };
+        }
+        // If no flag found but we have other_texts, first one might be region text
+        if region.is_empty() {
+            if let Some(first) = other_texts.first() {
+                region = first.clone();
+            }
+        }
 
         games.push(VimmGame {
             id: id.clone(),
             name,
             region,
-            version: String::new(),
+            version,
             languages: String::new(),
             rating: String::new(),
             size: String::new(),
