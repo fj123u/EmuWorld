@@ -1390,10 +1390,10 @@ export default function App() {
 
       let stickMoveDown = false, stickMoveUp = false, stickMoveRight = false, stickMoveLeft = false;
       if (navCooldown <= 0) {
-        if (stickY > 0.4) { stickMoveDown = true; navCooldown = 4; }
-        else if (stickY < -0.4) { stickMoveUp = true; navCooldown = 4; }
-        if (stickX > 0.4) { stickMoveRight = true; navCooldown = 4; }
-        else if (stickX < -0.4) { stickMoveLeft = true; navCooldown = 4; }
+        if (stickY > 0.4) { stickMoveDown = true; navCooldown = 12; }
+        else if (stickY < -0.4) { stickMoveUp = true; navCooldown = 12; }
+        if (stickX > 0.4) { stickMoveRight = true; navCooldown = 12; }
+        else if (stickX < -0.4) { stickMoveLeft = true; navCooldown = 12; }
       } else if (Math.abs(stickX) > 0.4 || Math.abs(stickY) > 0.4) {
         navCooldown--;
       } else {
@@ -1411,10 +1411,17 @@ export default function App() {
         if (focusables.length > 0) {
           const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
           let idx = focusIndexRef.current;
+          const currentRow = Math.floor(idx / cols);
           if (moveDown) idx = Math.min(idx + cols, focusables.length - 1);
           if (moveUp) idx = Math.max(idx - cols, 0);
-          if (moveRight) idx = Math.min(idx + 1, focusables.length - 1);
-          if (moveLeft) idx = Math.max(idx - 1, 0);
+          if (moveRight) {
+            const rowEnd = (currentRow + 1) * cols - 1;
+            idx = Math.min(idx + 1, Math.min(rowEnd, focusables.length - 1));
+          }
+          if (moveLeft) {
+            const rowStart = currentRow * cols;
+            idx = Math.max(idx - 1, rowStart);
+          }
           focusIndexRef.current = idx;
           setFocusIndex(idx);
         }
