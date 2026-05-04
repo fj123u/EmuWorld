@@ -1409,7 +1409,7 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
-      // If context menu is open, navigate within it
+      // If context menu is open, navigate within it + handle A/B
       if (gamepadContextMenuRef.current) {
         if (moveDown || moveUp) {
           const menuBtns = document.querySelectorAll<HTMLElement>(".gamepad-context-menu__btn");
@@ -1421,6 +1421,19 @@ export default function App() {
             menuBtns.forEach(b => b.classList.remove("gamepad-ctx-focused"));
             menuBtns[newIdx]?.classList.add("gamepad-ctx-focused");
           }
+        }
+        // A = confirm selection in menu
+        if (getAction("confirm")) {
+          const focusedBtn = document.querySelector<HTMLElement>(".gamepad-context-menu__btn.gamepad-ctx-focused");
+          if (focusedBtn) focusedBtn.click();
+          else {
+            const firstBtn = document.querySelector<HTMLElement>(".gamepad-context-menu__btn");
+            if (firstBtn) firstBtn.click();
+          }
+        }
+        // B = close menu
+        if (getAction("back")) {
+          setGamepadContextMenu(null);
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
