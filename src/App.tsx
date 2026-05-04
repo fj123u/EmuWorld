@@ -2690,7 +2690,7 @@ export default function App() {
                     )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
-                    {page === "controller" && (gamepadActive ? `Manette connectée` : "Aucune manette détectée")}
+                    {page === "controller" && (gamepadActive ? `Manette connectée (tick: ${gamepadTick})` : "Aucune manette détectée")}
                   </p>
                 </div>
                 <div className="main-content__actions">
