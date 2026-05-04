@@ -276,22 +276,24 @@ interface GamepadConfig {
 
 const DEFAULT_GAMEPAD_MAPPINGS: GamepadButtonMapping[] = [
   { action: "confirm", label: "A", buttonIndex: 0 },
+  { action: "back", label: "B", buttonIndex: 1 },
   { action: "details", label: "X", buttonIndex: 2 },
   { action: "favorite", label: "Y", buttonIndex: 3 },
   { action: "prevPage", label: "LB", buttonIndex: 4 },
   { action: "nextPage", label: "RB", buttonIndex: 5 },
-  { action: "settings", label: "Start", buttonIndex: 9 },
   { action: "search", label: "Select", buttonIndex: 8 },
+  { action: "settings", label: "Start", buttonIndex: 9 },
 ];
 
 const GAMEPAD_ACTIONS: Record<string, string> = {
   confirm: "Confirmer / Lancer",
+  back: "Retour",
   details: "Détails",
   favorite: "Favori",
   prevPage: "Page précédente",
   nextPage: "Page suivante",
-  settings: "Controller",
   search: "Recherche",
+  settings: "Controller",
 };
 
 type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller";
@@ -857,7 +859,7 @@ export default function App() {
   const [gamepadName, setGamepadName] = useState("");
   const [focusIndex, setFocusIndex] = useState(0);
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
-  const [gamepadContextMenu, setGamepadContextMenu] = useState<{ romPath: string; x: number; y: number } | null>(null);
+  const [gamepadContextMenu, setGamepadContextMenu] = useState<{ type: "rom"; romPath: string; x: number; y: number } | { type: "emu"; emuId: string; x: number; y: number } | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
   const gamepadActiveRef = useRef(false);
@@ -1319,6 +1321,8 @@ export default function App() {
   remappingActionRef.current = remappingAction;
   const pageRef = useRef(page);
   pageRef.current = page;
+  const gamepadContextMenuRef = useRef(gamepadContextMenu);
+  gamepadContextMenuRef.current = gamepadContextMenu;
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
@@ -1405,6 +1409,23 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
+      // If context menu is open, navigate within it
+      if (gamepadContextMenuRef.current) {
+        if (moveDown || moveUp) {
+          const menuBtns = document.querySelectorAll<HTMLElement>(".gamepad-context-menu__btn");
+          if (menuBtns.length > 0) {
+            const currentIdx = Array.from(menuBtns).findIndex(b => b.classList.contains("gamepad-ctx-focused"));
+            let newIdx = currentIdx;
+            if (moveDown) newIdx = Math.min(currentIdx + 1, menuBtns.length - 1);
+            if (moveUp) newIdx = Math.max(currentIdx - 1, 0);
+            menuBtns.forEach(b => b.classList.remove("gamepad-ctx-focused"));
+            menuBtns[newIdx]?.classList.add("gamepad-ctx-focused");
+          }
+        }
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
       if (moveDown || moveUp || moveRight || moveLeft) {
         const SIDEBAR_SEL = ".sidebar__item";
         const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row";
@@ -1451,20 +1472,47 @@ export default function App() {
         }
       }
 
-      // A = confirm
+      // A = confirm / open context menu on game or emu cards
       if (getAction("confirm")) {
-        const el = document.querySelector<HTMLElement>(".gamepad-focused");
-        if (el) el.click();
+        if (gamepadContextMenuRef.current) {
+          // If context menu open, click focused button inside it
+          const menuBtns = document.querySelectorAll<HTMLElement>(".gamepad-context-menu__btn");
+          const focusedBtn = document.querySelector<HTMLElement>(".gamepad-context-menu__btn.gamepad-ctx-focused");
+          if (focusedBtn) focusedBtn.click();
+          else if (menuBtns[0]) menuBtns[0].click();
+        } else {
+          const el = document.querySelector<HTMLElement>(".gamepad-focused");
+          if (el) {
+            // Game card → open context menu
+            const romPath = el.getAttribute("data-rom-path");
+            if (romPath && el.classList.contains("game-card")) {
+              const rect = el.getBoundingClientRect();
+              setGamepadContextMenu({ type: "rom", romPath, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+            }
+            // Emu card → open context menu
+            else if (el.classList.contains("emu-card")) {
+              const emuId = el.getAttribute("data-emu-id");
+              if (emuId) {
+                const rect = el.getBoundingClientRect();
+                setGamepadContextMenu({ type: "emu", emuId, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+              }
+            }
+            // Everything else → normal click
+            else {
+              el.click();
+            }
+          }
+        }
       }
 
-      // B = go back in navigation
-      if (justPressed[1]) {
-        if (document.querySelector(".account-overlay")) {
-          // Close modal
+      // B = back / close context menu
+      if (getAction("back")) {
+        if (gamepadContextMenuRef.current) {
+          setGamepadContextMenu(null);
+        } else if (document.querySelector(".account-overlay")) {
           const closeBtn = document.querySelector<HTMLElement>(".account-modal__close");
           if (closeBtn) closeBtn.click();
         } else {
-          // Navigate back: clear console filter, or go to catalog
           setConsoleFilter(prev => {
             if (prev) return null;
             setCategoryFilter(cf => {
@@ -1474,6 +1522,16 @@ export default function App() {
             });
             return prev;
           });
+        }
+      }
+
+      // Y = toggle favorite on focused game card
+      if (getAction("favorite")) {
+        const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
+        if (el) {
+          const romPath = el.getAttribute("data-rom-path") ?? "";
+          const rom = roms.find(r => r.path === romPath);
+          if (rom) handleToggleFavorite(rom);
         }
       }
 
@@ -2714,7 +2772,7 @@ export default function App() {
                     )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
-                    {page === "controller" && (gamepadActive ? `Manette connectée (tick: ${gamepadTick})` : "Aucune manette détectée")}
+                    {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
                   </p>
                 </div>
                 <div className="main-content__actions">
@@ -2765,7 +2823,7 @@ export default function App() {
 
               {page === "catalog" && (() => {
                 const renderEmuCard = (emu: EmulatorInfo) => (
-                  <motion.div key={emu.id} className="emu-card">
+                  <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                     <div className="emu-card__header">
                       <div className="emu-card__icon">{emu.icon}</div>
                       <div className="emu-card__info">
@@ -3674,7 +3732,7 @@ export default function App() {
               {page === "installed" && (
                 <div className="emu-grid">
                   {catalog.filter(e => installed.includes(e.id)).map(emu => (
-                    <motion.div key={emu.id} className="emu-card">
+                    <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                       <div className="emu-card__header">
                         <div className="emu-card__icon">{emu.icon}</div>
                         <div className="emu-card__info">
@@ -3890,41 +3948,102 @@ export default function App() {
       {/* Gamepad context menu */}
       <AnimatePresence>
         {gamepadContextMenu && (() => {
-          const rom = roms.find(r => r.path === gamepadContextMenu.romPath);
-          if (!rom) return null;
-          const isFav = playtime.games[rom.name]?.favorite ?? false;
-          return (
-            <motion.div
-              className="gamepad-context-overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setGamepadContextMenu(null)}
-            >
+          if (gamepadContextMenu.type === "rom") {
+            const rom = roms.find(r => r.path === gamepadContextMenu.romPath);
+            if (!rom) return null;
+            const isFav = playtime.games[rom.name]?.favorite ?? false;
+            return (
               <motion.div
-                className="gamepad-context-menu"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                style={{ left: gamepadContextMenu.x, top: gamepadContextMenu.y }}
-                onClick={e => e.stopPropagation()}
+                className="gamepad-context-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setGamepadContextMenu(null)}
               >
-                <div className="gamepad-context-menu__title">{rom.name}</div>
-                <button
-                  className="gamepad-context-menu__btn gamepad-context-menu__btn--play"
-                  onClick={() => { setGamepadContextMenu(null); handleLaunch(rom); }}
+                <motion.div
+                  className="gamepad-context-menu"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  style={{ left: gamepadContextMenu.x, top: gamepadContextMenu.y }}
+                  onClick={e => e.stopPropagation()}
                 >
-                  <Play size={14} /> Jouer
-                </button>
-                <button
-                  className="gamepad-context-menu__btn"
-                  onClick={() => { setGamepadContextMenu(null); handleToggleFavorite(rom); }}
-                >
-                  {isFav ? "★ Retirer des favoris" : "☆ Mettre en favori"}
-                </button>
+                  <div className="gamepad-context-menu__title">{rom.name}</div>
+                  <button
+                    className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
+                    onClick={() => { setGamepadContextMenu(null); handleLaunch(rom); }}
+                  >
+                    <Play size={14} /> Jouer
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); handleToggleFavorite(rom); }}
+                  >
+                    {isFav ? "★ Retirer des favoris" : "☆ Mettre en favori"}
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
+                    onClick={() => { setGamepadContextMenu(null); handleDeleteRom(rom); }}
+                  >
+                    <Trash2 size={14} /> Supprimer
+                  </button>
+                </motion.div>
               </motion.div>
-            </motion.div>
-          );
+            );
+          } else {
+            const emu = catalog.find(e => e.id === gamepadContextMenu.emuId);
+            if (!emu) return null;
+            const isInstalled = installed.includes(emu.id);
+            return (
+              <motion.div
+                className="gamepad-context-overlay"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setGamepadContextMenu(null)}
+              >
+                <motion.div
+                  className="gamepad-context-menu"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  style={{ left: gamepadContextMenu.x, top: gamepadContextMenu.y }}
+                  onClick={e => e.stopPropagation()}
+                >
+                  <div className="gamepad-context-menu__title">{emu.name}</div>
+                  {isInstalled ? (
+                    <button
+                      className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
+                      onClick={() => { setGamepadContextMenu(null); handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 }); }}
+                    >
+                      <Play size={14} /> Lancer
+                    </button>
+                  ) : (
+                    <button
+                      className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
+                      onClick={() => { setGamepadContextMenu(null); handleInstall(emu.id); }}
+                    >
+                      <Download size={14} /> Installer
+                    </button>
+                  )}
+                  {isInstalled && (
+                    <button
+                      className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
+                      onClick={() => { setGamepadContextMenu(null); handleUninstall(emu.id); }}
+                    >
+                      <Trash2 size={14} /> Désinstaller
+                    </button>
+                  )}
+                  <button
+                    className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); window.open(emu.website, "_blank"); }}
+                  >
+                    <ExternalLink size={14} /> Site web
+                  </button>
+                </motion.div>
+              </motion.div>
+            );
+          }
         })()}
       </AnimatePresence>
 
