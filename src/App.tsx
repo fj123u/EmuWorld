@@ -860,7 +860,8 @@ export default function App() {
   const [gamepadContextMenu, setGamepadContextMenu] = useState<{ romPath: string; x: number; y: number } | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
-  const seenReleasedRef = useRef<Set<number>>(new Set());
+  const ghostButtonsRef = useRef<Set<number>>(new Set());
+  const ghostDetectedRef = useRef(false);
   const lastAxisRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // Synchronize 'downloaded' state with locally scanned 'roms'
@@ -1300,35 +1301,52 @@ export default function App() {
   useEffect(() => { checkAchievements(); }, [checkAchievements]);
 
   // ---- Gamepad polling & navigation ----
-  // WebView2 requires a user gesture + button press before getGamepads() returns data.
-  // We poll aggressively and also listen to events as backup.
   useEffect(() => {
     const scan = () => {
       const pads = navigator.getGamepads();
       const connected = [...pads].filter(Boolean);
-      if (connected.length > 0 !== gamepadActive) {
-        setGamepadActive(connected.length > 0);
+      const isActive = connected.length > 0;
+
+      if (isActive && !ghostDetectedRef.current) {
+        // First time seeing the gamepad — snapshot which buttons are pressed
+        // These are "ghost" buttons stuck from BT connection
+        const gp = connected[0]!;
+        ghostButtonsRef.current = new Set(
+          gp.buttons.map((b, i) => b.pressed ? i : -1).filter(i => i >= 0)
+        );
+        ghostDetectedRef.current = true;
+        lastGamepadButtonsRef.current = gp.buttons.map(b => b.pressed);
       }
-      if (connected.length > 0) {
+
+      if (isActive !== gamepadActive) {
+        setGamepadActive(isActive);
+      }
+      if (isActive) {
         setGamepads([...pads]);
       }
     };
 
-    const handleConnect = () => scan();
+    const handleConnect = () => {
+      ghostDetectedRef.current = false;
+      ghostButtonsRef.current.clear();
+      scan();
+    };
     const handleDisconnect = () => {
-      setGamepads([...navigator.getGamepads()]);
-      setGamepadActive([...navigator.getGamepads()].filter(Boolean).length > 0);
-      seenReleasedRef.current.clear();
+      ghostDetectedRef.current = false;
+      ghostButtonsRef.current.clear();
       lastGamepadButtonsRef.current = [];
+      const pads = navigator.getGamepads();
+      const connected = [...pads].filter(Boolean);
+      setGamepadActive(connected.length > 0);
+      setGamepads([...pads]);
     };
 
     window.addEventListener("gamepadconnected", handleConnect);
     window.addEventListener("gamepaddisconnected", handleDisconnect);
 
-    // Also scan on any user interaction (Chromium requires gesture to expose gamepads)
     const onInteraction = () => scan();
-    window.addEventListener("pointerdown", onInteraction, { once: false });
-    window.addEventListener("keydown", onInteraction, { once: false });
+    window.addEventListener("pointerdown", onInteraction);
+    window.addEventListener("keydown", onInteraction);
 
     const pollId = setInterval(scan, 300);
     scan();
@@ -1385,14 +1403,16 @@ export default function App() {
 
       const currentButtons = gp.buttons.map(b => b.pressed);
       const prev = lastGamepadButtonsRef.current;
+      const ghosts = ghostButtonsRef.current;
 
-      // Track buttons that have been released at least once (ghost button filter)
+      // If a ghost button is finally released, remove it from the ghost set
       for (let i = 0; i < currentButtons.length; i++) {
-        if (!currentButtons[i]) seenReleasedRef.current.add(i);
+        if (!currentButtons[i] && ghosts.has(i)) ghosts.delete(i);
       }
 
+      // justPressed = rising edge, excluding ghost buttons
       const justPressed = currentButtons.map((pressed, i) =>
-        pressed && !(prev[i] ?? false) && seenReleasedRef.current.has(i)
+        pressed && !(prev[i] ?? false) && !ghosts.has(i)
       );
 
       // Handle remap mode
@@ -1466,7 +1486,7 @@ export default function App() {
       }
 
       // B (button 1) = context menu on game cards
-      if (justPressed[1] && seenReleasedRef.current.has(1)) {
+      if (justPressed[1]) {
         const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
         if (el) {
           const rect = el.getBoundingClientRect();
