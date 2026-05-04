@@ -1415,11 +1415,11 @@ export default function App() {
 
       let stickMoveDown = false, stickMoveUp = false, stickMoveRight = false, stickMoveLeft = false;
       if (navCooldown <= 0) {
-        if (stickY > 0.5) { stickMoveDown = true; navCooldown = 3; }
-        else if (stickY < -0.5) { stickMoveUp = true; navCooldown = 3; }
-        if (stickX > 0.5) { stickMoveRight = true; navCooldown = 3; }
-        else if (stickX < -0.5) { stickMoveLeft = true; navCooldown = 3; }
-      } else if (Math.abs(stickX) > 0.5 || Math.abs(stickY) > 0.5) {
+        if (stickY > 0.4) { stickMoveDown = true; navCooldown = 4; }
+        else if (stickY < -0.4) { stickMoveUp = true; navCooldown = 4; }
+        if (stickX > 0.4) { stickMoveRight = true; navCooldown = 4; }
+        else if (stickX < -0.4) { stickMoveLeft = true; navCooldown = 4; }
+      } else if (Math.abs(stickX) > 0.4 || Math.abs(stickY) > 0.4) {
         navCooldown--;
       } else {
         navCooldown = 0;
@@ -1430,19 +1430,24 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
-      const FOCUSABLE = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
-      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE);
-      if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
-        const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
-        if (moveDown) setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
-        if (moveUp) setFocusIndex(p => Math.max(p - Math.round(cols), 0));
-        if (moveRight) setFocusIndex(p => Math.min(p + 1, focusables.length - 1));
-        if (moveLeft) setFocusIndex(p => Math.max(p - 1, 0));
+      if (moveDown || moveUp || moveRight || moveLeft) {
+        const FOCUSABLE = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
+        const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE);
+        if (focusables.length > 0) {
+          const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
+          let idx = focusIndexRef.current;
+          if (moveDown) idx = Math.min(idx + cols, focusables.length - 1);
+          if (moveUp) idx = Math.max(idx - cols, 0);
+          if (moveRight) idx = Math.min(idx + 1, focusables.length - 1);
+          if (moveLeft) idx = Math.max(idx - 1, 0);
+          focusIndexRef.current = idx;
+          setFocusIndex(idx);
+        }
       }
 
       // A = confirm
       if (getAction("confirm")) {
-        const el = document.querySelector<HTMLElement>(FOCUSABLE.split(", ").map(s => s + ".gamepad-focused").join(", "));
+        const el = document.querySelector<HTMLElement>(".gamepad-focused");
         if (el) el.click();
       }
 
@@ -1476,20 +1481,25 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
-  // Apply focus highlight
+  // Apply focus highlight — done directly in DOM to avoid re-render dependency issues
+  const focusIndexRef = useRef(focusIndex);
+  focusIndexRef.current = focusIndex;
   useEffect(() => {
-    if (!gamepadActive) return;
     const FOCUSABLE_SELECTOR = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
-    const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
-    focusables.forEach((el, i) => {
-      if (i === focusIndex) {
-        el.classList.add("gamepad-focused");
-        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-      } else {
-        el.classList.remove("gamepad-focused");
-      }
-    });
-  }, [focusIndex, gamepadActive, page]);
+    const applyFocus = () => {
+      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+      focusables.forEach((el, i) => {
+        if (i === focusIndexRef.current) {
+          el.classList.add("gamepad-focused");
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } else {
+          el.classList.remove("gamepad-focused");
+        }
+      });
+    };
+    const id = setInterval(applyFocus, 100);
+    return () => clearInterval(id);
+  }, []);
 
   // Discord Rich Presence — idle pub on boot. Failures are expected when
   // Discord is not running; swallow them so the app doesn't spam toasts.
