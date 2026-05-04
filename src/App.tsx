@@ -1323,6 +1323,7 @@ export default function App() {
   pageRef.current = page;
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
+  const remapReadyRef = useRef(false);
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
@@ -1357,19 +1358,25 @@ export default function App() {
       const prev = lastGamepadButtonsRef.current;
       const justPressed = buttons.map((pressed, i) => pressed && !(prev[i] ?? false));
 
-      // Remap mode
+      // Remap mode — wait for all buttons released first, then capture next press
       if (remappingActionRef.current) {
-        for (let i = 0; i < buttons.length; i++) {
-          if (justPressed[i]) {
-            const action = remappingActionRef.current;
-            setGamepadConfig(c => ({
-              ...c,
-              mappings: c.mappings.map(m =>
-                m.action === action ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
-              ),
-            }));
-            setRemappingAction(null);
-            break;
+        const anyPressed = buttons.some(b => b);
+        if (!remapReadyRef.current) {
+          if (!anyPressed) remapReadyRef.current = true;
+        } else {
+          for (let i = 0; i < buttons.length; i++) {
+            if (justPressed[i]) {
+              const action = remappingActionRef.current;
+              setGamepadConfig(c => ({
+                ...c,
+                mappings: c.mappings.map(m =>
+                  m.action === action ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
+                ),
+              }));
+              setRemappingAction(null);
+              remapReadyRef.current = false;
+              break;
+            }
           }
         }
         lastGamepadButtonsRef.current = [...buttons];
@@ -1441,7 +1448,7 @@ export default function App() {
 
       if (moveDown || moveUp || moveRight || moveLeft) {
         const SIDEBAR_SEL = ".sidebar__item";
-        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row";
+        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .gamepad-nav-item";
         const sidebarItems = document.querySelectorAll<HTMLElement>(SIDEBAR_SEL);
         const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_SEL);
         const allItems = [...sidebarItems, ...contentItems];
@@ -1571,7 +1578,7 @@ export default function App() {
   useEffect(() => {
     const applyFocus = () => {
       const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
-      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row");
+      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .gamepad-nav-item");
       const allItems = [...sidebarItems, ...contentItems];
       allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
@@ -3769,12 +3776,12 @@ export default function App() {
                     <div className="settings__field">
                       <label className="settings__field-label">ROMs Folder</label>
                       <input className="settings__field-input" value={config.roms_directory} readOnly />
-                      <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("roms_directory")}>Browse</button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("roms_directory")}>Browse</button>
                     </div>
                     <div className="settings__field">
                       <label className="settings__field-label">Emulators Folder</label>
                       <input className="settings__field-input" value={config.emulators_directory} readOnly />
-                      <button className="btn btn--ghost btn--sm" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
                     </div>
                   </div>
 
@@ -3785,7 +3792,7 @@ export default function App() {
                         <label className="settings__field-label">Cover Art Cache</label>
                         <p className="settings__field-desc">Clear locally stored boxart images. Useful if some covers are wrong.</p>
                       </div>
-                      <button className="btn btn--danger btn--sm" onClick={handleClearCache}>
+                      <button className="btn btn--danger btn--sm gamepad-nav-item" onClick={handleClearCache}>
                         <X size={14} /> Clear Cache
                       </button>
                     </div>
@@ -3892,7 +3899,7 @@ export default function App() {
                           <div key={mapping.action} className="controller-mapping__row">
                             <span className="controller-mapping__action">{GAMEPAD_ACTIONS[mapping.action]}</span>
                             <button
-                              className={`controller-mapping__btn ${remappingAction === mapping.action ? "controller-mapping__btn--listening" : ""}`}
+                              className={`controller-mapping__btn gamepad-nav-item ${remappingAction === mapping.action ? "controller-mapping__btn--listening" : ""}`}
                               onClick={() => setRemappingAction(remappingAction === mapping.action ? null : mapping.action)}
                             >
                               {remappingAction === mapping.action ? "Appuyez..." : `Button ${mapping.buttonIndex}`}
@@ -3926,7 +3933,7 @@ export default function App() {
                   {gamepadActive && (
                     <div className="settings__group">
                       <button
-                        className="btn btn--danger btn--sm"
+                        className="btn btn--danger btn--sm gamepad-nav-item"
                         onClick={() => setGamepadConfig({ selectedIndex: gamepadConfig.selectedIndex, deadzone: 0.15, mappings: [...DEFAULT_GAMEPAD_MAPPINGS] })}
                       >
                         <RefreshCw size={14} /> Réinitialiser le mapping
@@ -3939,7 +3946,7 @@ export default function App() {
               {page === "changelogs" && (
                 <div className="changelogs">
                   {changelogs.map((log: ChangelogEntry) => (
-                    <div key={log.version} className="changelog-card">
+                    <div key={log.version} className="changelog-card gamepad-nav-item">
                       <div className="changelog-card__header">
                         <h2 className="changelog-card__version">Version {log.version}</h2>
                         <span className="changelog-card__date">{log.date}</span>
