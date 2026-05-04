@@ -1300,7 +1300,8 @@ export default function App() {
 
   useEffect(() => { checkAchievements(); }, [checkAchievements]);
 
-  // ---- Gamepad polling & navigation ----
+  // ---- Gamepad detection (runs once, never re-creates) ----
+  const gamepadActiveRef = useRef(false);
   useEffect(() => {
     const scan = () => {
       const pads = navigator.getGamepads();
@@ -1308,8 +1309,6 @@ export default function App() {
       const isActive = connected.length > 0;
 
       if (isActive && !ghostDetectedRef.current) {
-        // First time seeing the gamepad — snapshot which buttons are pressed
-        // These are "ghost" buttons stuck from BT connection
         const gp = connected[0]!;
         ghostButtonsRef.current = new Set(
           gp.buttons.map((b, i) => b.pressed ? i : -1).filter(i => i >= 0)
@@ -1318,7 +1317,8 @@ export default function App() {
         lastGamepadButtonsRef.current = gp.buttons.map(b => b.pressed);
       }
 
-      if (isActive !== gamepadActive) {
+      if (isActive !== gamepadActiveRef.current) {
+        gamepadActiveRef.current = isActive;
         setGamepadActive(isActive);
       }
       if (isActive) {
@@ -1335,18 +1335,13 @@ export default function App() {
       ghostDetectedRef.current = false;
       ghostButtonsRef.current.clear();
       lastGamepadButtonsRef.current = [];
-      const pads = navigator.getGamepads();
-      const connected = [...pads].filter(Boolean);
-      setGamepadActive(connected.length > 0);
-      setGamepads([...pads]);
+      scan();
     };
 
     window.addEventListener("gamepadconnected", handleConnect);
     window.addEventListener("gamepaddisconnected", handleDisconnect);
-
-    const onInteraction = () => scan();
-    window.addEventListener("pointerdown", onInteraction);
-    window.addEventListener("keydown", onInteraction);
+    window.addEventListener("pointerdown", scan);
+    window.addEventListener("keydown", scan);
 
     const pollId = setInterval(scan, 300);
     scan();
@@ -1354,11 +1349,11 @@ export default function App() {
     return () => {
       window.removeEventListener("gamepadconnected", handleConnect);
       window.removeEventListener("gamepaddisconnected", handleDisconnect);
-      window.removeEventListener("pointerdown", onInteraction);
-      window.removeEventListener("keydown", onInteraction);
+      window.removeEventListener("pointerdown", scan);
+      window.removeEventListener("keydown", scan);
       clearInterval(pollId);
     };
-  }, [gamepadActive]);
+  }, []);
 
   // Tick for live controller display
   useEffect(() => {
