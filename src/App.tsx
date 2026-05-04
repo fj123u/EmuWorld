@@ -2765,12 +2765,12 @@ export default function App() {
                 </div>
                 <div className="main-content__actions">
                   {page === "store" && pendingImportConsole && (
-                    <button className="btn btn--primary btn--glow" onClick={() => handleImportRom(pendingImportConsole)}>
+                    <button className="btn btn--primary btn--glow gamepad-nav-item" onClick={() => handleImportRom(pendingImportConsole)}>
                       <CheckCircle size={14} /> Finalize {pendingImportConsole} Download
                     </button>
                   )}
                   {page === "library" && (
-                    <button className="btn btn--secondary" onClick={() => handleImportRom("Mixed")}>
+                    <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
                       <Download size={14} /> Import ROM
                     </button>
                   )}
@@ -2999,13 +2999,13 @@ export default function App() {
               {page === "store" && (
                 <div className="store-source-toggle">
                   <button
-                    className={`store-source-toggle__btn ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
+                    className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("vimm")}
                   >
                     🎮 Individual games (Vimm's Lair)
                   </button>
                   <button
-                    className={`store-source-toggle__btn ${storeMode === "rgs" ? "store-source-toggle__btn--active" : ""}`}
+                    className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "rgs" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("rgs")}
                   >
                     📦 Complete packs (RetroGameSets)
