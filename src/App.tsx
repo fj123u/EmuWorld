@@ -861,6 +861,8 @@ export default function App() {
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
+  const lastAxisRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const navRepeatRef = useRef<number>(0);
   const gamepadFrameRef = useRef<number>(0);
 
   // Synchronize 'downloaded' state with locally scanned 'roms'
@@ -1376,6 +1378,7 @@ export default function App() {
 
     const pages: Page[] = ["catalog", "library", "installed", "store", "settings", "controller", "changelogs"];
     let running = true;
+    const NAV_REPEAT_DELAY = 200; // ms between repeated moves when holding
 
     const poll = () => {
       if (!running) return;
@@ -1383,35 +1386,50 @@ export default function App() {
       const gp = pads[gamepadConfig.selectedIndex];
       if (!gp) { gamepadFrameRef.current = requestAnimationFrame(poll); return; }
 
+      const now = performance.now();
       const currentButtons = gp.buttons.map(b => b.pressed);
       const prev = lastGamepadButtonsRef.current;
-      const justPressed = currentButtons.map((pressed, i) => pressed && !prev[i]);
+      const justPressed = currentButtons.map((pressed, i) => pressed && !(prev[i] ?? false));
 
       const getAction = (action: string) => {
         const mapping = gamepadConfig.mappings.find(m => m.action === action);
-        return mapping ? justPressed[mapping.buttonIndex] : false;
+        return mapping ? justPressed[mapping.buttonIndex] ?? false : false;
       };
 
-      // D-pad / stick navigation
-      const axisX = Math.abs(gp.axes[0]) > gamepadConfig.deadzone ? gp.axes[0] : 0;
-      const axisY = Math.abs(gp.axes[1]) > gamepadConfig.deadzone ? gp.axes[1] : 0;
+      // D-pad buttons (digital)
+      const dpadDown = justPressed[13] ?? false;
+      const dpadUp = justPressed[12] ?? false;
+      const dpadRight = justPressed[15] ?? false;
+      const dpadLeft = justPressed[14] ?? false;
+
+      // Stick with repeat logic
+      const rawX = gp.axes[0] ?? 0;
+      const rawY = gp.axes[1] ?? 0;
+      const stickX = Math.abs(rawX) > gamepadConfig.deadzone ? rawX : 0;
+      const stickY = Math.abs(rawY) > gamepadConfig.deadzone ? rawY : 0;
+      let stickMoveX = 0;
+      let stickMoveY = 0;
+      if (now - navRepeatRef.current > NAV_REPEAT_DELAY) {
+        if (stickY > 0.5) stickMoveY = 1;
+        else if (stickY < -0.5) stickMoveY = -1;
+        if (stickX > 0.5) stickMoveX = 1;
+        else if (stickX < -0.5) stickMoveX = -1;
+      }
+
+      const moveDown = dpadDown || stickMoveY === 1;
+      const moveUp = dpadUp || stickMoveY === -1;
+      const moveRight = dpadRight || stickMoveX === 1;
+      const moveLeft = dpadLeft || stickMoveX === -1;
 
       const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
-      if (focusables.length > 0) {
+      if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
         const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
+        navRepeatRef.current = now;
 
-        if (justPressed[13] || (axisY > 0.5 && !(prev.length > 0))) {
-          setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
-        }
-        if (justPressed[12] || (axisY < -0.5 && !(prev.length > 0))) {
-          setFocusIndex(p => Math.max(p - Math.round(cols), 0));
-        }
-        if (justPressed[15] || (axisX > 0.5 && !prev[15])) {
-          setFocusIndex(p => Math.min(p + 1, focusables.length - 1));
-        }
-        if (justPressed[14] || (axisX < -0.5 && !prev[14])) {
-          setFocusIndex(p => Math.max(p - 1, 0));
-        }
+        if (moveDown) setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
+        if (moveUp) setFocusIndex(p => Math.max(p - Math.round(cols), 0));
+        if (moveRight) setFocusIndex(p => Math.min(p + 1, focusables.length - 1));
+        if (moveLeft) setFocusIndex(p => Math.max(p - 1, 0));
       }
 
       if (getAction("confirm")) {
@@ -1435,6 +1453,7 @@ export default function App() {
       }
 
       lastGamepadButtonsRef.current = currentButtons;
+      lastAxisRef.current = { x: stickX, y: stickY };
       gamepadFrameRef.current = requestAnimationFrame(poll);
     };
 
