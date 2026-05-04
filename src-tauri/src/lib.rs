@@ -1925,6 +1925,7 @@ async fn download_rom(
 
 #[tauri::command]
 async fn finalize_rgs_import(
+    app_handle: tauri::AppHandle,
     src_path: String,
     console: String,
 ) -> Result<String, String> {
@@ -1993,21 +1994,35 @@ async fn finalize_rgs_import(
         }
     } else if is_7z {
         let size_mb = fs::metadata(&dest).map(|m| m.len() / 1_048_576).unwrap_or(0);
-        println!("[Import] Detected 7z archive ({} MB), extracting (this may take a while)...", size_mb);
+        println!("[Import] Detected 7z archive ({} MB), extracting in background...", size_mb);
         let dest_clone = dest.clone();
         let dest_dir_clone = dest_dir.clone();
-        let result = tokio::task::spawn_blocking(move || {
-            extract_7z(&dest_clone, &dest_dir_clone)
-        }).await.map_err(|e| format!("7z task panicked: {}", e))?;
-        match result {
-            Ok(()) => {
-                println!("[Import] Extracted 7z successfully");
-                let _ = fs::remove_file(&dest);
+        let handle = app_handle.clone();
+        let file_name_clone = file_name.clone();
+        // Fire-and-forget: extract in background, notify frontend when done
+        tokio::task::spawn_blocking(move || {
+            use tauri::Emitter;
+            let result = extract_7z(&dest_clone, &dest_dir_clone);
+            match result {
+                Ok(()) => {
+                    println!("[Import] Extracted 7z successfully: {}", file_name_clone);
+                    let _ = fs::remove_file(&dest_clone);
+                    let _ = handle.emit("import-extract-done", serde_json::json!({
+                        "file": file_name_clone,
+                        "status": "success"
+                    }));
+                }
+                Err(e) => {
+                    println!("[Import] 7z extraction failed: {} — keeping raw file", e);
+                    let _ = handle.emit("import-extract-done", serde_json::json!({
+                        "file": file_name_clone,
+                        "status": "error",
+                        "message": e
+                    }));
+                }
             }
-            Err(e) => {
-                println!("[Import] 7z extraction failed: {} — keeping raw file", e);
-            }
-        }
+        });
+        return Ok(format!("Extracting {} ({} MB) in background — you'll be notified when done", file_name, size_mb));
     }
 
     Ok(format!("Imported successfully to {} folder", final_console))

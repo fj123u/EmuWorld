@@ -1798,6 +1798,22 @@ export default function App() {
     return () => { unlisten.then((fn) => fn()); };
   }, [loadPlaytime, showToast, scheduleCloudSync, checkAchievements, triggerHiddenAchievement]);
 
+  // Listen for background 7z extraction completion
+  useEffect(() => {
+    const unlisten = listen<{ file: string; status: string; message?: string }>(
+      "import-extract-done",
+      (event) => {
+        if (event.payload.status === "success") {
+          showToast(`Extraction terminée : ${event.payload.file.replace(".7z", "")}`, "success");
+          loadData();
+        } else {
+          showToast(`Extraction échouée : ${event.payload.message || event.payload.file}`, "error");
+        }
+      }
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, [showToast, loadData]);
+
   const handleToggleFavorite = useCallback(async (rom: RomFile) => {
     try {
       const isFav = await invoke<boolean>("toggle_favorite", { console: rom.console, name: rom.name });
