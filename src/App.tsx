@@ -540,7 +540,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite }: {
       whileHover={{ scale: 1.02, y: -4 }}
       whileTap={{ scale: 0.98 }}
       className="game-card"
-      data-focusable
+      data-rom-path={rom.path}
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
@@ -857,6 +857,7 @@ export default function App() {
   const [gamepadActive, setGamepadActive] = useState(false);
   const [focusIndex, setFocusIndex] = useState(0);
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
+  const [gamepadContextMenu, setGamepadContextMenu] = useState<{ romPath: string; x: number; y: number } | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
   const seenReleasedRef = useRef<Set<number>>(new Set());
@@ -1428,7 +1429,8 @@ export default function App() {
       const moveRight = dpadRight || stickMoveRight;
       const moveLeft = dpadLeft || stickMoveLeft;
 
-      const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
+      const FOCUSABLE_SELECTOR = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
+      const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
       if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
         const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
         if (moveDown) setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
@@ -1437,9 +1439,22 @@ export default function App() {
         if (moveLeft) setFocusIndex(p => Math.max(p - 1, 0));
       }
 
+      // A = confirm / click
       if (getAction("confirm")) {
-        const el = document.querySelector<HTMLElement>("[data-focusable].gamepad-focused");
+        const el = document.querySelector<HTMLElement>(FOCUSABLE_SELECTOR.split(", ").map(s => s + ".gamepad-focused").join(", "));
         if (el) el.click();
+      }
+
+      // B (button 1) = context menu on game cards
+      if (justPressed[1] && seenReleasedRef.current.has(1)) {
+        const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          const romPath = el.getAttribute("data-rom-path") ?? "";
+          if (romPath) {
+            setGamepadContextMenu({ romPath, x: rect.left + rect.width / 2, y: rect.top });
+          }
+        }
       }
       if (getAction("prevPage")) {
         setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
@@ -1461,7 +1476,8 @@ export default function App() {
   // Apply focus highlight
   useEffect(() => {
     if (!gamepadActive) return;
-    const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
+    const FOCUSABLE_SELECTOR = ".game-card, .rgs-console-card, .emu-card, .myrient-file-row, .vimm-game-row, .sidebar__item";
+    const focusables = document.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
     focusables.forEach((el, i) => {
       if (i === focusIndex) {
         el.classList.add("gamepad-focused");
@@ -3849,6 +3865,47 @@ export default function App() {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Gamepad context menu */}
+      <AnimatePresence>
+        {gamepadContextMenu && (() => {
+          const rom = roms.find(r => r.path === gamepadContextMenu.romPath);
+          if (!rom) return null;
+          const isFav = playtime.games[rom.name]?.favorite ?? false;
+          return (
+            <motion.div
+              className="gamepad-context-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setGamepadContextMenu(null)}
+            >
+              <motion.div
+                className="gamepad-context-menu"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                style={{ left: gamepadContextMenu.x, top: gamepadContextMenu.y }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="gamepad-context-menu__title">{rom.name}</div>
+                <button
+                  className="gamepad-context-menu__btn gamepad-context-menu__btn--play"
+                  onClick={() => { setGamepadContextMenu(null); handleLaunch(rom); }}
+                >
+                  <Play size={14} /> Jouer
+                </button>
+                <button
+                  className="gamepad-context-menu__btn"
+                  onClick={() => { setGamepadContextMenu(null); handleToggleFavorite(rom); }}
+                >
+                  {isFav ? "★ Retirer des favoris" : "☆ Mettre en favori"}
+                </button>
+              </motion.div>
+            </motion.div>
+          );
+        })()}
+      </AnimatePresence>
 
       <div className="toasts">
         <AnimatePresence>

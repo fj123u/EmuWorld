@@ -3321,3 +3321,70 @@ body {
   color: #22c55e;
   margin-left: auto;
 }
+
+/* Gamepad context menu */
+.gamepad-context-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gamepad-context-menu {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: rgba(20, 20, 35, 0.98);
+  border: 1px solid rgba(99,102,241,0.4);
+  border-radius: 12px;
+  padding: 0.75rem;
+  min-width: 180px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.gamepad-context-menu__title {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.2rem 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.gamepad-context-menu__btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: left;
+}
+
+.gamepad-context-menu__btn:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.gamepad-context-menu__btn--play {
+  color: #22c55e;
+}
+
+.gamepad-context-menu__btn--play:hover {
+  background: rgba(34,197,94,0.12);
+}
