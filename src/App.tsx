@@ -276,7 +276,6 @@ interface GamepadConfig {
 
 const DEFAULT_GAMEPAD_MAPPINGS: GamepadButtonMapping[] = [
   { action: "confirm", label: "A", buttonIndex: 0 },
-  { action: "back", label: "B", buttonIndex: 1 },
   { action: "details", label: "X", buttonIndex: 2 },
   { action: "favorite", label: "Y", buttonIndex: 3 },
   { action: "prevPage", label: "LB", buttonIndex: 4 },
@@ -287,12 +286,11 @@ const DEFAULT_GAMEPAD_MAPPINGS: GamepadButtonMapping[] = [
 
 const GAMEPAD_ACTIONS: Record<string, string> = {
   confirm: "Confirmer / Lancer",
-  back: "Retour",
   details: "Détails",
   favorite: "Favori",
   prevPage: "Page précédente",
   nextPage: "Page suivante",
-  settings: "Paramètres",
+  settings: "Controller",
   search: "Recherche",
 };
 
@@ -1355,7 +1353,8 @@ export default function App() {
   useEffect(() => {
     if (!gamepadActive) return;
 
-    const pages: Page[] = ["catalog", "library", "installed", "store", "settings", "controller", "changelogs"];
+    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "settings", "changelogs"];
+    let navCooldown = 0;
 
     const id = setInterval(() => {
       const config = gamepadConfigRef.current;
@@ -1406,21 +1405,28 @@ export default function App() {
       const dpadRight = justPressed[15] ?? false;
       const dpadLeft = justPressed[14] ?? false;
 
-      // Stick with repeat (interval already handles timing at ~60ms)
+      // Stick: allow continuous movement with cooldown (every 150ms while held)
       const rawX = gp.axes[0] ?? 0;
       const rawY = gp.axes[1] ?? 0;
       const stickX = Math.abs(rawX) > config.deadzone ? rawX : 0;
       const stickY = Math.abs(rawY) > config.deadzone ? rawY : 0;
-      const prevAxis = lastAxisRef.current;
-      const stickDown = stickY > 0.5 && prevAxis.y <= 0.5;
-      const stickUp = stickY < -0.5 && prevAxis.y >= -0.5;
-      const stickRight = stickX > 0.5 && prevAxis.x <= 0.5;
-      const stickLeft = stickX < -0.5 && prevAxis.x >= -0.5;
 
-      const moveDown = dpadDown || stickDown;
-      const moveUp = dpadUp || stickUp;
-      const moveRight = dpadRight || stickRight;
-      const moveLeft = dpadLeft || stickLeft;
+      let stickMoveDown = false, stickMoveUp = false, stickMoveRight = false, stickMoveLeft = false;
+      if (navCooldown <= 0) {
+        if (stickY > 0.5) { stickMoveDown = true; navCooldown = 3; }
+        else if (stickY < -0.5) { stickMoveUp = true; navCooldown = 3; }
+        if (stickX > 0.5) { stickMoveRight = true; navCooldown = 3; }
+        else if (stickX < -0.5) { stickMoveLeft = true; navCooldown = 3; }
+      } else if (Math.abs(stickX) > 0.5 || Math.abs(stickY) > 0.5) {
+        navCooldown--;
+      } else {
+        navCooldown = 0;
+      }
+
+      const moveDown = dpadDown || stickMoveDown;
+      const moveUp = dpadUp || stickMoveUp;
+      const moveRight = dpadRight || stickMoveRight;
+      const moveLeft = dpadLeft || stickMoveLeft;
 
       const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
       if (focusables.length > 0 && (moveDown || moveUp || moveRight || moveLeft)) {
@@ -1435,9 +1441,6 @@ export default function App() {
         const el = document.querySelector<HTMLElement>("[data-focusable].gamepad-focused");
         if (el) el.click();
       }
-      if (getAction("back")) {
-        setPage(p => p !== "catalog" ? "catalog" : p);
-      }
       if (getAction("prevPage")) {
         setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
       }
@@ -1445,12 +1448,12 @@ export default function App() {
         setPage(p => { const idx = pages.indexOf(p); return idx < pages.length - 1 ? pages[idx + 1] : p; });
       }
       if (getAction("settings")) {
-        setPage("settings");
+        setPage("controller");
       }
 
       lastGamepadButtonsRef.current = currentButtons;
       lastAxisRef.current = { x: stickX, y: stickY };
-    }, 60);
+    }, 50);
 
     return () => clearInterval(id);
   }, [gamepadActive]);
