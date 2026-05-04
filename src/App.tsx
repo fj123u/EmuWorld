@@ -262,7 +262,41 @@ interface MyrientFile {
   console: string;
 }
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store";
+interface GamepadButtonMapping {
+  action: string;
+  label: string;
+  buttonIndex: number;
+}
+
+interface GamepadConfig {
+  selectedIndex: number;
+  deadzone: number;
+  mappings: GamepadButtonMapping[];
+}
+
+const DEFAULT_GAMEPAD_MAPPINGS: GamepadButtonMapping[] = [
+  { action: "confirm", label: "A", buttonIndex: 0 },
+  { action: "back", label: "B", buttonIndex: 1 },
+  { action: "details", label: "X", buttonIndex: 2 },
+  { action: "favorite", label: "Y", buttonIndex: 3 },
+  { action: "prevPage", label: "LB", buttonIndex: 4 },
+  { action: "nextPage", label: "RB", buttonIndex: 5 },
+  { action: "settings", label: "Start", buttonIndex: 9 },
+  { action: "search", label: "Select", buttonIndex: 8 },
+];
+
+const GAMEPAD_ACTIONS: Record<string, string> = {
+  confirm: "Confirmer / Lancer",
+  back: "Retour",
+  details: "Détails",
+  favorite: "Favori",
+  prevPage: "Page précédente",
+  nextPage: "Page suivante",
+  settings: "Paramètres",
+  search: "Recherche",
+};
+
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -508,6 +542,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite }: {
       whileHover={{ scale: 1.02, y: -4 }}
       whileTap={{ scale: 0.98 }}
       className="game-card"
+      data-focusable
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
@@ -814,10 +849,24 @@ export default function App() {
     { version: "0.1.0", date: "2026-03-10", changes: ["Initial Beta Launch", "Support for 20+ retro consoles", "Automatic ROM scanning"] }
   ]);
 
+  // ---- Gamepad / Controller state ----
+  const [gamepads, setGamepads] = useState<(Gamepad | null)[]>([]);
+  const [gamepadConfig, setGamepadConfig] = useState<GamepadConfig>({
+    selectedIndex: 0,
+    deadzone: 0.15,
+    mappings: [...DEFAULT_GAMEPAD_MAPPINGS],
+  });
+  const [gamepadActive, setGamepadActive] = useState(false);
+  const [focusIndex, setFocusIndex] = useState(0);
+  const [remappingAction, setRemappingAction] = useState<string | null>(null);
+  const [gamepadTick, setGamepadTick] = useState(0);
+  const lastGamepadButtonsRef = useRef<boolean[]>([]);
+  const gamepadFrameRef = useRef<number>(0);
+
   // Synchronize 'downloaded' state with locally scanned 'roms'
   useEffect(() => {
     if (roms.length === 0 && storeRoms.length === 0) return;
-    
+
     // Efficiently identify which Store ROMs are present locally
     const downloadedIds = storeRoms
       .filter(sr => {
@@ -1249,6 +1298,158 @@ export default function App() {
   }, [roms.length, installed.length, showToast, loadAchievements, syncAchievementToCloud]);
 
   useEffect(() => { checkAchievements(); }, [checkAchievements]);
+
+  // ---- Gamepad polling & navigation ----
+  useEffect(() => {
+    const handleConnect = () => setGamepads([...navigator.getGamepads()]);
+    const handleDisconnect = () => setGamepads([...navigator.getGamepads()]);
+    window.addEventListener("gamepadconnected", handleConnect);
+    window.addEventListener("gamepaddisconnected", handleDisconnect);
+    setGamepads([...navigator.getGamepads()]);
+    return () => {
+      window.removeEventListener("gamepadconnected", handleConnect);
+      window.removeEventListener("gamepaddisconnected", handleDisconnect);
+    };
+  }, []);
+
+  useEffect(() => {
+    const connectedPads = gamepads.filter(Boolean);
+    setGamepadActive(connectedPads.length > 0);
+  }, [gamepads]);
+
+  // Tick for live controller display
+  useEffect(() => {
+    if (page !== "controller" || !gamepadActive) return;
+    const id = setInterval(() => setGamepadTick(t => t + 1), 50);
+    return () => clearInterval(id);
+  }, [page, gamepadActive]);
+
+  // Load gamepad config from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("emuworld_gamepad_config");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setGamepadConfig(parsed);
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  // Save gamepad config on change
+  useEffect(() => {
+    localStorage.setItem("emuworld_gamepad_config", JSON.stringify(gamepadConfig));
+  }, [gamepadConfig]);
+
+  // Gamepad remap listener
+  useEffect(() => {
+    if (!remappingAction) return;
+    const pollRemap = () => {
+      const pads = navigator.getGamepads();
+      const gp = pads[gamepadConfig.selectedIndex];
+      if (!gp) { gamepadFrameRef.current = requestAnimationFrame(pollRemap); return; }
+      for (let i = 0; i < gp.buttons.length; i++) {
+        if (gp.buttons[i].pressed) {
+          setGamepadConfig(prev => ({
+            ...prev,
+            mappings: prev.mappings.map(m =>
+              m.action === remappingAction ? { ...m, buttonIndex: i, label: `Button ${i}` } : m
+            ),
+          }));
+          setRemappingAction(null);
+          return;
+        }
+      }
+      gamepadFrameRef.current = requestAnimationFrame(pollRemap);
+    };
+    gamepadFrameRef.current = requestAnimationFrame(pollRemap);
+    return () => cancelAnimationFrame(gamepadFrameRef.current);
+  }, [remappingAction, gamepadConfig.selectedIndex]);
+
+  // Gamepad navigation polling
+  useEffect(() => {
+    if (!gamepadActive || remappingAction) return;
+
+    const pages: Page[] = ["catalog", "library", "installed", "store", "settings", "controller", "changelogs"];
+    let running = true;
+
+    const poll = () => {
+      if (!running) return;
+      const pads = navigator.getGamepads();
+      const gp = pads[gamepadConfig.selectedIndex];
+      if (!gp) { gamepadFrameRef.current = requestAnimationFrame(poll); return; }
+
+      const currentButtons = gp.buttons.map(b => b.pressed);
+      const prev = lastGamepadButtonsRef.current;
+      const justPressed = currentButtons.map((pressed, i) => pressed && !prev[i]);
+
+      const getAction = (action: string) => {
+        const mapping = gamepadConfig.mappings.find(m => m.action === action);
+        return mapping ? justPressed[mapping.buttonIndex] : false;
+      };
+
+      // D-pad / stick navigation
+      const axisX = Math.abs(gp.axes[0]) > gamepadConfig.deadzone ? gp.axes[0] : 0;
+      const axisY = Math.abs(gp.axes[1]) > gamepadConfig.deadzone ? gp.axes[1] : 0;
+
+      const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
+      if (focusables.length > 0) {
+        const cols = Math.max(1, Math.round((focusables[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (focusables[0]?.clientWidth ?? 200) + 16)));
+
+        if (justPressed[13] || (axisY > 0.5 && !(prev.length > 0))) {
+          setFocusIndex(p => Math.min(p + Math.round(cols), focusables.length - 1));
+        }
+        if (justPressed[12] || (axisY < -0.5 && !(prev.length > 0))) {
+          setFocusIndex(p => Math.max(p - Math.round(cols), 0));
+        }
+        if (justPressed[15] || (axisX > 0.5 && !prev[15])) {
+          setFocusIndex(p => Math.min(p + 1, focusables.length - 1));
+        }
+        if (justPressed[14] || (axisX < -0.5 && !prev[14])) {
+          setFocusIndex(p => Math.max(p - 1, 0));
+        }
+      }
+
+      if (getAction("confirm")) {
+        const el = document.querySelector<HTMLElement>("[data-focusable].gamepad-focused");
+        if (el) el.click();
+      }
+
+      if (getAction("back")) {
+        setPage(p => p !== "catalog" ? "catalog" : p);
+      }
+
+      if (getAction("prevPage")) {
+        setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
+      }
+      if (getAction("nextPage")) {
+        setPage(p => { const idx = pages.indexOf(p); return idx < pages.length - 1 ? pages[idx + 1] : p; });
+      }
+
+      if (getAction("settings")) {
+        setPage("settings");
+      }
+
+      lastGamepadButtonsRef.current = currentButtons;
+      gamepadFrameRef.current = requestAnimationFrame(poll);
+    };
+
+    gamepadFrameRef.current = requestAnimationFrame(poll);
+    return () => { running = false; cancelAnimationFrame(gamepadFrameRef.current); };
+  }, [gamepadActive, gamepadConfig, remappingAction]);
+
+  // Apply focus highlight
+  useEffect(() => {
+    if (!gamepadActive) return;
+    const focusables = document.querySelectorAll<HTMLElement>("[data-focusable]");
+    focusables.forEach((el, i) => {
+      if (i === focusIndex) {
+        el.classList.add("gamepad-focused");
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } else {
+        el.classList.remove("gamepad-focused");
+      }
+    });
+  }, [focusIndex, gamepadActive, page]);
 
   // Discord Rich Presence — idle pub on boot. Failures are expected when
   // Discord is not running; swallow them so the app doesn't spam toasts.
@@ -2181,6 +2382,14 @@ export default function App() {
               <span className="sidebar__item-count">{storeRoms.length}</span>
             </button>
             <button
+              className={`sidebar__item ${page === "controller" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("controller")}
+            >
+              <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
+              Controller
+              {gamepadActive && <span className="sidebar__item-badge">●</span>}
+            </button>
+            <button
               className={`sidebar__item ${page === "settings" ? "sidebar__item--active" : ""}`}
               onClick={() => setPage("settings")}
             >
@@ -2412,6 +2621,7 @@ export default function App() {
                     {page === "installed" && "Installed Emulators"}
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
+                    {page === "controller" && "Controller"}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && (
@@ -2440,6 +2650,7 @@ export default function App() {
                     )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
+                    {page === "controller" && (gamepadActive ? `Manette connectée` : "Aucune manette détectée")}
                   </p>
                 </div>
                 <div className="main-content__actions">
@@ -3466,6 +3677,133 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {page === "controller" && (
+                <div className="controller-page">
+                  {/* Controller selection */}
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Gamepad2 size={16} /> Manette active</div>
+                    {gamepads.filter(Boolean).length === 0 ? (
+                      <div className="controller-empty">
+                        <div className="controller-empty__icon">🎮</div>
+                        <p className="controller-empty__text">Connectez une manette pour commencer</p>
+                        <p className="controller-empty__hint">Compatible Xbox, PlayStation, Switch Pro Controller et plus</p>
+                      </div>
+                    ) : (
+                      <div className="controller-select">
+                        {gamepads.filter(Boolean).map((gp, i) => gp && (
+                          <button
+                            key={gp.index}
+                            className={`controller-select__item ${gamepadConfig.selectedIndex === gp.index ? "controller-select__item--active" : ""}`}
+                            onClick={() => setGamepadConfig(prev => ({ ...prev, selectedIndex: gp.index }))}
+                          >
+                            <span className="controller-select__icon">🎮</span>
+                            <span className="controller-select__name">{gp.id}</span>
+                            <span className="controller-select__index">Player {i + 1}</span>
+                            {gamepadConfig.selectedIndex === gp.index && <Check size={16} className="controller-select__check" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Visual controller display */}
+                  {gamepadActive && (() => {
+                    void gamepadTick;
+                    const gp = navigator.getGamepads()[gamepadConfig.selectedIndex];
+                    return (
+                      <div className="settings__group">
+                        <div className="settings__group-title"><Activity size={16} /> État en direct</div>
+                        <div className="controller-live">
+                          <div className="controller-live__sticks">
+                            <div className="controller-live__stick">
+                              <div className="controller-live__stick-label">Left Stick</div>
+                              <div className="controller-live__stick-ring">
+                                <div
+                                  className="controller-live__stick-dot"
+                                  style={{
+                                    transform: `translate(${(gp?.axes[0] ?? 0) * 20}px, ${(gp?.axes[1] ?? 0) * 20}px)`
+                                  }}
+                                />
+                              </div>
+                            </div>
+                            <div className="controller-live__stick">
+                              <div className="controller-live__stick-label">Right Stick</div>
+                              <div className="controller-live__stick-ring">
+                                <div
+                                  className="controller-live__stick-dot"
+                                  style={{
+                                    transform: `translate(${(gp?.axes[2] ?? 0) * 20}px, ${(gp?.axes[3] ?? 0) * 20}px)`
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="controller-live__buttons">
+                            {gp && gp.buttons.slice(0, 17).map((btn, i) => (
+                              <div key={i} className={`controller-live__btn ${btn.pressed ? "controller-live__btn--pressed" : ""}`}>
+                                {i}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Button mapping */}
+                  {gamepadActive && (
+                    <div className="settings__group">
+                      <div className="settings__group-title"><Settings size={16} /> Mapping des touches</div>
+                      <p className="settings__field-desc">Cliquez sur un bouton puis appuyez sur la touche de votre manette pour reassigner.</p>
+                      <div className="controller-mapping">
+                        {gamepadConfig.mappings.map(mapping => (
+                          <div key={mapping.action} className="controller-mapping__row">
+                            <span className="controller-mapping__action">{GAMEPAD_ACTIONS[mapping.action]}</span>
+                            <button
+                              className={`controller-mapping__btn ${remappingAction === mapping.action ? "controller-mapping__btn--listening" : ""}`}
+                              onClick={() => setRemappingAction(remappingAction === mapping.action ? null : mapping.action)}
+                            >
+                              {remappingAction === mapping.action ? "Appuyez..." : `Button ${mapping.buttonIndex}`}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Deadzone */}
+                  {gamepadActive && (
+                    <div className="settings__group">
+                      <div className="settings__group-title"><Activity size={16} /> Deadzone</div>
+                      <div className="controller-deadzone">
+                        <input
+                          type="range"
+                          min="0.05"
+                          max="0.5"
+                          step="0.01"
+                          value={gamepadConfig.deadzone}
+                          onChange={e => setGamepadConfig(prev => ({ ...prev, deadzone: parseFloat(e.target.value) }))}
+                          className="controller-deadzone__slider"
+                        />
+                        <span className="controller-deadzone__value">{gamepadConfig.deadzone.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reset */}
+                  {gamepadActive && (
+                    <div className="settings__group">
+                      <button
+                        className="btn btn--danger btn--sm"
+                        onClick={() => setGamepadConfig({ selectedIndex: gamepadConfig.selectedIndex, deadzone: 0.15, mappings: [...DEFAULT_GAMEPAD_MAPPINGS] })}
+                      >
+                        <RefreshCw size={14} /> Réinitialiser le mapping
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
