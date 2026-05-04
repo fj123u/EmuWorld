@@ -277,6 +277,11 @@ async fn launch_emulator(
             }
         }
 
+        // Cemu requires -g flag to launch a game
+        if emu.id == "cemu" {
+            cmd.arg("-g");
+        }
+
         cmd.arg(&final_path);
     }
 
