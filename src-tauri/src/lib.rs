@@ -1976,19 +1976,30 @@ async fn finalize_rgs_import(
         let _ = fs::remove_file(&src);
     }
 
-    // ZIP Auto-Extraction
-    // Check extension and magic bytes
-    let is_zip = lower_file.ends_with(".zip") || lower_file.ends_with(".7z") || is_zip_file(&dest);
-    
+    // Archive Auto-Extraction
+    let is_zip = lower_file.ends_with(".zip") || is_zip_file(&dest);
+    let is_7z = lower_file.ends_with(".7z");
+
     if is_zip {
-        println!("[Import] Detected archive, extracting...");
+        println!("[Import] Detected ZIP archive, extracting...");
         match extract_rom_zip(&dest, &dest_dir) {
             Ok(extracted_files) => {
                 println!("[Import] Extracted {} files", extracted_files.len());
                 let _ = fs::remove_file(&dest);
             }
             Err(e) => {
-                println!("[Import] Extraction failed: {} — keeping raw file", e);
+                println!("[Import] ZIP extraction failed: {} — keeping raw file", e);
+            }
+        }
+    } else if is_7z {
+        println!("[Import] Detected 7z archive, extracting...");
+        match extract_7z(&dest, &dest_dir) {
+            Ok(()) => {
+                println!("[Import] Extracted 7z successfully");
+                let _ = fs::remove_file(&dest);
+            }
+            Err(e) => {
+                println!("[Import] 7z extraction failed: {} — keeping raw file", e);
             }
         }
     }

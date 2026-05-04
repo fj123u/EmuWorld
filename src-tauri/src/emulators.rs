@@ -87,7 +87,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             description: "The gold standard emulator for GameCube and Wii games.".to_string(),
             download_url: "https://dl.dolphin-emu.org/releases/2412/dolphin-2412-x64.7z".to_string(),
             executable_name: "Dolphin.exe".to_string(),
-            supported_extensions: vec!["iso".to_string(), "gcm".to_string(), "wbfs".to_string(), "rvz".to_string()],
+            supported_extensions: vec!["iso".to_string(), "gcm".to_string(), "wbfs".to_string(), "rvz".to_string(), "ciso".to_string(), "gcz".to_string(), "nkit.iso".to_string()],
             icon: "🐬".to_string(),
             website: "https://dolphin-emu.org".to_string(),
             archive_type: "7z".to_string(),

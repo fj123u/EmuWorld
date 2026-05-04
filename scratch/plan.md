@@ -9,8 +9,8 @@
   > 1. App actuelle : ID par défaut `1334862011723284510` dans `src-tauri/src/discord_rpc.rs` — remplace par le tien si tu veux être propriétaire
   > 2. Uploader les assets avec ces keys exactes : `emuworld_logo` (grand), `playing_generic` (petit fallback), et `console_switch` / `console_wiiu` / `console_ps2` etc. (voir `console_icon_key` dans le module Rust pour la liste)
   > 3. Sans assets, les icônes ne s'affichent pas mais le texte lui fonctionne quand même.
-- [ ] **Manette (navigation UI au pad)** *(gros)* — Gamepad API, highlight focus, D-pad → navigate, A → click, B → back
-- [ ] **Achievements in-app** *(gros)* — palier par installation, nb de ROMs, heures jouées, jeu favori, 10 consoles, etc. Notif in-app + badges sur le profil web
+- [x] **Manette (navigation UI au pad)** *(gros)* — Gilrs natif Rust, highlight focus, D-pad/stick → navigate, A → click/context menu, B → back, clavier virtuel, remap touches
+- [x] **Achievements in-app** *(gros)* — palier par installation, nb de ROMs, heures jouées, jeu favori, 10 consoles, etc. Notif in-app + badges sur le profil web
 - [ ] **RetroAchievements par jeu** *(gros)* — wrapper de l'API [retroachievements.org](https://retroachievements.org), rattachement du compte, progression affichée sur la fiche jeu
 - [x] **Executable partageable** — workflow GitHub Actions qui build + signe le `.exe`/`.msi` à chaque tag `v*`, release en prerelease, guide dans [scratch/release_guide.md](scratch/release_guide.md)
 - [ ] **Système d'amis** *(hard)*
@@ -29,8 +29,10 @@
 
 - [ ] **Covers qui restent manquantes** sur certains jeux (lesquels déjà ? faudrait lister les noms)
 - [x] **OAuth Google / Discord** — `register_all()` au boot, page bounce sur alwaysdata pour que l'onglet se ferme proprement, playtime réinitialisé au switch de compte, et fix du listener `game-closed` qui tournait dans le vide.
-- [ ] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
-- [] **Chargement Infini** page de connexion — page bounce `/auth-callback.html` affiche un message "tu peux fermer cette fenêtre".
+- [x] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
+- [ ] **Chargement Infini** page de connexion — page bounce `/auth-callback.html` affiche un message "tu peux fermer cette fenêtre".
+- [x] **Probleme lancement Cemu** lors du lancement d'une rom, cemu se lance bien masi pas la rom → fix: ajout flag `-g`
+- [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 

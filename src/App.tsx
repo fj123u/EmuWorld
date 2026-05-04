@@ -784,6 +784,15 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.4.0", date: "2026-05-05", changes: [
+      "🎮 Navigation manette complète: D-pad/stick pour naviguer, A pour confirmer, B pour retour",
+      "📋 Menu contextuel manette: A sur un jeu → Jouer/Favori/Supprimer, sur un émulateur → Installer-Lancer/Désinstaller/Site web",
+      "⌨️ Clavier virtuel: appuyer A sur une barre de recherche ouvre un clavier navigable à la manette",
+      "🔧 Remapping des touches manette avec détection anti-conflit",
+      "🕹️ Détection native via Rust (gilrs) — compatible Xbox, PlayStation, Switch Pro Controller",
+      "🛒 Store simplifié: Vimm's Lair + RetroGameSets, suppression de Myrient",
+      "🐛 Fix lancement Wii U: Cemu reçoit maintenant le flag -g pour charger le jeu directement"
+    ] },
     { version: "1.3.0", date: "2026-05-03", changes: [
       "🏆 Achievements: 33 succès (21 milestones + 12 cachés) avec détection en temps réel",
       "🎖️ Badge de rang à côté de la photo de profil (Bronze → Argent → Or → Platine → Diamant)",
