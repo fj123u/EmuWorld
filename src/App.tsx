@@ -861,6 +861,7 @@ export default function App() {
   const [remappingAction, setRemappingAction] = useState<string | null>(null);
   const [gamepadTick, setGamepadTick] = useState(0);
   const lastGamepadButtonsRef = useRef<boolean[]>([]);
+  const seenReleasedRef = useRef<Set<number>>(new Set());
   const lastAxisRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const navRepeatRef = useRef<number>(0);
   const gamepadFrameRef = useRef<number>(0);
@@ -1347,7 +1348,7 @@ export default function App() {
     localStorage.setItem("emuworld_gamepad_config", JSON.stringify(gamepadConfig));
   }, [gamepadConfig]);
 
-  // Gamepad remap listener
+  // Gamepad remap listener — only accept buttons that have been seen released
   useEffect(() => {
     if (!remappingAction) return;
     const pollRemap = () => {
@@ -1355,7 +1356,10 @@ export default function App() {
       const gp = pads[gamepadConfig.selectedIndex];
       if (!gp) { gamepadFrameRef.current = requestAnimationFrame(pollRemap); return; }
       for (let i = 0; i < gp.buttons.length; i++) {
-        if (gp.buttons[i].pressed) {
+        if (!gp.buttons[i].pressed) seenReleasedRef.current.add(i);
+      }
+      for (let i = 0; i < gp.buttons.length; i++) {
+        if (gp.buttons[i].pressed && seenReleasedRef.current.has(i)) {
           setGamepadConfig(prev => ({
             ...prev,
             mappings: prev.mappings.map(m =>
@@ -1389,7 +1393,17 @@ export default function App() {
       const now = performance.now();
       const currentButtons = gp.buttons.map(b => b.pressed);
       const prev = lastGamepadButtonsRef.current;
-      const justPressed = currentButtons.map((pressed, i) => pressed && !(prev[i] ?? false));
+
+      // Track which buttons have been seen released at least once.
+      // Buttons that are "stuck on" from connection (Pro Controller BT bug)
+      // won't count until they're released and re-pressed.
+      for (let i = 0; i < currentButtons.length; i++) {
+        if (!currentButtons[i]) seenReleasedRef.current.add(i);
+      }
+
+      const justPressed = currentButtons.map((pressed, i) =>
+        pressed && !(prev[i] ?? false) && seenReleasedRef.current.has(i)
+      );
 
       const getAction = (action: string) => {
         const mapping = gamepadConfig.mappings.find(m => m.action === action);
