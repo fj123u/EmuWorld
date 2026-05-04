@@ -1992,8 +1992,14 @@ async fn finalize_rgs_import(
             }
         }
     } else if is_7z {
-        println!("[Import] Detected 7z archive, extracting...");
-        match extract_7z(&dest, &dest_dir) {
+        let size_mb = fs::metadata(&dest).map(|m| m.len() / 1_048_576).unwrap_or(0);
+        println!("[Import] Detected 7z archive ({} MB), extracting (this may take a while)...", size_mb);
+        let dest_clone = dest.clone();
+        let dest_dir_clone = dest_dir.clone();
+        let result = tokio::task::spawn_blocking(move || {
+            extract_7z(&dest_clone, &dest_dir_clone)
+        }).await.map_err(|e| format!("7z task panicked: {}", e))?;
+        match result {
             Ok(()) => {
                 println!("[Import] Extracted 7z successfully");
                 let _ = fs::remove_file(&dest);
