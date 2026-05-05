@@ -459,14 +459,27 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
             if e.file_type().is_file() {
                 if let Some(ext) = e.path().extension() {
                     let ext_str = ext.to_string_lossy().to_lowercase();
-                    if let Some((console, emu_id)) = match_extension(&ext_str, &catalog) {
+
+                    // Try to infer console from parent folder name (matches target_console from Vimm or user-created folders)
+                    let folder_console = e.path().strip_prefix(&dir).ok()
+                        .and_then(|rel| rel.components().next())
+                        .and_then(|c| {
+                            let folder = c.as_os_str().to_string_lossy().to_string();
+                            catalog.iter().find(|emu| {
+                                emu.console.eq_ignore_ascii_case(&folder) && emu.supported_extensions.contains(&ext_str)
+                            }).map(|emu| (emu.console.clone(), emu.id.clone()))
+                        });
+
+                    let matched = folder_console.or_else(|| match_extension(&ext_str, &catalog));
+
+                    if let Some((console, emu_id)) = matched {
                         let name = e.path().file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
-                        
+
                         // Filter out updates and DLCs
                         if is_update_or_dlc(&name, &ext_str) {
                             continue;
                         }
-                        
+
                         roms.push(RomFile {
                             name,
                             path: e.path().to_string_lossy().to_string(),
