@@ -2796,21 +2796,38 @@ async fn download_vimm_rom(
         .join("; ");
     let page_html = page_resp.text().await.map_err(|e| format!("page read: {}", e))?;
 
-    let media_id = {
+    let (media_id, dl_host) = {
         use scraper::{Html, Selector};
         let doc = Html::parse_document(&page_html);
         let media_sel = Selector::parse(r#"input[name="mediaId"]"#).map_err(|_| "selector error")?;
-        doc.select(&media_sel).next()
+        let mid = doc.select(&media_sel).next()
             .and_then(|el| el.value().attr("value"))
             .ok_or_else(|| "Could not find mediaId on Vimm page".to_string())?
-            .to_string()
+            .to_string();
+        let form_sel = Selector::parse(r#"form#dl_form"#).map_err(|_| "selector error")?;
+        let host = doc.select(&form_sel).next()
+            .and_then(|el| el.value().attr("action"))
+            .unwrap_or("//dl3.vimm.net/")
+            .trim_start_matches("//")
+            .trim_end_matches('/')
+            .to_string();
+        (mid, host)
     };
 
-    println!("[Vimm] mediaId={} for game {}", media_id, game_name);
+    println!("[Vimm] mediaId={} host={} for game {}", media_id, dl_host, game_name);
 
-    let download_url = format!("https://download2.vimm.net/download/?mediaId={}", media_id);
+    let download_url = format!("https://{}/?mediaId={}", dl_host, media_id);
     let mut req = client.get(&download_url)
-        .header("Referer", &page_url);
+        .header("Referer", &page_url)
+        .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+        .header("Accept-Language", "en-US,en;q=0.9")
+        .header("Sec-Ch-Ua", r#""Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120""#)
+        .header("Sec-Ch-Ua-Mobile", "?0")
+        .header("Sec-Ch-Ua-Platform", "\"Windows\"")
+        .header("Sec-Fetch-Dest", "document")
+        .header("Sec-Fetch-Mode", "navigate")
+        .header("Sec-Fetch-Site", "cross-site")
+        .header("Sec-Fetch-User", "?1");
     if !set_cookie.is_empty() {
         req = req.header("Cookie", &set_cookie);
     }
