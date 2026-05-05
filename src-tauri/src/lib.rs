@@ -220,6 +220,28 @@ fn extract_zip(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Stri
 }
 
 fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), String> {
+    // Try native 7z.exe first (much faster for large archives)
+    let seven_zip_paths = [
+        r"C:\Program Files\7-Zip\7z.exe",
+        r"C:\Program Files (x86)\7-Zip\7z.exe",
+    ];
+    for sz_path in &seven_zip_paths {
+        if std::path::Path::new(sz_path).exists() {
+            println!("[Extract] Using native 7z: {}", sz_path);
+            let output = Command::new(sz_path)
+                .args(&["x", "-y", &format!("-o{}", install_dir.display())])
+                .arg(archive_path)
+                .output()
+                .map_err(|e| format!("7z exec failed: {}", e))?;
+            if output.status.success() {
+                return Ok(());
+            }
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            println!("[Extract] 7z.exe failed ({}), falling back to sevenz-rust", stderr.trim());
+        }
+    }
+    // Fallback to pure-Rust (slower but works without 7-Zip installed)
+    println!("[Extract] Using sevenz-rust (no native 7z found, this may be slow)...");
     sevenz_rust::decompress_file(archive_path, install_dir).map_err(|e| e.to_string())
 }
 
