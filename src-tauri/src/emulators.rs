@@ -168,7 +168,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 },
                 SetupFile {
                     url: "https://github.com/THZoria/NX_Firmware/releases/download/22.1.0/Firmware.22.1.0.zip".to_string(),
-                    dest: "portable/system/firmware".to_string(),
+                    dest: "portable/system/Contents/registered".to_string(),
                     extract: true,
                 },
             ],
@@ -249,7 +249,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             setup_files: vec![
                 SetupFile {
                     url: "http://dus01.ps3.update.playstation.net/update/ps3/image/us/2026_0318_a2b60b6ac1d2e49e230144345616927c/PS3UPDAT.PUP".to_string(),
-                    dest: "dev_flash/PS3UPDAT.PUP".to_string(),
+                    dest: "PS3UPDAT.PUP".to_string(),
                     extract: false,
                 },
             ],
