@@ -2774,11 +2774,11 @@ async fn download_vimm_rom(
     }
 
     let client = reqwest::Client::builder()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .redirect(reqwest::redirect::Policy::limited(10))
         .timeout(std::time::Duration::from_secs(600))
         .build()
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| format!("client build: {}", e))?;
 
     let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
         "game_id": game_id,
@@ -2787,8 +2787,14 @@ async fn download_vimm_rom(
     }));
 
     let page_url = format!("https://vimm.net/vault/{}", game_id);
-    let page_html = client.get(&page_url).send().await.map_err(|e| e.to_string())?
-        .text().await.map_err(|e| e.to_string())?;
+    let page_resp = client.get(&page_url).send().await.map_err(|e| format!("page fetch: {}", e))?;
+    let set_cookie = page_resp.headers().get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .map(|s| s.split(';').next().unwrap_or("").to_string())
+        .collect::<Vec<_>>()
+        .join("; ");
+    let page_html = page_resp.text().await.map_err(|e| format!("page read: {}", e))?;
 
     let media_id = {
         use scraper::{Html, Selector};
@@ -2800,10 +2806,15 @@ async fn download_vimm_rom(
             .to_string()
     };
 
+    println!("[Vimm] mediaId={} for game {}", media_id, game_name);
+
     let download_url = format!("https://download2.vimm.net/download/?mediaId={}", media_id);
-    let response = client.get(&download_url)
-        .header("Referer", &page_url)
-        .send().await.map_err(|e| e.to_string())?;
+    let mut req = client.get(&download_url)
+        .header("Referer", &page_url);
+    if !set_cookie.is_empty() {
+        req = req.header("Cookie", &set_cookie);
+    }
+    let response = req.send().await.map_err(|e| format!("download request: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("Vimm download HTTP {}", response.status()));
