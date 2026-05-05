@@ -2956,6 +2956,10 @@ async fn download_vimm_rom(
         }
     }
 
+    // Clean up Vimm's Lair.txt that gets bundled with downloads
+    let vimm_txt = dest_dir.join("Vimm's Lair.txt");
+    if vimm_txt.exists() { let _ = fs::remove_file(&vimm_txt); }
+
     let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
         "game_id": game_id,
         "status": "done",
