@@ -2200,6 +2200,28 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unlisten = listen<{ game_id?: string; status: string; progress?: number; downloaded_bytes?: number; total_bytes?: number; speed_bps?: number; eta?: number }>(
+      "vimm-download-progress",
+      (event) => {
+        const { game_id, status, progress, downloaded_bytes, total_bytes, speed_bps, eta } = event.payload;
+        if (game_id && status === "downloading") {
+          setDownloadProgress(prev => ({
+            ...prev,
+            [game_id]: {
+              progress: progress || 0,
+              downloaded_bytes: downloaded_bytes || 0,
+              total_bytes: total_bytes || 0,
+              speed_bps: speed_bps || 0,
+              eta: eta || 0,
+            }
+          }));
+        }
+      }
+    );
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   // ---- Vimm loaders ----
   const loadVimmConsoles = useCallback(async () => {
     try {
@@ -2220,14 +2242,27 @@ export default function App() {
 
   const handleOpenVimmGame = useCallback(async (game: VimmGame) => {
     const targetConsole = selectedVimmConsole?.target_console || "Mixed";
+    if (downloading.includes(game.id)) return;
+    setDownloading(prev => [...prev, game.id]);
+    setDownloadNames(prev => ({ ...prev, [game.id]: game.name }));
+    showToast(`Téléchargement de ${game.name}...`, "info");
     try {
-      await openUrl(game.page_url).catch(() => window.open(game.page_url, "_blank"));
-      setPendingImportConsole(targetConsole);
-      showToast(`Once downloaded, click 'Finalize' to move the ROM to your ${targetConsole} library.`, "info");
-    } catch (e) {
-      console.error("Failed to open Vimm page:", e);
+      await invoke<string>("download_vimm_rom", {
+        gameId: game.id,
+        gameName: game.name,
+        console: targetConsole,
+      });
+      showToast(`${game.name} téléchargé avec succès !`, "success");
+      loadData();
+      triggerHiddenAchievement("first_download");
+    } catch (err: any) {
+      showToast(`Échec : ${err}`, "error");
+    } finally {
+      setDownloading(prev => prev.filter(id => id !== game.id));
+      setDownloadNames(prev => { const n = { ...prev }; delete n[game.id]; return n; });
+      setDownloadProgress(prev => { const n = { ...prev }; delete n[game.id]; return n; });
     }
-  }, [selectedVimmConsole, showToast]);
+  }, [selectedVimmConsole, showToast, downloading, loadData, triggerHiddenAchievement]);
 
   // Debounced Vimm search — scoped to the currently selected console when available,
   // or global across all Vimm consoles otherwise.
@@ -3115,10 +3150,15 @@ export default function App() {
                                 {game.size && <span className="vimm-tag vimm-tag--size">{game.size}</span>}
                               </div>
                               <button
-                                className="btn btn--primary btn--sm"
+                                className={`btn btn--sm gamepad-nav-item ${downloading.includes(game.id) ? 'btn--loading' : 'btn--primary'}`}
                                 onClick={() => handleOpenVimmGame(game)}
+                                disabled={downloading.includes(game.id)}
                               >
-                                Download
+                                {downloading.includes(game.id) ? (
+                                  <><RefreshCw size={12} className="animate-spin" /> {downloadProgress[game.id]?.progress || 0}%</>
+                                ) : (
+                                  <><Download size={12} /> Download</>
+                                )}
                               </button>
                             </motion.div>
                           ))}

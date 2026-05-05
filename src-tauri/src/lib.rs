@@ -2759,6 +2759,124 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
     Ok(games)
 }
 
+#[tauri::command]
+async fn download_vimm_rom(
+    app_handle: tauri::AppHandle,
+    game_id: String,
+    game_name: String,
+    console: String,
+) -> Result<String, String> {
+    let config = get_config();
+    let roms_dir = std::path::PathBuf::from(&config.roms_directory);
+    let dest_dir = roms_dir.join(&console);
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
+    }
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+        "game_id": game_id,
+        "status": "resolving",
+        "progress": 0
+    }));
+
+    let page_url = format!("https://vimm.net/vault/{}", game_id);
+    let page_html = client.get(&page_url).send().await.map_err(|e| e.to_string())?
+        .text().await.map_err(|e| e.to_string())?;
+
+    let media_id = {
+        use scraper::{Html, Selector};
+        let doc = Html::parse_document(&page_html);
+        let media_sel = Selector::parse(r#"input[name="mediaId"]"#).map_err(|_| "selector error")?;
+        doc.select(&media_sel).next()
+            .and_then(|el| el.value().attr("value"))
+            .ok_or_else(|| "Could not find mediaId on Vimm page".to_string())?
+            .to_string()
+    };
+
+    let download_url = format!("https://download2.vimm.net/download/?mediaId={}", media_id);
+    let response = client.get(&download_url)
+        .header("Referer", &page_url)
+        .send().await.map_err(|e| e.to_string())?;
+
+    if !response.status().is_success() {
+        return Err(format!("Vimm download HTTP {}", response.status()));
+    }
+
+    let file_name = response.headers().get("content-disposition")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| {
+            v.split("filename=").nth(1)
+                .or_else(|| v.split("filename*=UTF-8''").nth(1))
+                .map(|s| s.trim_matches('"').trim().to_string())
+        })
+        .unwrap_or_else(|| format!("{}.zip", game_name.replace(|c: char| !c.is_alphanumeric() && c != ' ', "").trim().replace(' ', "_")));
+
+    let total_size = response.content_length().unwrap_or(0);
+    let dest = dest_dir.join(&file_name);
+    let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let mut downloaded_bytes = 0u64;
+    let mut last_emit = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
+
+    use std::io::Write;
+    let mut stream = response;
+    while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded_bytes += chunk.len() as u64;
+
+        if last_emit.elapsed().as_millis() >= 400 {
+            let effective_total = if total_size > 0 { total_size } else { downloaded_bytes + 10_000_000 };
+            let progress = (downloaded_bytes as f64 / effective_total as f64 * 100.0).min(99.0) as u32;
+            let elapsed_sec = start_time.elapsed().as_secs_f64();
+            let speed_bps = if elapsed_sec > 0.0 { downloaded_bytes as f64 / elapsed_sec } else { 0.0 };
+            let eta = if speed_bps > 0.0 && total_size > downloaded_bytes {
+                ((total_size - downloaded_bytes) as f64 / speed_bps) as u64
+            } else { 0 };
+
+            let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+                "game_id": game_id,
+                "status": "downloading",
+                "progress": progress,
+                "downloaded_bytes": downloaded_bytes,
+                "total_bytes": total_size,
+                "speed_bps": speed_bps as u64,
+                "eta": eta
+            }));
+            last_emit = std::time::Instant::now();
+        }
+    }
+    drop(file);
+
+    let lower = file_name.to_lowercase();
+    if lower.ends_with(".zip") {
+        if let Ok(extracted) = extract_rom_zip(&dest, &dest_dir) {
+            if !extracted.is_empty() { let _ = fs::remove_file(&dest); }
+        }
+    } else if lower.ends_with(".7z") {
+        let dest_c = dest.clone();
+        let dir_c = dest_dir.clone();
+        match extract_7z(&dest_c, &dir_c) {
+            Ok(()) => { let _ = fs::remove_file(&dest); }
+            Err(_) => {}
+        }
+    }
+
+    let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+        "game_id": game_id,
+        "status": "done",
+        "progress": 100
+    }));
+
+    Ok(format!("Downloaded {} to {}", file_name, dest_dir.display()))
+}
+
 // ============================================================
 // PLAYTIME — per-game session tracking, favorites, aggregate stats.
 // Data lives in %APPDATA%/Local/EmuWorld/playtime.json.
@@ -2931,6 +3049,7 @@ pub fn run() {
             get_vimm_consoles,
             browse_vimm,
             search_vimm,
+            download_vimm_rom,
             get_playtime,
             toggle_favorite,
             get_profile_stats,
