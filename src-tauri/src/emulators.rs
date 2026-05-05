@@ -227,7 +227,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "PLACEHOLDER_PS2_BIOS".to_string(),
+                    url: "https://archive.org/download/ps2-bios-megadump/PS2_BIOS.zip".to_string(),
                     dest: "bios".to_string(),
                     extract: true,
                 },
@@ -248,7 +248,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "PLACEHOLDER_PS3_FIRMWARE".to_string(),
+                    url: "http://dus01.ps3.update.playstation.net/update/ps3/image/us/2026_0318_a2b60b6ac1d2e49e230144345616927c/PS3UPDAT.PUP".to_string(),
                     dest: "dev_flash/PS3UPDAT.PUP".to_string(),
                     extract: false,
                 },
