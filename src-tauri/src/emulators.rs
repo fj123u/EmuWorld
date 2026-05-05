@@ -141,7 +141,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "PLACEHOLDER_CEMU_KEYS".to_string(),
+                    url: "https://gist.githubusercontent.com/MuTLY/7876de98811aac72b13b31c24c84b5be/raw/keys.txt".to_string(),
                     dest: "keys.txt".to_string(),
                     extract: false,
                 },
@@ -162,12 +162,12 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "PLACEHOLDER_SWITCH_KEYS".to_string(),
+                    url: "https://raw.githubusercontent.com/THZoria/NX_Firmware/master/prod.keys".to_string(),
                     dest: "portable/system/prod.keys".to_string(),
                     extract: false,
                 },
                 SetupFile {
-                    url: "PLACEHOLDER_SWITCH_FIRMWARE".to_string(),
+                    url: "https://github.com/THZoria/NX_Firmware/releases/download/22.1.0/Firmware.22.1.0.zip".to_string(),
                     dest: "portable/system/firmware".to_string(),
                     extract: true,
                 },
@@ -206,9 +206,9 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "PLACEHOLDER_PS1_BIOS".to_string(),
-                    dest: "bios".to_string(),
-                    extract: true,
+                    url: "https://ps1emulator.com/SCPH1001.BIN".to_string(),
+                    dest: "bios/SCPH1001.BIN".to_string(),
+                    extract: false,
                 },
             ],
         },
