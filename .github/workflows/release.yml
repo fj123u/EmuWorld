@@ -131,8 +131,8 @@ jobs:
       - name: Create release + upload artefacts
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          prerelease: true
+          draft: false
+          prerelease: false
           # softprops ignores blank lines, so empty MSI outputs won't break.
           files: |
             ${{ steps.artefacts.outputs.nsis_exe }}
