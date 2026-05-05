@@ -758,6 +758,7 @@ export default function App() {
   const [downloading, setDownloading] = useState<string[]>([]);
   const [downloaded, setDownloaded] = useState<string[]>([]);
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadStats>>({});
+  const [downloadNames, setDownloadNames] = useState<Record<string, string>>({});
   const [isSearchingStore, setIsSearchingStore] = useState(false);
 
   // ---- Store state ----
@@ -2133,8 +2134,9 @@ export default function App() {
 
   const handleDownloadRom = async (rom: RomStoreEntry) => {
     if (downloading.includes(rom.id) || downloaded.includes(rom.id)) return;
-    showToast(`Preparing download for ${rom.name}...`, "info");
+    showToast(`Téléchargement de ${rom.name}...`, "info");
     setDownloading(prev => [...prev, rom.id]);
+    setDownloadNames(prev => ({ ...prev, [rom.id]: rom.name }));
     try {
       const result = await invoke<string>("download_rom", {
         downloadUrlArg: rom.download_url,
@@ -2144,13 +2146,15 @@ export default function App() {
         iaId: rom.ia_id || null,
         storeId: rom.id,
       });
-      showToast(`${rom.name} downloaded! 🎮`, "success");
+      showToast(`${rom.name} téléchargé avec succès !`, "success");
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
-      showToast(`Download failed: ${err}`, "error");
+      showToast(`Échec du téléchargement : ${err}`, "error");
     } finally {
       setDownloading(prev => prev.filter(id => id !== rom.id));
+      setDownloadNames(prev => { const n = { ...prev }; delete n[rom.id]; return n; });
+      setDownloadProgress(prev => { const n = { ...prev }; delete n[rom.id]; return n; });
     }
   };
 
@@ -3988,6 +3992,55 @@ export default function App() {
                 <span>B = fermer</span>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {downloading.length > 0 && (
+          <motion.div
+            className="download-banner"
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 40 }}
+          >
+            <div className="download-banner__icon">
+              <Download size={16} className="download-banner__pulse" />
+            </div>
+            <div className="download-banner__content">
+              {downloading.map(id => {
+                const name = downloadNames[id] || id;
+                const stats = downloadProgress[id];
+                const progress = stats?.progress || 0;
+                const speed = stats?.speed_bps || 0;
+                const eta = stats?.eta || 0;
+                const formatBytes = (bytes: number) => {
+                  if (bytes === 0) return '0 B';
+                  const k = 1024;
+                  const sizes = ['B', 'KB', 'MB', 'GB'];
+                  const i = Math.floor(Math.log(bytes) / Math.log(k));
+                  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                };
+                const formatEta = (s: number) => {
+                  if (s <= 0) return '';
+                  if (s < 60) return `${s}s`;
+                  return `${Math.floor(s / 60)}m${s % 60}s`;
+                };
+                return (
+                  <div key={id} className="download-banner__item">
+                    <div className="download-banner__info">
+                      <span className="download-banner__name">{name}</span>
+                      <span className="download-banner__stats">
+                        {progress}%{speed > 0 && ` · ${formatBytes(speed)}/s`}{eta > 0 && ` · ${formatEta(eta)}`}
+                      </span>
+                    </div>
+                    <div className="download-banner__bar">
+                      <div className="download-banner__bar-fill" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
