@@ -50,6 +50,7 @@ import {
   Globe,
   Package,
   Activity,
+  Trophy,
 } from "lucide-react";
 
 /* ============================
@@ -226,6 +227,27 @@ interface RgsSearchResult {
   image?: string;
   lien_id?: string;
   url?: string;
+}
+
+interface RAGameAchievement {
+  id: number;
+  title: string;
+  description: string;
+  points: number;
+  badge_name: string;
+  date_earned: string | null;
+  date_earned_hardcore: string | null;
+}
+
+interface RAGameInfo {
+  game_id: number;
+  title: string;
+  console_name: string;
+  image_icon: string;
+  num_achievements: number;
+  achievements: RAGameAchievement[];
+  num_earned: number;
+  num_earned_hardcore: number;
 }
 
 interface VimmConsole {
@@ -491,12 +513,21 @@ const formatPlaytime = (seconds: number): string => {
    Components
    ============================ */
 
-const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite }: {
+const RA_SUPPORTED_CONSOLES = new Set([
+  "NES", "Super Nintendo", "Nintendo 64", "Game Boy Advance", "Game Boy",
+  "Game Boy Color", "Nintendo DS", "Virtual Boy", "PlayStation 1",
+  "PlayStation 2", "PlayStation Portable", "Mega Drive", "Master System",
+  "Game Gear", "Saturn", "Dreamcast", "Arcade", "Neo-Geo", "PC Engine",
+  "Atari 2600", "WonderSwan",
+]);
+
+const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
   entry?: GameEntry,
   onToggleFavorite?: (rom: RomFile) => void,
+  onOpenRA?: (rom: RomFile) => void,
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -576,6 +607,17 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite }: {
       >
         <Trash2 size={14} />
       </button>
+
+      {/* RetroAchievements Button */}
+      {onOpenRA && RA_SUPPORTED_CONSOLES.has(rom.console) && (
+        <button
+          className="game-card__ra"
+          onClick={(e) => { e.stopPropagation(); onOpenRA(rom); }}
+          title="RetroAchievements"
+        >
+          <Trophy size={14} />
+        </button>
+      )}
 
       {/* Playtime badge */}
       {entry && entry.seconds > 0 && (
@@ -760,6 +802,13 @@ export default function App() {
   const [downloadProgress, setDownloadProgress] = useState<Record<string, DownloadStats>>({});
   const [downloadNames, setDownloadNames] = useState<Record<string, string>>({});
   const [isSearchingStore, setIsSearchingStore] = useState(false);
+
+  // ---- RetroAchievements state ----
+  const [raUsername, setRaUsername] = useState("");
+  const [raApiKey, setRaApiKey] = useState("");
+  const [raModalRom, setRaModalRom] = useState<RomFile | null>(null);
+  const [raGameInfo, setRaGameInfo] = useState<RAGameInfo | null>(null);
+  const [raLoading, setRaLoading] = useState(false);
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
@@ -1186,6 +1235,38 @@ export default function App() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // ---- Load RA credentials ----
+  useEffect(() => {
+    invoke<{ username: string; api_key: string }>("get_ra_credentials").then(creds => {
+      setRaUsername(creds.username || "");
+      setRaApiKey(creds.api_key || "");
+    }).catch(() => {});
+  }, []);
+
+  const handleSaveRaCredentials = useCallback(async () => {
+    try {
+      await invoke("save_ra_credentials", { username: raUsername, apiKey: raApiKey });
+      showToast("RetroAchievements credentials saved!", "success");
+    } catch (e: any) {
+      showToast(`Failed to save: ${e}`, "error");
+    }
+  }, [raUsername, raApiKey, showToast]);
+
+  const handleOpenRaModal = useCallback(async (rom: RomFile) => {
+    setRaModalRom(rom);
+    setRaGameInfo(null);
+    setRaLoading(true);
+    try {
+      const info = await invoke<RAGameInfo>("get_ra_game_progress", { gameName: rom.name, console: rom.console });
+      setRaGameInfo(info);
+    } catch (e: any) {
+      showToast(`RetroAchievements: ${e}`, "error");
+      setRaModalRom(null);
+    } finally {
+      setRaLoading(false);
+    }
+  }, [showToast]);
 
   // ---- Playtime / profile stats ----
   const loadPlaytime = useCallback(async () => {
@@ -2962,6 +3043,7 @@ export default function App() {
                                 onDelete={handleDeleteRom}
                                 entry={playtime.games[`${favRom.console}::${favRom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
+                                onOpenRA={handleOpenRaModal}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
@@ -2972,6 +3054,7 @@ export default function App() {
                                 onDelete={handleDeleteRom}
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
+                                onOpenRA={handleOpenRaModal}
                               />
                             ))}
                           </div>
@@ -3571,6 +3654,7 @@ export default function App() {
                               onDelete={handleDeleteRom}
                               entry={playtime.games[`${rom.console}::${rom.name}`]}
                               onToggleFavorite={handleToggleFavorite}
+                              onOpenRA={handleOpenRaModal}
                             />
                           ))}
                         </div>
@@ -3649,6 +3733,7 @@ export default function App() {
                               onDelete={handleDeleteRom}
                               entry={playtime.games[`${rom.console}::${rom.name}`]}
                               onToggleFavorite={handleToggleFavorite}
+                              onOpenRA={handleOpenRaModal}
                             />
                           ))}
                         </div>
@@ -3733,6 +3818,41 @@ export default function App() {
                           <div ref={logsEndRef} />
                         </div>
                       )}
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Trophy size={16} /> RetroAchievements</div>
+                    <p className="settings__field-desc" style={{ marginBottom: 12 }}>
+                      Connectez votre compte RetroAchievements pour voir vos trophées directement sur chaque jeu.
+                    </p>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Username</label>
+                      <input
+                        className="settings__field-input"
+                        value={raUsername}
+                        onChange={(e) => setRaUsername(e.target.value)}
+                        placeholder="Your RA username"
+                      />
+                    </div>
+                    <div className="settings__field">
+                      <label className="settings__field-label">API Key</label>
+                      <input
+                        className="settings__field-input"
+                        type="password"
+                        value={raApiKey}
+                        onChange={(e) => setRaApiKey(e.target.value)}
+                        placeholder="Your RA API key (from retroachievements.org/settings)"
+                      />
+                    </div>
+                    <div className="settings__field" style={{ justifyContent: "flex-end" }}>
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={handleSaveRaCredentials}
+                        disabled={!raUsername || !raApiKey}
+                      >
+                        <Check size={14} /> Sauvegarder
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -4295,6 +4415,101 @@ export default function App() {
                   Manage account on Web
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== RETROACHIEVEMENTS MODAL ===== */}
+      <AnimatePresence>
+        {raModalRom && (
+          <motion.div
+            className="ra-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => { setRaModalRom(null); setRaGameInfo(null); }}
+          >
+            <motion.div
+              className="ra-modal"
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="ra-modal__close" onClick={() => { setRaModalRom(null); setRaGameInfo(null); }}>
+                <X size={18} />
+              </button>
+
+              {raLoading ? (
+                <div className="ra-modal__loading">
+                  <RefreshCw size={32} className="animate-spin" />
+                  <p>Recherche sur RetroAchievements...</p>
+                </div>
+              ) : raGameInfo ? (
+                <>
+                  <div className="ra-modal__header">
+                    {raGameInfo.image_icon && (
+                      <img
+                        src={`https://retroachievements.org${raGameInfo.image_icon}`}
+                        alt={raGameInfo.title}
+                        className="ra-modal__game-icon"
+                      />
+                    )}
+                    <div className="ra-modal__game-info">
+                      <h2 className="ra-modal__title">{raGameInfo.title}</h2>
+                      <span className="ra-modal__console">{raGameInfo.console_name}</span>
+                    </div>
+                  </div>
+
+                  <div className="ra-modal__progress">
+                    <div className="ra-modal__progress-bar">
+                      <div
+                        className="ra-modal__progress-fill"
+                        style={{ width: `${raGameInfo.num_achievements > 0 ? (raGameInfo.num_earned / raGameInfo.num_achievements) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <div className="ra-modal__progress-text">
+                      <span>{raGameInfo.num_earned} / {raGameInfo.num_achievements} débloqués</span>
+                      {raGameInfo.num_earned_hardcore > 0 && (
+                        <span className="ra-modal__hardcore">{raGameInfo.num_earned_hardcore} hardcore</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="ra-modal__achievements">
+                    {raGameInfo.achievements.map(ach => (
+                      <div key={ach.id} className={`ra-achievement ${ach.date_earned ? "ra-achievement--unlocked" : ""}`}>
+                        <img
+                          src={`https://retroachievements.org/Badge/${ach.badge_name}.png`}
+                          alt={ach.title}
+                          className={`ra-achievement__badge ${!ach.date_earned ? "ra-achievement__badge--locked" : ""}`}
+                        />
+                        <div className="ra-achievement__info">
+                          <div className="ra-achievement__title">
+                            {ach.title}
+                            <span className="ra-achievement__points">{ach.points} pts</span>
+                          </div>
+                          <div className="ra-achievement__desc">{ach.description}</div>
+                          {ach.date_earned && (
+                            <div className="ra-achievement__date">
+                              {ach.date_earned_hardcore ? "🏆" : "✓"} {ach.date_earned}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {raGameInfo.achievements.length === 0 && (
+                      <div className="ra-modal__empty">Aucun achievement trouvé pour ce jeu.</div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="ra-modal__empty">
+                  <p>Impossible de trouver ce jeu sur RetroAchievements.</p>
+                  <p className="ra-modal__hint">Vérifiez que vos identifiants sont configurés dans les Settings.</p>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

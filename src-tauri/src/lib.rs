@@ -14,6 +14,7 @@ mod playtime;
 mod discord_rpc;
 mod achievements;
 mod gamepad;
+mod retroachievements;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -2970,6 +2971,33 @@ async fn download_vimm_rom(
 }
 
 // ============================================================
+// RETROACHIEVEMENTS
+// ============================================================
+
+#[tauri::command]
+fn save_ra_credentials(username: String, api_key: String) -> Result<(), String> {
+    retroachievements::save_config(&retroachievements::RAConfig { username, api_key })
+}
+
+#[tauri::command]
+fn get_ra_credentials() -> retroachievements::RAConfig {
+    retroachievements::load_config()
+}
+
+#[tauri::command]
+async fn get_ra_game_progress(game_name: String, console: String) -> Result<retroachievements::RAGameInfo, String> {
+    let config = retroachievements::load_config();
+    if config.username.is_empty() || config.api_key.is_empty() {
+        return Err("RetroAchievements credentials not configured".to_string());
+    }
+
+    let game_id = retroachievements::search_game(&game_name, &console, &config.api_key).await?
+        .ok_or_else(|| format!("Game '{}' not found on RetroAchievements", game_name))?;
+
+    retroachievements::get_game_progress(game_id, &config.username, &config.api_key).await
+}
+
+// ============================================================
 // PLAYTIME — per-game session tracking, favorites, aggregate stats.
 // Data lives in %APPDATA%/Local/EmuWorld/playtime.json.
 // ============================================================
@@ -3152,6 +3180,9 @@ pub fn run() {
             get_achievement_rank,
             check_achievements,
             unlock_achievement,
+            save_ra_credentials,
+            get_ra_credentials,
+            get_ra_game_progress,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,
