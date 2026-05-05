@@ -1,6 +1,15 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SetupFile {
+    pub url: String,
+    /// Relative path inside the emulator install dir (e.g. "keys.txt" or "portable/system/prod.keys")
+    pub dest: String,
+    /// If true, the downloaded file is a zip that should be extracted at `dest` (treated as dir)
+    pub extract: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EmulatorInfo {
     pub id: String,
     pub name: String,
@@ -16,6 +25,9 @@ pub struct EmulatorInfo {
     pub category: String,
     /// Optional: libretro core filename (e.g., "mame_libretro.dll")
     pub core_name: Option<String>,
+    /// Optional: extra files to download after install (keys, firmware, BIOS)
+    #[serde(default)]
+    pub setup_files: Vec<SetupFile>,
 }
 
 /// Returns the built-in catalog of supported emulators.
@@ -37,6 +49,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "mgba".to_string(),
@@ -51,6 +64,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "snes9x".to_string(),
@@ -65,6 +79,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "project64".to_string(),
@@ -79,6 +94,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "dolphin".to_string(),
@@ -93,6 +109,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "melonds".to_string(),
@@ -107,6 +124,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "cemu".to_string(),
@@ -121,6 +139,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![
+                SetupFile {
+                    url: "PLACEHOLDER_CEMU_KEYS".to_string(),
+                    dest: "keys.txt".to_string(),
+                    extract: false,
+                },
+            ],
         },
         EmulatorInfo {
             id: "ryubing".to_string(),
@@ -135,6 +160,18 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Nintendo".to_string(),
             core_name: None,
+            setup_files: vec![
+                SetupFile {
+                    url: "PLACEHOLDER_SWITCH_KEYS".to_string(),
+                    dest: "portable/system/prod.keys".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "PLACEHOLDER_SWITCH_FIRMWARE".to_string(),
+                    dest: "portable/system/firmware".to_string(),
+                    extract: true,
+                },
+            ],
         },
         EmulatorInfo {
             id: "retroarch-vb".to_string(),
@@ -149,6 +186,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
             core_name: Some("beetle_vb_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         // ═══════════════════════════════════════════════════════════
         //  SONY
@@ -166,6 +204,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Sony".to_string(),
             core_name: None,
+            setup_files: vec![
+                SetupFile {
+                    url: "PLACEHOLDER_PS1_BIOS".to_string(),
+                    dest: "bios".to_string(),
+                    extract: true,
+                },
+            ],
         },
         EmulatorInfo {
             id: "pcsx2".to_string(),
@@ -180,6 +225,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sony".to_string(),
             core_name: None,
+            setup_files: vec![
+                SetupFile {
+                    url: "PLACEHOLDER_PS2_BIOS".to_string(),
+                    dest: "bios".to_string(),
+                    extract: true,
+                },
+            ],
         },
         EmulatorInfo {
             id: "rpcs3".to_string(),
@@ -194,6 +246,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sony".to_string(),
             core_name: None,
+            setup_files: vec![
+                SetupFile {
+                    url: "PLACEHOLDER_PS3_FIRMWARE".to_string(),
+                    dest: "dev_flash/PS3UPDAT.PUP".to_string(),
+                    extract: false,
+                },
+            ],
         },
         EmulatorInfo {
             id: "ppsspp".to_string(),
@@ -208,6 +267,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Sony".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -226,6 +286,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Sega".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-md".to_string(),
@@ -240,6 +301,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-sms".to_string(),
@@ -254,6 +316,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-gg".to_string(),
@@ -268,6 +331,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-saturn".to_string(),
@@ -282,6 +346,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("beetle_saturn_libretro.dll".to_string()),
+            setup_files: vec![],
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -300,6 +365,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Microsoft".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -318,6 +384,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mame_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-neogeo".to_string(),
@@ -332,6 +399,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("fbneo_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-pce".to_string(),
@@ -346,6 +414,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mednafen_pce_fast_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-atari2600".to_string(),
@@ -360,6 +429,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("stella_libretro.dll".to_string()),
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-wswan".to_string(),
@@ -374,6 +444,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mednafen_wswan_libretro.dll".to_string()),
+            setup_files: vec![],
         },
 
         // ═══════════════════════════════════════════════════════════
@@ -392,6 +463,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Multi-System".to_string(),
             core_name: None,
+            setup_files: vec![],
         },
     ]
 }

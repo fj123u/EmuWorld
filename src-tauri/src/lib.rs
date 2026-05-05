@@ -190,6 +190,52 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
     }
 
+    // Download setup files (keys, firmware, BIOS)
+    if !emu.setup_files.is_empty() {
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "setup",
+            "progress": 85
+        }));
+
+        for sf in &emu.setup_files {
+            if sf.url.starts_with("PLACEHOLDER") { continue; }
+            let dest_path = install_dir.join(&sf.dest);
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent).ok();
+            }
+            println!("[Setup] Downloading {} -> {}", sf.url, dest_path.display());
+            match client.get(&sf.url)
+                .header("User-Agent", "EmuWorld/0.2.0 (Windows; Desktop)")
+                .send().await
+            {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        match resp.bytes().await {
+                            Ok(data) => {
+                                if sf.extract {
+                                    let tmp_zip = install_dir.join("_setup_tmp.zip");
+                                    if fs::write(&tmp_zip, &data).is_ok() {
+                                        fs::create_dir_all(&dest_path).ok();
+                                        let _ = extract_zip(&tmp_zip, &dest_path);
+                                        fs::remove_file(&tmp_zip).ok();
+                                    }
+                                } else {
+                                    let _ = fs::write(&dest_path, &data);
+                                }
+                                println!("[Setup] OK: {}", sf.dest);
+                            }
+                            Err(e) => println!("[Setup] Read failed for {}: {}", sf.dest, e),
+                        }
+                    } else {
+                        println!("[Setup] HTTP {} for {}", resp.status(), sf.url);
+                    }
+                }
+                Err(e) => println!("[Setup] Download failed for {}: {}", sf.dest, e),
+            }
+        }
+    }
+
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
         "status": "done",
