@@ -652,38 +652,87 @@
     // Best-effort cover URL for a given game. Mirrors the Rust fetch_boxart
     // priority: tinfoil for Switch title IDs, GameTDB for Wii/Wii U disc IDs,
     // Libretro thumbnails for retro systems. Falls back to onerror → hide.
+    const SYSTEMS = {
+      'NES': 'Nintendo - Nintendo Entertainment System',
+      'Super Nintendo': 'Nintendo - Super Nintendo Entertainment System',
+      'SNES': 'Nintendo - Super Nintendo Entertainment System',
+      'Nintendo 64': 'Nintendo - Nintendo 64',
+      'N64': 'Nintendo - Nintendo 64',
+      'Game Boy': 'Nintendo - Game Boy',
+      'Game Boy Color': 'Nintendo - Game Boy Color',
+      'Game Boy Advance': 'Nintendo - Game Boy Advance',
+      'Nintendo DS': 'Nintendo - Nintendo DS',
+      'GameCube': 'Nintendo - GameCube',
+      'GameCube / Wii': 'Nintendo - Wii',
+      'Wii': 'Nintendo - Wii',
+      'Wii U': 'Nintendo - Wii U',
+      'Nintendo Switch': 'Nintendo - Nintendo Switch',
+      'PlayStation 1': 'Sony - PlayStation',
+      'PlayStation 2': 'Sony - PlayStation 2',
+      'PlayStation Portable': 'Sony - PlayStation Portable',
+      'Mega Drive': 'Sega - Mega Drive - Genesis',
+      'Dreamcast': 'Sega - Dreamcast',
+      'Master System': 'Sega - Master System - Mark III',
+      'Game Gear': 'Sega - Game Gear',
+      'Arcade': 'MAME',
+    };
+
+    const toTitleCase = (s) => s.replace(/\b\w/g, c => c.toUpperCase());
+
     const coverUrlFor = (console, name) => {
       // 1. Switch: detect a 16-hex title id inside brackets.
       const tidMatch = String(name || '').match(/\[(0100[0-9A-Fa-f]{12})\]/);
       if (tidMatch) return `https://tinfoil.media/ti/${tidMatch[1].toUpperCase()}/256/256`;
 
-      // 2. Libretro thumbnail by system + cleaned name (without trailing tags).
-      const SYSTEMS = {
-        'NES': 'Nintendo - Nintendo Entertainment System',
-        'Super Nintendo': 'Nintendo - Super Nintendo Entertainment System',
-        'SNES': 'Nintendo - Super Nintendo Entertainment System',
-        'Nintendo 64': 'Nintendo - Nintendo 64',
-        'N64': 'Nintendo - Nintendo 64',
-        'Game Boy': 'Nintendo - Game Boy',
-        'Game Boy Color': 'Nintendo - Game Boy Color',
-        'Game Boy Advance': 'Nintendo - Game Boy Advance',
-        'Nintendo DS': 'Nintendo - Nintendo DS',
-        'GameCube': 'Nintendo - GameCube',
-        'GameCube / Wii': 'Nintendo - Wii',
-        'Wii': 'Nintendo - Wii',
-        'Wii U': 'Nintendo - Wii U',
-        'Nintendo Switch': 'Nintendo - Nintendo Switch',
-        'PlayStation 1': 'Sony - PlayStation',
-        'PlayStation 2': 'Sony - PlayStation 2',
-        'Mega Drive': 'Sega - Mega Drive - Genesis',
-        'Dreamcast': 'Sega - Dreamcast',
-      };
+      // 2. Libretro thumbnail by system + cleaned name
       const sys = SYSTEMS[console];
       if (!sys) return null;
-      const cleaned = cleanGameName(name);
+      let cleaned = cleanGameName(name);
       if (!cleaned) return null;
+      // Title case for lowercase names
+      if (cleaned === cleaned.toLowerCase()) cleaned = toTitleCase(cleaned);
       const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
       return `https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`;
+    };
+
+    // Generate multiple cover URL candidates for fallback
+    const coverUrlCandidates = (console, name) => {
+      const urls = [];
+      const sys = SYSTEMS[console];
+      if (!sys) return urls;
+
+      const tidMatch = String(name || '').match(/\[(0100[0-9A-Fa-f]{12})\]/);
+      if (tidMatch) urls.push(`https://tinfoil.media/ti/${tidMatch[1].toUpperCase()}/256/256`);
+
+      let cleaned = cleanGameName(name);
+      if (!cleaned) return urls;
+
+      // Exact name
+      const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
+      urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`);
+
+      // Title-cased version
+      const titled = toTitleCase(cleaned.toLowerCase());
+      if (titled !== cleaned) {
+        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(titled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+      }
+
+      // Common prefix additions (Zelda, Mario, Pokemon)
+      const PREFIXES = {
+        'zelda': 'The Legend of Zelda - ',
+        'mario': 'Super Mario ',
+        'pokemon': 'Pokemon ',
+        'pikmin': 'Pikmin',
+      };
+      const lower = cleaned.toLowerCase();
+      for (const [key, prefix] of Object.entries(PREFIXES)) {
+        if (lower.includes(key) && !lower.startsWith(prefix.toLowerCase().trim())) {
+          const suffixed = prefix + toTitleCase(cleaned);
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffixed.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+        }
+      }
+
+      return [...new Set(urls)];
     };
 
     // Achievement definitions — mirrors achievements.rs
@@ -732,6 +781,77 @@
       if (count >= 6) return { rank: "Or", icon: "🥇" };
       if (count >= 3) return { rank: "Argent", icon: "🥈" };
       return { rank: "Bronze", icon: "🥉" };
+    }
+
+    // Cover fallback handler — tries next candidate URL on error
+    window.handleCoverError = function(img) {
+      const fallbacks = JSON.parse(img.getAttribute('data-fallbacks') || '[]');
+      if (fallbacks.length > 0) {
+        img.setAttribute('data-fallbacks', JSON.stringify(fallbacks.slice(1)));
+        img.src = fallbacks[0];
+      } else {
+        img.outerHTML = '<div class="game-tile__placeholder">🎮</div>';
+      }
+    };
+
+    // RetroAchievements API helper (client-side)
+    const RA_CONSOLE_IDS = {
+      'NES': 7, 'Super Nintendo': 3, 'Nintendo 64': 2, 'Game Boy Advance': 5,
+      'Game Boy': 4, 'Game Boy Color': 4, 'Nintendo DS': 18, 'Virtual Boy': 28,
+      'PlayStation 1': 12, 'PlayStation 2': 21, 'PlayStation Portable': 41,
+      'Mega Drive': 1, 'Master System': 11, 'Game Gear': 15, 'Saturn': 39,
+      'Dreamcast': 40, 'Arcade': 27, 'PC Engine': 8, 'Atari 2600': 25,
+    };
+
+    function getRaCredentials() {
+      try {
+        const stored = localStorage.getItem('emuworld_ra');
+        return stored ? JSON.parse(stored) : null;
+      } catch { return null; }
+    }
+
+    function saveRaCredentials(username, apiKey) {
+      localStorage.setItem('emuworld_ra', JSON.stringify({ username, apiKey }));
+    }
+
+    async function fetchRaGameProgress(gameName, consoleName) {
+      const creds = getRaCredentials();
+      if (!creds || !creds.username || !creds.apiKey) return null;
+
+      const consoleId = RA_CONSOLE_IDS[consoleName];
+      if (!consoleId) return null;
+
+      // Search for the game
+      const cleanRaName = (n) => n.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+      const cleaned = cleanRaName(cleanGameName(gameName));
+
+      try {
+        const listUrl = `https://retroachievements.org/API/API_GetGameList.php?i=${consoleId}&y=${creds.apiKey}&f=1&h=1`;
+        const listResp = await fetch(listUrl);
+        if (!listResp.ok) return null;
+        const gamesList = await listResp.json();
+
+        let gameId = null;
+        let bestScore = Infinity;
+        for (const g of gamesList) {
+          const title = cleanRaName(g.Title || '');
+          if (title === cleaned) { gameId = g.ID; break; }
+          if (title.includes(cleaned) || cleaned.includes(title)) {
+            const score = Math.abs(title.length - cleaned.length);
+            if (score < bestScore) { bestScore = score; gameId = g.ID; }
+          }
+        }
+        if (!gameId) return null;
+
+        // Get progress
+        const progUrl = `https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?g=${gameId}&u=${creds.username}&y=${creds.apiKey}`;
+        const progResp = await fetch(progUrl);
+        if (!progResp.ok) return null;
+        return await progResp.json();
+      } catch (e) {
+        console.error('[RA]', e);
+        return null;
+      }
     }
 
     const setView = (html) => { view.innerHTML = html; window.scrollTo(0, 0); };
@@ -1038,12 +1158,15 @@
       // Build games grid (for Games tab)
       const allGamesForGrid = [...games].filter(g => g.seconds > 0 || g.launches > 0).sort((a, b) => b.seconds - a.seconds);
       const gamesGridHtml = allGamesForGrid.map(g => {
-        const cover = coverUrlFor(g.console, g.name);
+        const candidates = coverUrlCandidates(g.console, g.name);
         const cleaned = cleanGameName(g.name);
-        const pct = 0; // We don't have RA data server-side, show playtime only
-        const coverHtml = cover
-          ? `<img class="game-tile__cover" src="${esc(cover)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'game-tile__placeholder\\'>🎮</div>'" />`
-          : `<div class="game-tile__placeholder">🎮</div>`;
+        let coverHtml;
+        if (candidates.length > 0) {
+          const fallbacksJson = JSON.stringify(candidates.slice(1)).replace(/"/g, '&quot;');
+          coverHtml = `<img class="game-tile__cover" src="${esc(candidates[0])}" alt="" loading="lazy" data-fallbacks="${fallbacksJson}" onerror="handleCoverError(this)" />`;
+        } else {
+          coverHtml = `<div class="game-tile__placeholder">🎮</div>`;
+        }
         return `
           <div class="game-tile" data-game-key="${esc(g.console + '::' + g.name)}">
             ${coverHtml}
@@ -1152,12 +1275,14 @@
       gameDetailModal?.addEventListener('click', (e) => { if (e.target === gameDetailModal) gameDetailModal.classList.remove('open'); });
 
       document.querySelectorAll('.game-tile').forEach(tile => {
-        tile.addEventListener('click', () => {
+        tile.addEventListener('click', async () => {
           const key = tile.getAttribute('data-game-key');
           const g = games.find(x => (x.console + '::' + x.name) === key);
           if (!g) return;
           const cover = coverUrlFor(g.console, g.name);
           const cleaned = cleanGameName(g.name);
+
+          // Show modal with loading state
           gameDetailContent.innerHTML = `
             <div class="game-detail__header">
               ${cover ? `<img class="game-detail__cover" src="${esc(cover)}" alt="" onerror="this.style.display='none'" />` : ''}
@@ -1175,8 +1300,73 @@
               ${g.first_played ? `<div>First played: <span>${fmtDate(g.first_played)}</span></div>` : ''}
               ${g.last_played ? `<div>Last played: <span>${fmtDate(g.last_played)}</span></div>` : ''}
             </div>
+            <div id="ra-section" style="margin-top:16px;color:var(--muted);font-size:13px;">
+              ${RA_CONSOLE_IDS[g.console] ? '<div class="loading__spinner" style="width:24px;height:24px;margin:8px 0;"></div> Loading RetroAchievements...' : ''}
+            </div>
           `;
           gameDetailModal.classList.add('open');
+
+          // Fetch RA data if console is supported
+          if (RA_CONSOLE_IDS[g.console]) {
+            const raData = await fetchRaGameProgress(g.name, g.console);
+            const raSection = document.getElementById('ra-section');
+            if (!raSection) return;
+
+            if (!raData || !raData.Achievements) {
+              const creds = getRaCredentials();
+              if (!creds || !creds.username) {
+                raSection.innerHTML = `
+                  <div style="padding:12px;background:var(--bg-2);border:1px solid var(--border);border-radius:10px;">
+                    <div style="font-weight:700;margin-bottom:8px;">🏆 RetroAchievements</div>
+                    <p style="font-size:12px;margin:0 0 8px;">Entrez vos identifiants RA pour voir la progression.</p>
+                    <input id="ra-user-input" class="modal__input" placeholder="Username" style="margin-bottom:6px;padding:8px 10px;font-size:12px;" />
+                    <input id="ra-key-input" class="modal__input" placeholder="API Key" style="margin-bottom:8px;padding:8px 10px;font-size:12px;" />
+                    <button class="btn btn--primary" style="padding:6px 12px;font-size:12px;" onclick="saveRaCredentials(document.getElementById('ra-user-input').value, document.getElementById('ra-key-input').value); this.textContent='Saved!'; this.disabled=true;">Sauvegarder</button>
+                  </div>
+                `;
+              } else {
+                raSection.innerHTML = `<div style="color:var(--muted);font-size:12px;">Jeu non trouvé sur RetroAchievements.</div>`;
+              }
+              return;
+            }
+
+            const achievements = Object.values(raData.Achievements || {});
+            const numEarned = achievements.filter(a => a.DateEarned).length;
+            const numTotal = achievements.length;
+            const pctEarned = numTotal > 0 ? Math.round((numEarned / numTotal) * 100) : 0;
+            const totalPts = achievements.reduce((s, a) => s + (parseInt(a.Points) || 0), 0);
+            const earnedPts = achievements.filter(a => a.DateEarned).reduce((s, a) => s + (parseInt(a.Points) || 0), 0);
+            const is100 = numEarned === numTotal && numTotal > 0;
+
+            const achListHtml = achievements
+              .sort((a, b) => (a.DisplayOrder || a.ID) - (b.DisplayOrder || b.ID))
+              .map(a => {
+                const unlocked = !!a.DateEarned;
+                return `
+                  <div class="game-detail__ach ${unlocked ? 'game-detail__ach--unlocked' : ''}">
+                    <img class="game-detail__ach-badge ${!unlocked ? 'game-detail__ach-badge--locked' : ''}" src="https://retroachievements.org/Badge/${a.BadgeName}.png" alt="" />
+                    <div style="flex:1;min-width:0;">
+                      <div class="game-detail__ach-name">${esc(a.Title)}</div>
+                      <div class="game-detail__ach-desc">${esc(a.Description)}</div>
+                      ${unlocked ? `<div class="game-detail__ach-date">${a.DateEarnedHardcore ? '🏆' : '✓'} ${a.DateEarned}</div>` : ''}
+                    </div>
+                    <div class="game-detail__ach-pts">${a.Points} pts</div>
+                  </div>
+                `;
+              }).join('');
+
+            raSection.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div style="font-weight:700;font-size:14px;">🏆 RetroAchievements ${is100 ? '<span style="background:rgba(34,197,94,0.2);color:#22c55e;padding:2px 8px;border-radius:6px;font-size:11px;margin-left:8px;">100%</span>' : ''}</div>
+                <div style="font-size:12px;color:var(--amber);font-weight:600;">${earnedPts} / ${totalPts} pts</div>
+              </div>
+              <div class="game-detail__progress">
+                <div class="game-detail__progress-fill" style="width:${pctEarned}%"></div>
+              </div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">${numEarned} / ${numTotal} débloqués</div>
+              <div class="game-detail__ach-list">${achListHtml}</div>
+            `;
+          }
         });
       });
     }
