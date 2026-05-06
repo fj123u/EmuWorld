@@ -3102,7 +3102,7 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
         ("mgba_libretro.dll", "GBA/GB/GBC"),
         ("snes9x_libretro.dll", "SNES"),
         ("mupen64plus_next_libretro.dll", "N64"),
-        ("melonds_ds_libretro.dll", "DS"),
+        ("melonds_libretro.dll", "DS"),
         ("flycast_libretro.dll", "Dreamcast"),
     ];
 

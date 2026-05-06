@@ -506,7 +506,7 @@ pub fn retroarch_core_for_emulator(emulator_id: &str) -> Option<&'static str> {
         "mgba" => Some("mgba_libretro.dll"),
         "snes9x" => Some("snes9x_libretro.dll"),
         "project64" => Some("mupen64plus_next_libretro.dll"),
-        "melonds" => Some("melonds_ds_libretro.dll"),
+        "melonds" => Some("melonds_libretro.dll"),
         "flycast" => Some("flycast_libretro.dll"),
         _ => None,
     }
