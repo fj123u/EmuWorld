@@ -326,6 +326,145 @@
       flex-shrink: 0; text-align: right;
     }
     .ach-card__date { font-size: 10px; color: var(--muted); }
+
+    /* ---- Games tab / grid ---- */
+    .profile-tabs {
+      display: flex; gap: 4px; margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0;
+    }
+    .profile-tabs__btn {
+      padding: 10px 18px;
+      background: none; border: none; border-bottom: 2px solid transparent;
+      color: var(--muted); font-family: inherit; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .profile-tabs__btn:hover { color: var(--text); }
+    .profile-tabs__btn--active { color: var(--text); border-bottom-color: var(--purple); }
+
+    .games-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .game-tile {
+      position: relative;
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .game-tile:hover {
+      border-color: var(--border-strong);
+      transform: translateY(-3px);
+      box-shadow: 0 8px 24px rgba(168, 85, 247, 0.12);
+    }
+    .game-tile__cover {
+      width: 100%;
+      aspect-ratio: 3/4;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.03);
+      display: block;
+    }
+    .game-tile__placeholder {
+      width: 100%;
+      aspect-ratio: 3/4;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(255, 255, 255, 0.03);
+      font-size: 2rem; color: var(--muted);
+    }
+    .game-tile__info {
+      padding: 10px 12px;
+    }
+    .game-tile__name {
+      font-size: 12px; font-weight: 700;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .game-tile__meta {
+      font-size: 11px; color: var(--muted); margin-top: 2px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .game-tile__100 {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(34, 197, 94, 0.9);
+      color: white;
+      font-size: 10px; font-weight: 800;
+      padding: 2px 6px; border-radius: 6px;
+    }
+    .game-tile__progress {
+      height: 3px; background: rgba(255, 255, 255, 0.06);
+      border-radius: 99px; margin: 6px 12px 10px;
+    }
+    .game-tile__progress-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--purple), var(--cyan));
+    }
+
+    /* Game detail modal */
+    .game-detail {
+      background: var(--bg-1);
+      border: 1px solid var(--border-strong);
+      border-radius: 18px;
+      max-width: 540px; width: 100%;
+      max-height: 80vh; overflow-y: auto;
+      padding: 24px;
+    }
+    .game-detail__header {
+      display: flex; align-items: center; gap: 16px; margin-bottom: 18px;
+    }
+    .game-detail__cover {
+      width: 64px; height: 85px; border-radius: 10px; object-fit: cover;
+      border: 1px solid var(--border); flex-shrink: 0;
+    }
+    .game-detail__title { font-size: 18px; font-weight: 800; margin: 0 0 4px; }
+    .game-detail__meta { font-size: 13px; color: var(--muted); }
+    .game-detail__stats {
+      display: flex; gap: 16px; margin-bottom: 16px;
+      font-size: 13px; color: var(--muted);
+    }
+    .game-detail__stats span { font-weight: 600; color: var(--text); }
+    .game-detail__progress {
+      height: 8px; background: rgba(255, 255, 255, 0.06);
+      border-radius: 99px; margin-bottom: 18px;
+    }
+    .game-detail__progress-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--purple), var(--cyan));
+      transition: width 0.3s;
+    }
+    .game-detail__ach-list { display: flex; flex-direction: column; gap: 8px; }
+    .game-detail__ach {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 10px; border-radius: 10px;
+      background: var(--bg-2); border: 1px solid var(--border);
+    }
+    .game-detail__ach--unlocked {
+      border-color: rgba(168, 85, 247, 0.3);
+      background: rgba(168, 85, 247, 0.06);
+    }
+    .game-detail__ach-badge {
+      width: 36px; height: 36px; border-radius: 6px; object-fit: cover; flex-shrink: 0;
+    }
+    .game-detail__ach-badge--locked { filter: grayscale(1) opacity(0.4); }
+    .game-detail__ach-name { font-size: 13px; font-weight: 700; }
+    .game-detail__ach-desc { font-size: 11px; color: var(--muted); }
+    .game-detail__ach-pts {
+      margin-left: auto; font-size: 11px; font-weight: 700;
+      color: var(--amber); background: rgba(251, 191, 36, 0.15);
+      padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+    }
+    .game-detail__ach-date { font-size: 10px; color: var(--cyan); margin-top: 1px; }
+    .game-detail__close {
+      position: absolute; top: 14px; right: 14px;
+      background: var(--bg-2); border: 1px solid var(--border);
+      border-radius: 50%; width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--muted); cursor: pointer; font-size: 18px;
+    }
+    .game-detail__close:hover { color: var(--text); background: rgba(239, 68, 68, 0.2); }
+
     .profile-hero__badge {
       display: inline-flex; align-items: center; gap: 6px;
       padding: 3px 10px;
@@ -582,6 +721,9 @@
       { id: "install_update", name: "À jour !", description: "Installer une mise à jour de EmuWorld", icon: "✨", hidden: true, hint: "Rester à la pointe..." },
       { id: "ten_favorites", name: "Fan absolu", description: "Avoir 10 jeux en favoris", icon: "💕", hidden: true, hint: "Pourquoi choisir quand on peut tout aimer ?" },
       { id: "clear_covers", name: "Ménage de printemps", description: "Vider le cache des covers", icon: "🧹", hidden: true, hint: "Parfois il faut faire place nette..." },
+      { id: "ra_connected", name: "Chasseur de trophées", description: "Connecter son compte RetroAchievements", icon: "🏆", hidden: true, hint: "Des trophées d'un autre monde..." },
+      { id: "ra_first_100", name: "Perfectionniste", description: "Avoir un jeu à 100% sur RetroAchievements", icon: "💯", hidden: true, hint: "La perfection est un long chemin..." },
+      { id: "ra_five_100", name: "Complétionniste", description: "Avoir 5 jeux à 100% sur RetroAchievements", icon: "🌟", hidden: true, hint: "Cinq fois parfait..." },
     ];
 
     function getRankInfo(count) {
@@ -893,6 +1035,26 @@
         `;
       }).join('');
 
+      // Build games grid (for Games tab)
+      const allGamesForGrid = [...games].filter(g => g.seconds > 0 || g.launches > 0).sort((a, b) => b.seconds - a.seconds);
+      const gamesGridHtml = allGamesForGrid.map(g => {
+        const cover = coverUrlFor(g.console, g.name);
+        const cleaned = cleanGameName(g.name);
+        const pct = 0; // We don't have RA data server-side, show playtime only
+        const coverHtml = cover
+          ? `<img class="game-tile__cover" src="${esc(cover)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'game-tile__placeholder\\'>🎮</div>'" />`
+          : `<div class="game-tile__placeholder">🎮</div>`;
+        return `
+          <div class="game-tile" data-game-key="${esc(g.console + '::' + g.name)}">
+            ${coverHtml}
+            <div class="game-tile__info">
+              <div class="game-tile__name" title="${esc(cleaned)}">${esc(cleaned)}</div>
+              <div class="game-tile__meta">${esc(g.console)} · ${fmtTime(g.seconds)}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
       setView(`
         <header class="profile-hero">
           ${avatar}
@@ -910,30 +1072,56 @@
           </div>
         </header>
 
-        <section class="tiles">
-          <div class="tile"><div class="tile__v">${fmtTime(totalSeconds)}</div><div class="tile__l">Total playtime</div></div>
-          <div class="tile"><div class="tile__v">${gamesPlayed}</div><div class="tile__l">Games played</div></div>
-          <div class="tile"><div class="tile__v">${totalLaunches}</div><div class="tile__l">Launches</div></div>
-          <div class="tile"><div class="tile__v">★ ${favoriteCount}</div><div class="tile__l">Favorites</div></div>
-        </section>
+        <div class="profile-tabs" id="profile-tabs">
+          <button class="profile-tabs__btn profile-tabs__btn--active" data-tab="overview">Overview</button>
+          <button class="profile-tabs__btn" data-tab="games">Games (${allGamesForGrid.length})</button>
+          <button class="profile-tabs__btn" data-tab="achievements">Achievements (${achCount}/${achTotal})</button>
+        </div>
 
-        ${rows.length ? `<section class="section"><h3 class="section__title">Highlights</h3>${rowsHtml}</section>` : ''}
+        <div id="tab-overview">
+          <section class="tiles">
+            <div class="tile"><div class="tile__v">${fmtTime(totalSeconds)}</div><div class="tile__l">Total playtime</div></div>
+            <div class="tile"><div class="tile__v">${gamesPlayed}</div><div class="tile__l">Games played</div></div>
+            <div class="tile"><div class="tile__v">${totalLaunches}</div><div class="tile__l">Launches</div></div>
+            <div class="tile"><div class="tile__v">★ ${favoriteCount}</div><div class="tile__l">Favorites</div></div>
+          </section>
 
-        ${topGamesHtml}
+          ${rows.length ? `<section class="section"><h3 class="section__title">Highlights</h3>${rowsHtml}</section>` : ''}
 
-        <section class="section achievements-section">
-          <div class="achievements-header">
-            <h3 class="section__title" style="margin:0">Achievements</h3>
-            <div class="achievements-rank">
-              <span class="achievements-rank__icon">${rankInfo.icon}</span>
-              <span class="achievements-rank__label">${rankInfo.rank}</span>
-              <span class="achievements-rank__count">${achCount}/${achTotal}</span>
+          ${topGamesHtml}
+        </div>
+
+        <div id="tab-games" style="display:none">
+          ${allGamesForGrid.length > 0 ? `<div class="games-grid">${gamesGridHtml}</div>` : `
+            <div class="empty">
+              <div class="empty__icon">🎮</div>
+              <div class="empty__title">No games yet</div>
             </div>
+          `}
+        </div>
+
+        <div id="tab-achievements" style="display:none">
+          <section class="section achievements-section">
+            <div class="achievements-header">
+              <h3 class="section__title" style="margin:0">Achievements</h3>
+              <div class="achievements-rank">
+                <span class="achievements-rank__icon">${rankInfo.icon}</span>
+                <span class="achievements-rank__label">${rankInfo.rank}</span>
+                <span class="achievements-rank__count">${achCount}/${achTotal}</span>
+              </div>
+            </div>
+            <div class="achievements-grid">
+              ${achCardsHtml}
+            </div>
+          </section>
+        </div>
+
+        <div class="modal-overlay" id="game-detail-modal">
+          <div class="game-detail" style="position:relative">
+            <button class="game-detail__close" id="game-detail-close">&times;</button>
+            <div id="game-detail-content"></div>
           </div>
-          <div class="achievements-grid">
-            ${achCardsHtml}
-          </div>
-        </section>
+        </div>
 
         ${games.length === 0 ? `
           <div class="empty">
@@ -943,6 +1131,54 @@
           </div>
         ` : ''}
       `);
+
+      // Tab switching
+      const tabs = document.querySelectorAll('#profile-tabs .profile-tabs__btn');
+      tabs.forEach(btn => {
+        btn.addEventListener('click', () => {
+          tabs.forEach(b => b.classList.remove('profile-tabs__btn--active'));
+          btn.classList.add('profile-tabs__btn--active');
+          const tab = btn.getAttribute('data-tab');
+          document.getElementById('tab-overview').style.display = tab === 'overview' ? '' : 'none';
+          document.getElementById('tab-games').style.display = tab === 'games' ? '' : 'none';
+          document.getElementById('tab-achievements').style.display = tab === 'achievements' ? '' : 'none';
+        });
+      });
+
+      // Game tile click → detail modal
+      const gameDetailModal = document.getElementById('game-detail-modal');
+      const gameDetailContent = document.getElementById('game-detail-content');
+      document.getElementById('game-detail-close')?.addEventListener('click', () => gameDetailModal.classList.remove('open'));
+      gameDetailModal?.addEventListener('click', (e) => { if (e.target === gameDetailModal) gameDetailModal.classList.remove('open'); });
+
+      document.querySelectorAll('.game-tile').forEach(tile => {
+        tile.addEventListener('click', () => {
+          const key = tile.getAttribute('data-game-key');
+          const g = games.find(x => (x.console + '::' + x.name) === key);
+          if (!g) return;
+          const cover = coverUrlFor(g.console, g.name);
+          const cleaned = cleanGameName(g.name);
+          gameDetailContent.innerHTML = `
+            <div class="game-detail__header">
+              ${cover ? `<img class="game-detail__cover" src="${esc(cover)}" alt="" onerror="this.style.display='none'" />` : ''}
+              <div>
+                <h2 class="game-detail__title">${esc(cleaned)}</h2>
+                <div class="game-detail__meta">${esc(g.console)}</div>
+              </div>
+            </div>
+            <div class="game-detail__stats">
+              <div>Playtime: <span>${fmtTime(g.seconds)}</span></div>
+              <div>Launches: <span>${g.launches}</span></div>
+              ${g.favorite ? '<div>★ Favorite</div>' : ''}
+            </div>
+            <div class="game-detail__stats">
+              ${g.first_played ? `<div>First played: <span>${fmtDate(g.first_played)}</span></div>` : ''}
+              ${g.last_played ? `<div>Last played: <span>${fmtDate(g.last_played)}</span></div>` : ''}
+            </div>
+          `;
+          gameDetailModal.classList.add('open');
+        });
+      });
     }
 
     // ============================================================
