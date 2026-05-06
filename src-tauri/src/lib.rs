@@ -15,6 +15,7 @@ mod discord_rpc;
 mod achievements;
 mod gamepad;
 mod retroachievements;
+mod cloud_backup;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
@@ -3187,6 +3188,84 @@ async fn get_ra_completed_games() -> Result<Vec<retroachievements::RACompletedGa
 }
 
 // ============================================================
+// CLOUD BACKUP — Backblaze B2 save sync
+// ============================================================
+
+#[tauri::command]
+fn save_b2_config(key_id: String, app_key: String, bucket_id: String, bucket_name: String) -> Result<(), String> {
+    cloud_backup::save_config(&cloud_backup::B2Config { key_id, app_key, bucket_id, bucket_name })
+}
+
+#[tauri::command]
+fn get_b2_config() -> cloud_backup::B2Config {
+    cloud_backup::load_config()
+}
+
+#[tauri::command]
+fn scan_local_saves() -> Vec<cloud_backup::SaveEntry> {
+    let config = get_config();
+    cloud_backup::scan_saves(&config.emulators_directory)
+}
+
+#[tauri::command]
+async fn backup_saves_to_cloud() -> Result<String, String> {
+    let app_config = get_config();
+    let b2_config = cloud_backup::load_config();
+    if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
+        return Err("Backblaze B2 not configured.".to_string());
+    }
+
+    // Create zip
+    let zip_path = cloud_backup::create_backup_zip(&app_config.emulators_directory)?;
+    let zip_data = fs::read(&zip_path).map_err(|e| e.to_string())?;
+    let zip_name = zip_path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+    // Auth + upload
+    let (token, api_url) = cloud_backup::b2_authorize(&b2_config.key_id, &b2_config.app_key).await?;
+    let b2_file_name = format!("emuworld/{}", zip_name);
+    cloud_backup::b2_upload_file(&api_url, &token, &b2_config.bucket_id, &b2_file_name, zip_data).await?;
+
+    // Clean up local zip
+    let _ = fs::remove_file(&zip_path);
+
+    Ok(format!("Backup uploaded: {}", b2_file_name))
+}
+
+#[tauri::command]
+async fn list_cloud_backups() -> Result<Vec<cloud_backup::CloudFile>, String> {
+    let b2_config = cloud_backup::load_config();
+    if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
+        return Err("Backblaze B2 not configured.".to_string());
+    }
+
+    let (token, api_url) = cloud_backup::b2_authorize(&b2_config.key_id, &b2_config.app_key).await?;
+    cloud_backup::b2_list_files(&api_url, &token, &b2_config.bucket_id, "emuworld/").await
+}
+
+#[tauri::command]
+async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
+    let app_config = get_config();
+    let b2_config = cloud_backup::load_config();
+    if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
+        return Err("Backblaze B2 not configured.".to_string());
+    }
+
+    let (token, api_url) = cloud_backup::b2_authorize(&b2_config.key_id, &b2_config.app_key).await?;
+    let data = cloud_backup::b2_download_file(&api_url, &token, &file_id).await?;
+
+    // Write to temp file and restore
+    let tmp_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join("EmuWorld").join("backups");
+    fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
+    let tmp_path = tmp_dir.join("restore_tmp.zip");
+    fs::write(&tmp_path, &data).map_err(|e| e.to_string())?;
+
+    let restored = cloud_backup::restore_backup_zip(&tmp_path.to_string_lossy(), &app_config.emulators_directory)?;
+    let _ = fs::remove_file(&tmp_path);
+
+    Ok(format!("{} files restored", restored))
+}
+
+// ============================================================
 // PLAYTIME — per-game session tracking, favorites, aggregate stats.
 // Data lives in %APPDATA%/Local/EmuWorld/playtime.json.
 // ============================================================
@@ -3376,6 +3455,12 @@ pub fn run() {
             ra_login,
             configure_ra_emulators,
             download_ra_cores,
+            save_b2_config,
+            get_b2_config,
+            scan_local_saves,
+            backup_saves_to_cloud,
+            list_cloud_backups,
+            restore_cloud_backup,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

@@ -51,6 +51,8 @@ import {
   Package,
   Activity,
   Trophy,
+  Cloud,
+  Upload,
 } from "lucide-react";
 
 /* ============================
@@ -315,7 +317,7 @@ const GAMEPAD_ACTIONS: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller";
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -826,6 +828,15 @@ export default function App() {
   const [raToken, setRaToken] = useState("");
   const [raDownloadingCores, setRaDownloadingCores] = useState(false);
 
+  // ---- Cloud Backup state ----
+  const [b2KeyId, setB2KeyId] = useState("");
+  const [b2AppKey, setB2AppKey] = useState("");
+  const [b2BucketId, setB2BucketId] = useState("");
+  const [b2BucketName, setB2BucketName] = useState("");
+  const [localSaves, setLocalSaves] = useState<{ emulator: string; game_name: string; file_name: string; size: number; modified: string }[]>([]);
+  const [cloudBackups, setCloudBackups] = useState<{ file_name: string; file_id: string; size: number; upload_timestamp: number }[]>([]);
+  const [backupLoading, setBackupLoading] = useState(false);
+
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
 
@@ -1252,6 +1263,16 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  // ---- Load B2 config ----
+  useEffect(() => {
+    invoke<{ key_id: string; app_key: string; bucket_id: string; bucket_name: string }>("get_b2_config").then(cfg => {
+      setB2KeyId(cfg.key_id || "");
+      setB2AppKey(cfg.app_key || "");
+      setB2BucketId(cfg.bucket_id || "");
+      setB2BucketName(cfg.bucket_name || "");
+    }).catch(() => {});
+  }, []);
+
   // ---- Load RA credentials ----
   useEffect(() => {
     invoke<{ username: string; api_key: string; token: string }>("get_ra_credentials").then(creds => {
@@ -1318,6 +1339,54 @@ export default function App() {
       showToast(`${e}`, "error");
     } finally {
       setRaDownloadingCores(false);
+    }
+  }, [showToast]);
+
+  // ---- Cloud Backup handlers ----
+  const handleSaveB2Config = useCallback(async () => {
+    try {
+      await invoke("save_b2_config", { keyId: b2KeyId, appKey: b2AppKey, bucketId: b2BucketId, bucketName: b2BucketName });
+      showToast("Configuration B2 sauvegardée", "success");
+      const saves = await invoke<typeof localSaves>("scan_local_saves");
+      setLocalSaves(saves);
+    } catch (e: any) {
+      showToast(`${e}`, "error");
+    }
+  }, [b2KeyId, b2AppKey, b2BucketId, b2BucketName, showToast]);
+
+  const handleBackupToCloud = useCallback(async () => {
+    setBackupLoading(true);
+    try {
+      const result = await invoke<string>("backup_saves_to_cloud");
+      showToast(result, "success");
+    } catch (e: any) {
+      showToast(`Backup failed: ${e}`, "error");
+    } finally {
+      setBackupLoading(false);
+    }
+  }, [showToast]);
+
+  const handleListCloudBackups = useCallback(async () => {
+    setBackupLoading(true);
+    try {
+      const files = await invoke<typeof cloudBackups>("list_cloud_backups");
+      setCloudBackups(files);
+    } catch (e: any) {
+      showToast(`${e}`, "error");
+    } finally {
+      setBackupLoading(false);
+    }
+  }, [showToast]);
+
+  const handleRestoreBackup = useCallback(async (fileId: string) => {
+    setBackupLoading(true);
+    try {
+      const result = await invoke<string>("restore_cloud_backup", { fileId });
+      showToast(result, "success");
+    } catch (e: any) {
+      showToast(`Restore failed: ${e}`, "error");
+    } finally {
+      setBackupLoading(false);
     }
   }, [showToast]);
 
@@ -2727,6 +2796,13 @@ export default function App() {
               {gamepadActive && <span className="sidebar__item-badge">●</span>}
             </button>
             <button
+              className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("backup"); invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); }}
+            >
+              <span className="sidebar__item-icon"><Cloud size={16} /></span>
+              Backup
+            </button>
+            <button
               className={`sidebar__item ${page === "settings" ? "sidebar__item--active" : ""}`}
               onClick={() => setPage("settings")}
             >
@@ -2958,6 +3034,7 @@ export default function App() {
                     {page === "installed" && "Installed Emulators"}
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
+                    {page === "backup" && "Cloud Backup"}
                     {page === "controller" && "Controller"}
                   </h1>
                   <p className="main-content__subtitle">
@@ -2987,6 +3064,7 @@ export default function App() {
                     )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
+                    {page === "backup" && "Backblaze B2 — Sauvegardez vos parties dans le cloud"}
                     {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
                   </p>
                 </div>
@@ -4026,6 +4104,84 @@ export default function App() {
                       ) : !raProfileLoading ? (
                         <p className="settings__field-desc">Cliquez "Charger" pour voir vos jeux 100%.</p>
                       ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {page === "backup" && (
+                <div className="settings-content">
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Cloud size={16} /> Backblaze B2 — Cloud Backup</div>
+                    <p className="settings__field-desc" style={{ marginBottom: 12 }}>
+                      Sauvegardez vos saves sur le cloud (Backblaze B2 — 10GB gratuit). Vos sauvegardes de tous les émulateurs sont zipées et uploadées.
+                    </p>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Key ID</label>
+                      <input className="settings__field-input" value={b2KeyId} onChange={(e) => setB2KeyId(e.target.value)} placeholder="Application Key ID" />
+                    </div>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Application Key</label>
+                      <input className="settings__field-input" type="password" value={b2AppKey} onChange={(e) => setB2AppKey(e.target.value)} placeholder="Application Key" />
+                    </div>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Bucket ID</label>
+                      <input className="settings__field-input" value={b2BucketId} onChange={(e) => setB2BucketId(e.target.value)} placeholder="Bucket ID" />
+                    </div>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Bucket Name</label>
+                      <input className="settings__field-input" value={b2BucketName} onChange={(e) => setB2BucketName(e.target.value)} placeholder="Bucket Name" />
+                    </div>
+                    <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8 }}>
+                      <button className="btn btn--primary btn--sm" onClick={handleSaveB2Config} disabled={!b2KeyId || !b2AppKey || !b2BucketId}>
+                        <Check size={14} /> Sauvegarder
+                      </button>
+                    </div>
+                  </div>
+
+                  {b2KeyId && b2AppKey && (
+                    <div className="settings__group">
+                      <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span><HardDrive size={16} /> Saves locales</span>
+                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{localSaves.length} fichiers</span>
+                      </div>
+                      {localSaves.length > 0 && (
+                        <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 12 }}>
+                          {localSaves.slice(0, 20).map((s, i) => (
+                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "0.75rem", borderBottom: "1px solid var(--border)" }}>
+                              <span style={{ color: "var(--text-secondary)" }}>{s.emulator}/{s.game_name}</span>
+                              <span style={{ color: "var(--text-muted)" }}>{(s.size / 1024).toFixed(0)} KB</span>
+                            </div>
+                          ))}
+                          {localSaves.length > 20 && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>... et {localSaves.length - 20} autres</p>}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}>
+                          {backupLoading ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
+                          {backupLoading ? " Backup..." : " Backup vers le cloud"}
+                        </button>
+                        <button className="btn btn--ghost btn--sm" onClick={handleListCloudBackups} disabled={backupLoading}>
+                          <RefreshCw size={14} /> Voir les backups cloud
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {cloudBackups.length > 0 && (
+                    <div className="settings__group">
+                      <div className="settings__group-title"><Cloud size={16} /> Backups disponibles</div>
+                      {cloudBackups.map((b, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                          <div>
+                            <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>{b.file_name.replace("emuworld/", "")}</div>
+                            <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{(b.size / 1024 / 1024).toFixed(1)} MB — {new Date(b.upload_timestamp).toLocaleDateString()}</div>
+                          </div>
+                          <button className="btn btn--ghost btn--sm" onClick={() => handleRestoreBackup(b.file_id)} disabled={backupLoading}>
+                            <Download size={14} /> Restore
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
