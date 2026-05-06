@@ -345,14 +345,16 @@ async fn launch_emulator(
         let ra_exe = find_executable(&ra_dir, "retroarch.exe");
         if let Some(exe) = ra_exe {
             println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
-            // Inject RA credentials into retroarch.cfg before launching
-            let cfg_path = ra_dir.join("retroarch.cfg");
+            // Use the exe's parent dir as the effective RA dir (handles nested folders like RetroArch-Win64/)
+            let effective_ra_dir = exe.parent().unwrap_or(&ra_dir).to_path_buf();
+            // Inject RA credentials into retroarch.cfg next to the exe
+            let cfg_path = effective_ra_dir.join("retroarch.cfg");
             let cfg_content = fs::read_to_string(&cfg_path).unwrap_or_default();
             let new_cfg = retroachievements::inject_retroarch_cheevos_pub(
                 &cfg_content, &ra_config.username, &ra_config.token
             );
             let _ = fs::write(&cfg_path, new_cfg);
-            (ra_dir, exe, "retroarch".to_string())
+            (effective_ra_dir, exe, "retroarch".to_string())
         } else {
             // RetroArch not installed, fall back to standalone
             println!("[Launch] RA active but RetroArch not installed — using standalone");
@@ -3082,11 +3084,17 @@ fn configure_ra_emulators() -> Result<Vec<String>, String> {
 async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
     let config = get_config();
     let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-    let cores_dir = ra_dir.join("cores");
 
     if !ra_dir.exists() {
         return Err("RetroArch not installed. Please install RetroArch first.".to_string());
     }
+
+    // Find the actual RetroArch exe to determine the real base dir (handles nested folders)
+    let effective_ra_dir = find_executable(&ra_dir, "retroarch.exe")
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| ra_dir.clone());
+
+    let cores_dir = effective_ra_dir.join("cores");
     fs::create_dir_all(&cores_dir).map_err(|e| e.to_string())?;
 
     let cores = vec![

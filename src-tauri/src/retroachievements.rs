@@ -274,14 +274,14 @@ pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, toke
     let mut configured = Vec::new();
 
     // RetroArch (and all retroarch-* variants share the same install)
-    let retroarch_cfg = base.join("retroarch").join("retroarch.cfg");
-    if let Some(parent) = retroarch_cfg.parent() {
-        if parent.exists() {
-            let cfg_content = fs::read_to_string(&retroarch_cfg).unwrap_or_default();
-            let new_cfg = inject_retroarch_cheevos(&cfg_content, username, token);
-            if fs::write(&retroarch_cfg, new_cfg).is_ok() {
-                configured.push("RetroArch".to_string());
-            }
+    // Find the actual retroarch.exe to determine the correct config dir
+    let ra_base = base.join("retroarch");
+    let ra_cfg_path = find_retroarch_cfg(&ra_base);
+    if let Some(cfg_path) = ra_cfg_path {
+        let cfg_content = fs::read_to_string(&cfg_path).unwrap_or_default();
+        let new_cfg = inject_retroarch_cheevos(&cfg_content, username, token);
+        if fs::write(&cfg_path, new_cfg).is_ok() {
+            configured.push("RetroArch".to_string());
         }
     }
 
@@ -344,6 +344,26 @@ pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, toke
     }
 
     configured
+}
+
+fn find_retroarch_cfg(base: &PathBuf) -> Option<PathBuf> {
+    // Try direct location first
+    let direct = base.join("retroarch.cfg");
+    if direct.exists() || base.join("retroarch.exe").exists() {
+        return Some(direct);
+    }
+    // Search one level deep for retroarch.exe and put cfg next to it
+    if let Ok(entries) = fs::read_dir(base) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                if path.join("retroarch.exe").exists() {
+                    return Some(path.join("retroarch.cfg"));
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn inject_retroarch_cheevos_pub(cfg: &str, username: &str, token: &str) -> String {
