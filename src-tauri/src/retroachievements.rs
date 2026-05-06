@@ -474,6 +474,20 @@ fn inject_ini_section_cheevos(ini: &str, username: &str, token: &str) -> String 
     lines.join("\n")
 }
 
+/// Returns the RetroArch core DLL name for a given emulator ID if it should be
+/// redirected to RetroArch when RA is enabled (standalone has no RA support).
+pub fn retroarch_core_for_emulator(emulator_id: &str) -> Option<&'static str> {
+    match emulator_id {
+        "mesen" => Some("mesen_libretro.dll"),
+        "mgba" => Some("mgba_libretro.dll"),
+        "snes9x" => Some("snes9x_libretro.dll"),
+        "project64" => Some("mupen64plus_next_libretro.dll"),
+        "melonds" => Some("melonds_ds_libretro.dll"),
+        "flycast" => Some("flycast_libretro.dll"),
+        _ => None,
+    }
+}
+
 fn clean_name(name: &str) -> String {
     let lower = name.to_lowercase();
     let mut cleaned = String::new();

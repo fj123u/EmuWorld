@@ -333,17 +333,54 @@ async fn launch_emulator(
     let catalog = emulators::get_catalog();
     let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or_else(|| "Emulator not found".to_string())?.clone();
     let config = get_config();
-    let install_dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
-    let exe_path = find_executable(&install_dir, &emu.executable_name)
-        .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
+
+    // Check if we should redirect to RetroArch for RA support
+    let ra_config = retroachievements::load_config();
+    let ra_active = !ra_config.token.is_empty() && !ra_config.username.is_empty();
+    let ra_core = retroachievements::retroarch_core_for_emulator(&emu.id);
+    let use_retroarch = ra_active && ra_core.is_some() && rom_path.is_some();
+
+    let (install_dir, exe_path, effective_id) = if use_retroarch {
+        let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+        let ra_exe = find_executable(&ra_dir, "retroarch.exe");
+        if let Some(exe) = ra_exe {
+            println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
+            (ra_dir, exe, "retroarch".to_string())
+        } else {
+            // RetroArch not installed, fall back to standalone
+            println!("[Launch] RA active but RetroArch not installed — using standalone");
+            let dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
+            let exe = find_executable(&dir, &emu.executable_name)
+                .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
+            (dir, exe, emu.id.clone())
+        }
+    } else {
+        let dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
+        let exe = find_executable(&dir, &emu.executable_name)
+            .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
+        (dir, exe, emu.id.clone())
+    };
+
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
     if let Some(rom) = rom_path.clone() {
         let final_path = rom.replace(r"\\?\", "").replace("/", "\\");
         println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
 
-        // Handle RetroArch cores if applicable
-        if emu.id.starts_with("retroarch") {
+        // Handle RetroArch cores — either from RA redirect or from retroarch-* emulators
+        if use_retroarch {
+            if let Some(core_name) = ra_core {
+                let cores_dir = install_dir.join("cores");
+                let core_path = cores_dir.join(core_name);
+                if core_path.exists() {
+                    println!("[Launch] Using RA core: {:?}", core_path);
+                    cmd.arg("-L");
+                    cmd.arg(&core_path);
+                } else {
+                    println!("[Launch] WARNING: Core '{}' not found in cores/, launching without -L", core_name);
+                }
+            }
+        } else if effective_id.starts_with("retroarch") {
             if let Some(core) = &emu.core_name {
                 if let Some(core_path) = find_executable(&install_dir, core) {
                     println!("[Launch] Detected RetroArch core: {:?}", core_path);
@@ -3035,6 +3072,87 @@ fn configure_ra_emulators() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    let config = get_config();
+    let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+    let cores_dir = ra_dir.join("cores");
+
+    if !ra_dir.exists() {
+        return Err("RetroArch not installed. Please install RetroArch first.".to_string());
+    }
+    fs::create_dir_all(&cores_dir).map_err(|e| e.to_string())?;
+
+    let cores = vec![
+        ("mesen_libretro.dll", "NES"),
+        ("mgba_libretro.dll", "GBA/GB/GBC"),
+        ("snes9x_libretro.dll", "SNES"),
+        ("mupen64plus_next_libretro.dll", "N64"),
+        ("melonds_ds_libretro.dll", "DS"),
+        ("flycast_libretro.dll", "Dreamcast"),
+    ];
+
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/0.2.0")
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut downloaded = Vec::new();
+    let base_url = "https://buildbot.libretro.com/nightly/windows/x86_64/latest/";
+
+    for (core_file, label) in &cores {
+        let dest = cores_dir.join(core_file);
+        if dest.exists() {
+            downloaded.push(format!("{} (already installed)", label));
+            continue;
+        }
+
+        let zip_name = core_file.replace(".dll", ".dll.zip");
+        let url = format!("{}{}", base_url, zip_name);
+        println!("[RA Cores] Downloading {} from {}", core_file, url);
+
+        use tauri::Emitter;
+        let _ = app_handle.emit("ra-core-progress", serde_json::json!({
+            "core": label,
+            "status": "downloading"
+        }));
+
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                match resp.bytes().await {
+                    Ok(bytes) => {
+                        let reader = std::io::Cursor::new(&bytes);
+                        if let Ok(mut archive) = zip::ZipArchive::new(reader) {
+                            for i in 0..archive.len() {
+                                if let Ok(mut file) = archive.by_index(i) {
+                                    let name = file.name().to_string();
+                                    if name.ends_with(".dll") {
+                                        let out_path = cores_dir.join(&name);
+                                        if let Ok(mut out) = fs::File::create(&out_path) {
+                                            let _ = std::io::copy(&mut file, &mut out);
+                                            downloaded.push(format!("{} ✓", label));
+                                            println!("[RA Cores] Installed {}", name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => println!("[RA Cores] Failed to read {}: {}", core_file, e),
+                }
+            }
+            Ok(resp) => println!("[RA Cores] HTTP {} for {}", resp.status(), core_file),
+            Err(e) => println!("[RA Cores] Network error for {}: {}", core_file, e),
+        }
+    }
+
+    if downloaded.is_empty() {
+        return Err("Failed to download any cores.".to_string());
+    }
+    Ok(downloaded)
+}
+
+#[tauri::command]
 async fn get_ra_completed_games() -> Result<Vec<retroachievements::RACompletedGame>, String> {
     let config = retroachievements::load_config();
     if config.username.is_empty() || config.api_key.is_empty() {
@@ -3242,6 +3360,7 @@ pub fn run() {
             get_ra_completed_games,
             ra_login,
             configure_ra_emulators,
+            download_ra_cores,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

@@ -824,6 +824,7 @@ export default function App() {
   const [raPassword, setRaPassword] = useState("");
   const [raLoginLoading, setRaLoginLoading] = useState(false);
   const [raToken, setRaToken] = useState("");
+  const [raDownloadingCores, setRaDownloadingCores] = useState(false);
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
@@ -1305,6 +1306,18 @@ export default function App() {
       showToast(`RetroAchievements configuré dans : ${configured.join(", ")}`, "success");
     } catch (e: any) {
       showToast(`${e}`, "error");
+    }
+  }, [showToast]);
+
+  const handleDownloadRaCores = useCallback(async () => {
+    setRaDownloadingCores(true);
+    try {
+      const cores = await invoke<string[]>("download_ra_cores");
+      showToast(`Cores installés : ${cores.join(", ")}`, "success");
+    } catch (e: any) {
+      showToast(`${e}`, "error");
+    } finally {
+      setRaDownloadingCores(false);
     }
   }, [showToast]);
 
@@ -3953,15 +3966,26 @@ export default function App() {
                         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "var(--neon-green)" }}>
                           <CheckCircle size={14} /> Token RA actif
                         </div>
-                        <button
-                          className="btn btn--primary btn--sm"
-                          onClick={handleConfigureRaEmulators}
-                          style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}
-                        >
-                          <Gamepad2 size={14} /> Configurer les émulateurs
-                        </button>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <button
+                            className="btn btn--primary btn--sm"
+                            onClick={handleConfigureRaEmulators}
+                            style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}
+                          >
+                            <Gamepad2 size={14} /> Configurer les émulateurs
+                          </button>
+                          <button
+                            className="btn btn--primary btn--sm"
+                            onClick={handleDownloadRaCores}
+                            disabled={raDownloadingCores}
+                            style={{ background: "linear-gradient(180deg, #6366f1 0%, #4f46e5 100%)" }}
+                          >
+                            {raDownloadingCores ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
+                            {raDownloadingCores ? " Téléchargement..." : " Installer les cores"}
+                          </button>
+                        </div>
                         <p className="settings__field-desc" style={{ margin: 0 }}>
-                          Active les achievements dans RetroArch, DuckStation, PCSX2, Dolphin et PPSSPP.
+                          Active les achievements dans RetroArch, DuckStation, PCSX2, Dolphin et PPSSPP. Les jeux NES/SNES/GB/GBA/N64/DS seront lancés via RetroArch avec RA activé.
                         </p>
                       </div>
                     )}
