@@ -1390,6 +1390,19 @@ export default function App() {
     }
   }, [showToast]);
 
+  const handleDeleteBackup = useCallback(async (fileId: string, fileName: string) => {
+    setBackupLoading(true);
+    try {
+      await invoke<string>("delete_cloud_backup", { fileId, fileName });
+      setCloudBackups(prev => prev.filter(b => b.file_id !== fileId));
+      showToast("Backup supprimé", "success");
+    } catch (e: any) {
+      showToast(`Suppression échouée: ${e}`, "error");
+    } finally {
+      setBackupLoading(false);
+    }
+  }, [showToast]);
+
   const handleLoadRaProfile = useCallback(async () => {
     setRaProfileLoading(true);
     try {
@@ -4177,9 +4190,14 @@ export default function App() {
                             <div style={{ fontSize: "0.8rem", fontWeight: 600 }}>{b.file_name.replace("emuworld/", "")}</div>
                             <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{(b.size / 1024 / 1024).toFixed(1)} MB — {new Date(b.upload_timestamp).toLocaleDateString()}</div>
                           </div>
-                          <button className="btn btn--ghost btn--sm" onClick={() => handleRestoreBackup(b.file_id)} disabled={backupLoading}>
-                            <Download size={14} /> Restore
-                          </button>
+                          <div style={{ display: "flex", gap: "4px" }}>
+                            <button className="btn btn--ghost btn--sm" onClick={() => handleRestoreBackup(b.file_id)} disabled={backupLoading}>
+                              <Download size={14} /> Restore
+                            </button>
+                            <button className="btn btn--danger btn--sm" onClick={() => handleDeleteBackup(b.file_id, b.file_name)} disabled={backupLoading}>
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>

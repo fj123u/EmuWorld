@@ -3265,6 +3265,19 @@ async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
     Ok(format!("{} files restored", restored))
 }
 
+#[tauri::command]
+async fn delete_cloud_backup(file_id: String, file_name: String) -> Result<String, String> {
+    let b2_config = cloud_backup::load_config();
+    if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
+        return Err("Backblaze B2 not configured.".to_string());
+    }
+
+    let (token, api_url) = cloud_backup::b2_authorize(&b2_config.key_id, &b2_config.app_key).await?;
+    cloud_backup::b2_delete_file(&api_url, &token, &file_id, &file_name).await?;
+
+    Ok(format!("Deleted: {}", file_name))
+}
+
 // ============================================================
 // PLAYTIME — per-game session tracking, favorites, aggregate stats.
 // Data lives in %APPDATA%/Local/EmuWorld/playtime.json.
@@ -3461,6 +3474,7 @@ pub fn run() {
             backup_saves_to_cloud,
             list_cloud_backups,
             restore_cloud_backup,
+            delete_cloud_backup,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

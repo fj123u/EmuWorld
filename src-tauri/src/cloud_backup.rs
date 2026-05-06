@@ -158,21 +158,14 @@ fn find_save_dirs_recursive(dir: &PathBuf, targets: &[&str], depth: u32, max_dep
 }
 
 fn dir_has_save_files(dir: &PathBuf) -> bool {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if SAVE_EXTENSIONS.contains(&ext_str.as_str()) {
-                        return true;
-                    }
-                }
-                // Also include files without extension or common save patterns
-                let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
-                if name.ends_with(".srm") || name.ends_with(".sav") || name.contains("save") {
-                    return true;
-                }
+    let walker = walkdir::WalkDir::new(dir).max_depth(3).into_iter().filter_map(|e| e.ok());
+    for entry in walker {
+        let path = entry.path();
+        if !path.is_file() { continue; }
+        if let Some(ext) = path.extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            if SAVE_EXTENSIONS.contains(&ext_str.as_str()) {
+                return true;
             }
         }
     }
@@ -209,12 +202,25 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
         if !emu_dir.is_dir() { continue; }
         let emu_id = emu_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-        let save_dirs = save_dirs_for_emulator(&emu_id, &emu_dir);
+        // For retroarch, find the actual base (may be nested)
+        let effective_dir = if emu_id == "retroarch" {
+            find_retroarch_base(&emu_dir)
+        } else {
+            emu_dir.clone()
+        };
+
+        let save_dirs = save_dirs_for_emulator(&emu_id, &effective_dir);
         for (category, dir) in save_dirs {
-            let walker = walkdir::WalkDir::new(&dir).max_depth(3).into_iter().filter_map(|e| e.ok());
+            let walker = walkdir::WalkDir::new(&dir).max_depth(5).into_iter().filter_map(|e| e.ok());
             for file in walker {
                 let path = file.path().to_path_buf();
                 if !path.is_file() { continue; }
+                if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    if !SAVE_EXTENSIONS.contains(&ext_str.as_str()) { continue; }
+                } else {
+                    continue;
+                }
                 let meta = match fs::metadata(&path) {
                     Ok(m) => m,
                     Err(_) => continue,
@@ -234,6 +240,54 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
                     size: meta.len(),
                     modified,
                 });
+            }
+        }
+    }
+
+    // Also scan the ROMs directory for saves that live next to ROM files
+    let config_path = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("EmuWorld")
+        .join("config.json");
+    if let Ok(config_data) = fs::read_to_string(&config_path) {
+        if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_data) {
+            if let Some(roms_dir) = config.get("roms_directory").and_then(|v| v.as_str()) {
+                let roms_path = PathBuf::from(roms_dir);
+                if roms_path.exists() {
+                    let walker = walkdir::WalkDir::new(&roms_path).max_depth(4).into_iter().filter_map(|e| e.ok());
+                    for file in walker {
+                        let path = file.path().to_path_buf();
+                        if !path.is_file() { continue; }
+                        if let Some(ext) = path.extension() {
+                            let ext_str = ext.to_string_lossy().to_lowercase();
+                            if !SAVE_EXTENSIONS.contains(&ext_str.as_str()) { continue; }
+                        } else {
+                            continue;
+                        }
+                        let meta = match fs::metadata(&path) {
+                            Ok(m) => m,
+                            Err(_) => continue,
+                        };
+                        let modified = meta.modified()
+                            .map(|t| {
+                                let dt: chrono::DateTime<chrono::Local> = t.into();
+                                dt.format("%Y-%m-%d %H:%M").to_string()
+                            })
+                            .unwrap_or_default();
+
+                        let rel = path.strip_prefix(&roms_path).unwrap_or(&path);
+                        let console = rel.components().next()
+                            .map(|c| c.as_os_str().to_string_lossy().to_string())
+                            .unwrap_or_else(|| "unknown".to_string());
+                        entries.push(SaveEntry {
+                            emulator: format!("roms/{}", console),
+                            game_name: rel.to_string_lossy().replace('\\', "/").to_string(),
+                            file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                            size: meta.len(),
+                            modified,
+                        });
+                    }
+                }
             }
         }
     }
@@ -457,6 +511,33 @@ pub async fn b2_download_file(
     }
 
     resp.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string())
+}
+
+pub async fn b2_delete_file(
+    api_url: &str,
+    auth_token: &str,
+    file_id: &str,
+    file_name: &str,
+) -> Result<(), String> {
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(format!("{}/b2api/v2/b2_delete_file_version", api_url))
+        .header("Authorization", auth_token)
+        .json(&serde_json::json!({
+            "fileId": file_id,
+            "fileName": file_name
+        }))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !resp.status().is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        return Err(format!("B2 delete failed: {}", body));
+    }
+
+    Ok(())
 }
 
 fn sha1_hash(_data: &[u8]) -> String {
