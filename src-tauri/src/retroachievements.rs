@@ -346,6 +346,10 @@ pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, toke
     configured
 }
 
+pub fn inject_retroarch_cheevos_pub(cfg: &str, username: &str, token: &str) -> String {
+    inject_retroarch_cheevos(cfg, username, token)
+}
+
 fn inject_retroarch_cheevos(cfg: &str, username: &str, token: &str) -> String {
     let mut lines: Vec<String> = cfg.lines().map(|l| l.to_string()).collect();
 

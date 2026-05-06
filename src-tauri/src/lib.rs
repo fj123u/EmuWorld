@@ -345,6 +345,13 @@ async fn launch_emulator(
         let ra_exe = find_executable(&ra_dir, "retroarch.exe");
         if let Some(exe) = ra_exe {
             println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
+            // Inject RA credentials into retroarch.cfg before launching
+            let cfg_path = ra_dir.join("retroarch.cfg");
+            let cfg_content = fs::read_to_string(&cfg_path).unwrap_or_default();
+            let new_cfg = retroachievements::inject_retroarch_cheevos_pub(
+                &cfg_content, &ra_config.username, &ra_config.token
+            );
+            let _ = fs::write(&cfg_path, new_cfg);
             (ra_dir, exe, "retroarch".to_string())
         } else {
             // RetroArch not installed, fall back to standalone
