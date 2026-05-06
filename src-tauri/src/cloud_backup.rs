@@ -282,6 +282,11 @@ fn find_retroarch_base(install_dir: &PathBuf) -> PathBuf {
 const APPDATA_ALL_FILES_EMULATORS: &[&str] = &["ryubing", "ryujinx", "cemu"];
 
 fn is_save_file(path: &std::path::Path, include_all: bool) -> bool {
+    let file_name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+    // Always skip lock files and temp files
+    if file_name.ends_with(".lock") || file_name.ends_with(".tmp") {
+        return false;
+    }
     if include_all {
         // For emulators like Ryujinx that store saves as raw files (no extension)
         // Skip common non-save extensions

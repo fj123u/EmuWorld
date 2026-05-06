@@ -4158,17 +4158,25 @@ export default function App() {
                         <span><HardDrive size={16} /> Saves locales</span>
                         <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{localSaves.length} fichiers</span>
                       </div>
-                      {localSaves.length > 0 && (
+                      {localSaves.length > 0 && (() => {
+                        const grouped = localSaves.reduce((acc, s) => {
+                          const key = s.emulator;
+                          if (!acc[key]) acc[key] = { count: 0, size: 0 };
+                          acc[key].count++;
+                          acc[key].size += s.size;
+                          return acc;
+                        }, {} as Record<string, { count: number; size: number }>);
+                        return (
                         <div style={{ maxHeight: 200, overflowY: "auto", marginBottom: 12 }}>
-                          {localSaves.slice(0, 20).map((s, i) => (
-                            <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "0.75rem", borderBottom: "1px solid var(--border)" }}>
-                              <span style={{ color: "var(--text-secondary)" }}>{s.emulator}/{s.game_name}</span>
-                              <span style={{ color: "var(--text-muted)" }}>{(s.size / 1024).toFixed(0)} KB</span>
+                          {Object.entries(grouped).map(([emu, info]) => (
+                            <div key={emu} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: "0.8rem", borderBottom: "1px solid var(--border)" }}>
+                              <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{emu}</span>
+                              <span style={{ color: "var(--text-muted)" }}>{info.count} fichiers — {(info.size / 1024 / 1024).toFixed(1)} MB</span>
                             </div>
                           ))}
-                          {localSaves.length > 20 && <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>... et {localSaves.length - 20} autres</p>}
                         </div>
-                      )}
+                        );
+                      })()}
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}>
                           {backupLoading ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
