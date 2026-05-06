@@ -3862,3 +3862,73 @@ body {
   margin-top: 8px;
   opacity: 0.7;
 }
+
+.ra-modal__points {
+  color: #f59e0b;
+  font-weight: 700;
+}
+
+/* RA Completed Games Grid */
+.ra-completed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ra-completed-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.ra-completed-card:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.08);
+  transform: translateY(-1px);
+}
+
+.ra-completed-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.ra-completed-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ra-completed-card__title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ra-completed-card__meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ra-completed-card__hc {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+}

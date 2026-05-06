@@ -2976,7 +2976,11 @@ async fn download_vimm_rom(
 
 #[tauri::command]
 fn save_ra_credentials(username: String, api_key: String) -> Result<(), String> {
-    retroachievements::save_config(&retroachievements::RAConfig { username, api_key })
+    retroachievements::save_config(&retroachievements::RAConfig { username: username.clone(), api_key })?;
+    if !username.is_empty() {
+        achievements::unlock_single("ra_connected");
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -2995,6 +2999,25 @@ async fn get_ra_game_progress(game_name: String, console: String) -> Result<retr
         .ok_or_else(|| format!("Game '{}' not found on RetroAchievements", game_name))?;
 
     retroachievements::get_game_progress(game_id, &config.username, &config.api_key).await
+}
+
+#[tauri::command]
+async fn get_ra_completed_games() -> Result<Vec<retroachievements::RACompletedGame>, String> {
+    let config = retroachievements::load_config();
+    if config.username.is_empty() || config.api_key.is_empty() {
+        return Err("RetroAchievements credentials not configured".to_string());
+    }
+    let games = retroachievements::get_completed_games(&config.username, &config.api_key).await?;
+    let completed_count = games.iter()
+        .filter(|g| g.num_awarded >= g.max_possible && g.max_possible > 0)
+        .count();
+    if completed_count >= 1 {
+        achievements::unlock_single("ra_first_100");
+    }
+    if completed_count >= 5 {
+        achievements::unlock_single("ra_five_100");
+    }
+    Ok(games)
 }
 
 // ============================================================
@@ -3183,6 +3206,7 @@ pub fn run() {
             save_ra_credentials,
             get_ra_credentials,
             get_ra_game_progress,
+            get_ra_completed_games,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

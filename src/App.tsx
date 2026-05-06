@@ -250,6 +250,16 @@ interface RAGameInfo {
   num_earned_hardcore: number;
 }
 
+interface RACompletedGame {
+  game_id: number;
+  title: string;
+  console_name: string;
+  image_icon: string;
+  max_possible: number;
+  num_awarded: number;
+  hardcore_mode: boolean;
+}
+
 interface VimmConsole {
   id: string;
   name: string;
@@ -809,6 +819,8 @@ export default function App() {
   const [raModalRom, setRaModalRom] = useState<RomFile | null>(null);
   const [raGameInfo, setRaGameInfo] = useState<RAGameInfo | null>(null);
   const [raLoading, setRaLoading] = useState(false);
+  const [raCompletedGames, setRaCompletedGames] = useState<RACompletedGame[]>([]);
+  const [raProfileLoading, setRaProfileLoading] = useState(false);
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
@@ -1259,6 +1271,33 @@ export default function App() {
     setRaLoading(true);
     try {
       const info = await invoke<RAGameInfo>("get_ra_game_progress", { gameName: rom.name, console: rom.console });
+      setRaGameInfo(info);
+    } catch (e: any) {
+      showToast(`RetroAchievements: ${e}`, "error");
+      setRaModalRom(null);
+    } finally {
+      setRaLoading(false);
+    }
+  }, [showToast]);
+
+  const handleLoadRaProfile = useCallback(async () => {
+    setRaProfileLoading(true);
+    try {
+      const games = await invoke<RACompletedGame[]>("get_ra_completed_games");
+      setRaCompletedGames(games);
+    } catch (e: any) {
+      showToast(`RetroAchievements: ${e}`, "error");
+    } finally {
+      setRaProfileLoading(false);
+    }
+  }, [showToast]);
+
+  const handleOpenRaFromCompleted = useCallback(async (game: RACompletedGame) => {
+    setRaGameInfo(null);
+    setRaModalRom({ name: game.title, path: "", console: game.console_name, extension: "", size: 0 });
+    setRaLoading(true);
+    try {
+      const info = await invoke<RAGameInfo>("get_ra_game_progress", { gameName: game.title, console: game.console_name });
       setRaGameInfo(info);
     } catch (e: any) {
       showToast(`RetroAchievements: ${e}`, "error");
@@ -3845,7 +3884,7 @@ export default function App() {
                         placeholder="Your RA API key (from retroachievements.org/settings)"
                       />
                     </div>
-                    <div className="settings__field" style={{ justifyContent: "flex-end" }}>
+                    <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8 }}>
                       <button
                         className="btn btn--primary btn--sm"
                         onClick={handleSaveRaCredentials}
@@ -3853,8 +3892,54 @@ export default function App() {
                       >
                         <Check size={14} /> Sauvegarder
                       </button>
+                      {raUsername && (
+                        <button
+                          className="btn btn--ghost btn--sm"
+                          onClick={() => openUrl(`https://retroachievements.org/user/${raUsername}`)}
+                        >
+                          <ExternalLink size={14} /> Mon profil RA
+                        </button>
+                      )}
                     </div>
                   </div>
+
+                  {raUsername && raApiKey && (
+                    <div className="settings__group">
+                      <div className="settings__group-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span><Trophy size={16} /> Jeux complétés (100%)</span>
+                        <button className="btn btn--ghost btn--sm" onClick={handleLoadRaProfile} disabled={raProfileLoading}>
+                          <RefreshCw size={12} className={raProfileLoading ? "animate-spin" : ""} /> {raProfileLoading ? "Chargement..." : "Charger"}
+                        </button>
+                      </div>
+                      {raCompletedGames.length > 0 ? (
+                        <div className="ra-completed-grid">
+                          {raCompletedGames
+                            .filter(g => g.num_awarded >= g.max_possible && g.max_possible > 0)
+                            .map(game => (
+                            <div
+                              key={`${game.game_id}-${game.hardcore_mode}`}
+                              className="ra-completed-card"
+                              onClick={() => handleOpenRaFromCompleted(game)}
+                            >
+                              <img
+                                src={`https://retroachievements.org${game.image_icon}`}
+                                alt={game.title}
+                                className="ra-completed-card__icon"
+                              />
+                              <div className="ra-completed-card__info">
+                                <div className="ra-completed-card__title">{game.title}</div>
+                                <div className="ra-completed-card__meta">
+                                  {game.console_name} {game.hardcore_mode && <span className="ra-completed-card__hc">HC</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : !raProfileLoading ? (
+                        <p className="settings__field-desc">Cliquez "Charger" pour voir vos jeux 100%.</p>
+                      ) : null}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -4471,9 +4556,9 @@ export default function App() {
                     </div>
                     <div className="ra-modal__progress-text">
                       <span>{raGameInfo.num_earned} / {raGameInfo.num_achievements} débloqués</span>
-                      {raGameInfo.num_earned_hardcore > 0 && (
-                        <span className="ra-modal__hardcore">{raGameInfo.num_earned_hardcore} hardcore</span>
-                      )}
+                      <span className="ra-modal__points">
+                        {raGameInfo.achievements.filter(a => a.date_earned).reduce((s, a) => s + a.points, 0)} / {raGameInfo.achievements.reduce((s, a) => s + a.points, 0)} pts
+                      </span>
                     </div>
                   </div>
 

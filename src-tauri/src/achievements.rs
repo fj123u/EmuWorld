@@ -72,6 +72,9 @@ pub fn all_achievements() -> Vec<AchievementDef> {
         AchievementDef { id: "install_update", name: "À jour !", description: "Installer une mise à jour de EmuWorld", icon: "✨", hidden: true },
         AchievementDef { id: "ten_favorites", name: "Fan absolu", description: "Avoir 10 jeux en favoris", icon: "💕", hidden: true },
         AchievementDef { id: "clear_covers", name: "Ménage de printemps", description: "Vider le cache des covers", icon: "🧹", hidden: true },
+        AchievementDef { id: "ra_connected", name: "Chasseur de trophées", description: "Connecter son compte RetroAchievements", icon: "🏆", hidden: true },
+        AchievementDef { id: "ra_first_100", name: "Perfectionniste", description: "Avoir un jeu à 100% sur RetroAchievements", icon: "💯", hidden: true },
+        AchievementDef { id: "ra_five_100", name: "Complétionniste", description: "Avoir 5 jeux à 100% sur RetroAchievements", icon: "🌟", hidden: true },
     ]
 }
 

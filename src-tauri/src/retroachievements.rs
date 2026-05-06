@@ -1,0 +1,258 @@
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct RAConfig {
+    pub username: String,
+    pub api_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RAGameAchievement {
+    pub id: u64,
+    pub title: String,
+    pub description: String,
+    pub points: u32,
+    pub badge_name: String,
+    pub date_earned: Option<String>,
+    pub date_earned_hardcore: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RAGameInfo {
+    pub game_id: u64,
+    pub title: String,
+    pub console_name: String,
+    pub image_icon: String,
+    pub num_achievements: u32,
+    pub achievements: Vec<RAGameAchievement>,
+    pub num_earned: u32,
+    pub num_earned_hardcore: u32,
+}
+
+fn config_path() -> PathBuf {
+    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.join("EmuWorld").join("ra_config.json")
+}
+
+pub fn load_config() -> RAConfig {
+    let path = config_path();
+    if let Ok(data) = fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        RAConfig::default()
+    }
+}
+
+pub fn save_config(config: &RAConfig) -> Result<(), String> {
+    let path = config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())
+}
+
+pub fn console_to_ra_id(console: &str) -> Option<u32> {
+    match console {
+        "NES" => Some(7),
+        "Super Nintendo" => Some(3),
+        "Nintendo 64" => Some(2),
+        "Game Boy Advance" => Some(5),
+        "Game Boy" | "Game Boy Color" => Some(4),
+        "Nintendo DS" => Some(18),
+        "Virtual Boy" => Some(28),
+        "PlayStation 1" => Some(12),
+        "PlayStation 2" => Some(21),
+        "PlayStation Portable" => Some(41),
+        "Mega Drive" => Some(1),
+        "Master System" => Some(11),
+        "Game Gear" => Some(15),
+        "Saturn" => Some(39),
+        "Dreamcast" => Some(40),
+        "Arcade" => Some(27),
+        "Neo-Geo" => Some(27),
+        "PC Engine" => Some(8),
+        "Atari 2600" => Some(25),
+        "WonderSwan" => Some(53),
+        _ => None,
+    }
+}
+
+pub async fn search_game(game_name: &str, console: &str, api_key: &str) -> Result<Option<u64>, String> {
+    let console_id = console_to_ra_id(console)
+        .ok_or_else(|| format!("Console '{}' not supported by RetroAchievements", console))?;
+
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/0.2.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://retroachievements.org/API/API_GetGameList.php?i={}&y={}&f=1&h=1",
+        console_id, api_key
+    );
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("RA API returned {}", resp.status()));
+    }
+
+    let games: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+
+    let cleaned = clean_name(game_name);
+    let mut best_match: Option<(u64, usize)> = None;
+
+    for game in &games {
+        let title = game["Title"].as_str().unwrap_or("");
+        let id = game["ID"].as_u64().unwrap_or(0);
+        if id == 0 { continue; }
+
+        let cleaned_title = clean_name(title);
+        if cleaned_title == cleaned {
+            return Ok(Some(id));
+        }
+
+        if cleaned_title.contains(&cleaned) || cleaned.contains(&cleaned_title) {
+            let score = cleaned_title.len().abs_diff(cleaned.len());
+            if best_match.is_none() || score < best_match.unwrap().1 {
+                best_match = Some((id, score));
+            }
+        }
+    }
+
+    Ok(best_match.map(|(id, _)| id))
+}
+
+pub async fn get_game_progress(game_id: u64, username: &str, api_key: &str) -> Result<RAGameInfo, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/0.2.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?g={}&u={}&y={}",
+        game_id, username, api_key
+    );
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("RA API returned {}", resp.status()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    let title = json["Title"].as_str().unwrap_or("Unknown").to_string();
+    let console_name = json["ConsoleName"].as_str().unwrap_or("").to_string();
+    let image_icon = json["ImageIcon"].as_str().unwrap_or("").to_string();
+    let num_achievements = json["NumAchievements"].as_u64().unwrap_or(0) as u32;
+
+    let mut achievements = Vec::new();
+    let mut num_earned = 0u32;
+    let mut num_earned_hardcore = 0u32;
+
+    if let Some(achs) = json["Achievements"].as_object() {
+        for (_, ach) in achs {
+            let date_earned = ach["DateEarned"].as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let date_earned_hardcore = ach["DateEarnedHardcore"].as_str()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+
+            if date_earned.is_some() { num_earned += 1; }
+            if date_earned_hardcore.is_some() { num_earned_hardcore += 1; }
+
+            achievements.push(RAGameAchievement {
+                id: ach["ID"].as_u64().unwrap_or(0),
+                title: ach["Title"].as_str().unwrap_or("").to_string(),
+                description: ach["Description"].as_str().unwrap_or("").to_string(),
+                points: ach["Points"].as_u64().unwrap_or(0) as u32,
+                badge_name: ach["BadgeName"].as_str().unwrap_or("").to_string(),
+                date_earned,
+                date_earned_hardcore,
+            });
+        }
+    }
+
+    achievements.sort_by_key(|a| a.id);
+
+    Ok(RAGameInfo {
+        game_id,
+        title,
+        console_name,
+        image_icon,
+        num_achievements,
+        achievements,
+        num_earned,
+        num_earned_hardcore,
+    })
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RACompletedGame {
+    pub game_id: u64,
+    pub title: String,
+    pub console_name: String,
+    pub image_icon: String,
+    pub max_possible: u32,
+    pub num_awarded: u32,
+    pub hardcore_mode: bool,
+}
+
+pub async fn get_completed_games(username: &str, api_key: &str) -> Result<Vec<RACompletedGame>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/0.2.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://retroachievements.org/API/API_GetUserCompletedGames.php?u={}&y={}",
+        username, api_key
+    );
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("RA API returned {}", resp.status()));
+    }
+
+    let games: Vec<serde_json::Value> = resp.json().await.map_err(|e| e.to_string())?;
+
+    let result: Vec<RACompletedGame> = games.iter().map(|g| {
+        RACompletedGame {
+            game_id: g["GameID"].as_u64().unwrap_or(0),
+            title: g["Title"].as_str().unwrap_or("").to_string(),
+            console_name: g["ConsoleName"].as_str().unwrap_or("").to_string(),
+            image_icon: g["ImageIcon"].as_str().unwrap_or("").to_string(),
+            max_possible: g["MaxPossible"].as_u64().unwrap_or(0) as u32,
+            num_awarded: g["NumAwarded"].as_u64().unwrap_or(0) as u32,
+            hardcore_mode: g["HardcoreMode"].as_str().map(|s| s == "1").unwrap_or(false)
+                || g["HardcoreMode"].as_u64().map(|n| n == 1).unwrap_or(false),
+        }
+    }).collect();
+
+    Ok(result)
+}
+
+fn clean_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    let mut cleaned = String::new();
+    let mut in_parens = false;
+    let mut in_brackets = false;
+    for c in lower.chars() {
+        match c {
+            '(' => { in_parens = true; }
+            ')' => { in_parens = false; continue; }
+            '[' => { in_brackets = true; }
+            ']' => { in_brackets = false; continue; }
+            _ if in_parens || in_brackets => {}
+            _ if c.is_alphanumeric() || c == ' ' => { cleaned.push(c); }
+            _ => {}
+        }
+    }
+    cleaned.split_whitespace().collect::<Vec<_>>().join(" ")
+}
