@@ -50,6 +50,7 @@ struct B2UploadFileResponse {
     #[serde(rename = "fileId")]
     file_id: String,
     #[serde(rename = "fileName")]
+    #[allow(dead_code)]
     file_name: String,
 }
 
@@ -93,81 +94,89 @@ pub fn save_config(config: &B2Config) -> Result<(), String> {
     fs::write(&path, json).map_err(|e| e.to_string())
 }
 
+/// Save file extensions we look for
+const SAVE_EXTENSIONS: &[&str] = &[
+    "srm", "sav", "state", "sav0", "sav1", "sav2", "sav3",
+    "ss0", "ss1", "ss2", "ss3", "ss4", "ss5", "ss6", "ss7", "ss8", "ss9",
+    "mcr", "mcd", "gme", "psv", "psx",
+    "dsv", "sna", "sta",
+    "eep", "fla", "mpk", "sra",
+    "bsv", "oops", "cht",
+    "rtc", "savestate",
+];
+
 /// Known save locations for each emulator (relative to the emulator install dir)
 fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(String, PathBuf)> {
     let mut paths = Vec::new();
-    match emulator_id {
-        "retroarch" => {
-            // RetroArch saves are in saves/ and states/ next to the exe
-            let base = find_retroarch_base(install_dir);
-            let saves = base.join("saves");
-            let states = base.join("states");
-            if saves.exists() { paths.push(("saves".to_string(), saves)); }
-            if states.exists() { paths.push(("states".to_string(), states)); }
-        }
-        "duckstation" => {
-            let memcards = install_dir.join("memcards");
-            let savestates = install_dir.join("savestates");
-            if memcards.exists() { paths.push(("memcards".to_string(), memcards)); }
-            if savestates.exists() { paths.push(("savestates".to_string(), savestates)); }
-        }
-        "pcsx2" => {
-            let memcards = install_dir.join("memcards");
-            let sstates = install_dir.join("sstates");
-            if memcards.exists() { paths.push(("memcards".to_string(), memcards)); }
-            if sstates.exists() { paths.push(("sstates".to_string(), sstates)); }
-        }
-        "dolphin" => {
-            let gc = install_dir.join("User").join("GC");
-            let wii = install_dir.join("User").join("Wii");
-            let state = install_dir.join("User").join("StateSaves");
-            if gc.exists() { paths.push(("GC".to_string(), gc)); }
-            if wii.exists() { paths.push(("Wii".to_string(), wii)); }
-            if state.exists() { paths.push(("StateSaves".to_string(), state)); }
-        }
-        "ppsspp" => {
-            let savedata = install_dir.join("memstick").join("PSP").join("SAVEDATA");
-            let ppstate = install_dir.join("memstick").join("PSP").join("PPSSPP_STATE");
-            if savedata.exists() { paths.push(("SAVEDATA".to_string(), savedata)); }
-            if ppstate.exists() { paths.push(("PPSSPP_STATE".to_string(), ppstate)); }
-        }
-        "ryubing" => {
-            let saves = install_dir.join("portable").join("bis").join("user").join("save");
-            if saves.exists() { paths.push(("saves".to_string(), saves)); }
-        }
-        "cemu" => {
-            let mlc = install_dir.join("mlc01").join("usr").join("save");
-            if mlc.exists() { paths.push(("saves".to_string(), mlc)); }
-        }
-        "mgba" => {
-            // mGBA stores saves next to the ROM by default, but also has a battery/ folder
-            let battery = install_dir.join("battery");
-            let state = install_dir.join("state");
-            if battery.exists() { paths.push(("battery".to_string(), battery)); }
-            if state.exists() { paths.push(("state".to_string(), state)); }
-        }
-        "mesen" => {
-            let saves = install_dir.join("Saves");
-            let states = install_dir.join("SaveStates");
-            if saves.exists() { paths.push(("Saves".to_string(), saves)); }
-            if states.exists() { paths.push(("SaveStates".to_string(), states)); }
-        }
-        "snes9x" => {
-            let saves = install_dir.join("Saves");
-            if saves.exists() { paths.push(("Saves".to_string(), saves)); }
-        }
-        "melonds" => {
-            // melonDS saves next to ROM by default
-            let battery = install_dir.join("battery");
-            if battery.exists() { paths.push(("battery".to_string(), battery)); }
-        }
-        "rpcs3" => {
-            let savedata = install_dir.join("dev_hdd0").join("home").join("00000001").join("savedata");
-            if savedata.exists() { paths.push(("savedata".to_string(), savedata)); }
-        }
-        _ => {}
-    }
+
+    // Generic approach: search common folder names recursively (1 level deep for perf)
+    let common_save_folders = match emulator_id {
+        "retroarch" => vec!["saves", "states"],
+        "duckstation" => vec!["memcards", "savestates"],
+        "pcsx2" => vec!["memcards", "sstates"],
+        "dolphin" => vec!["GC", "Wii", "StateSaves"],
+        "ppsspp" => vec!["SAVEDATA", "PPSSPP_STATE"],
+        "ryubing" => vec!["save"],
+        "cemu" => vec!["save"],
+        "mgba" => vec!["battery", "state", "Saves"],
+        "mesen" => vec!["Saves", "SaveStates"],
+        "snes9x" => vec!["Saves"],
+        "melonds" => vec!["battery", "saves"],
+        "rpcs3" => vec!["savedata"],
+        _ => vec!["saves", "Saves", "save"],
+    };
+
+    // Search recursively up to 3 levels deep for these folder names
+    find_save_dirs_recursive(install_dir, &common_save_folders, 0, 3, &mut paths);
     paths
+}
+
+fn find_save_dirs_recursive(dir: &PathBuf, targets: &[&str], depth: u32, max_depth: u32, results: &mut Vec<(String, PathBuf)>) {
+    if depth > max_depth { return; }
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() { continue; }
+        let name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+
+        if targets.iter().any(|t| t.eq_ignore_ascii_case(&name)) {
+            // Check if this dir actually contains save files
+            if dir_has_save_files(&path) {
+                results.push((name.clone(), path.clone()));
+            }
+        }
+
+        // Keep searching deeper
+        if depth < max_depth {
+            find_save_dirs_recursive(&path, targets, depth + 1, max_depth, results);
+        }
+    }
+}
+
+fn dir_has_save_files(dir: &PathBuf) -> bool {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Some(ext) = path.extension() {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    if SAVE_EXTENSIONS.contains(&ext_str.as_str()) {
+                        return true;
+                    }
+                }
+                // Also include files without extension or common save patterns
+                let name = path.file_name().unwrap_or_default().to_string_lossy().to_lowercase();
+                if name.ends_with(".srm") || name.ends_with(".sav") || name.contains("save") {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 fn find_retroarch_base(install_dir: &PathBuf) -> PathBuf {
@@ -189,40 +198,42 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
     let base = PathBuf::from(emulators_dir);
     let mut entries = Vec::new();
 
-    let known_emus = [
-        "retroarch", "duckstation", "pcsx2", "dolphin", "ppsspp",
-        "ryubing", "cemu", "mgba", "mesen", "snes9x", "melonds", "rpcs3",
-    ];
+    // Scan all directories in the emulators folder
+    let emu_dirs = match fs::read_dir(&base) {
+        Ok(e) => e,
+        Err(_) => return entries,
+    };
 
-    for emu_id in &known_emus {
-        let emu_dir = base.join(emu_id);
-        if !emu_dir.exists() { continue; }
+    for emu_entry in emu_dirs.flatten() {
+        let emu_dir = emu_entry.path();
+        if !emu_dir.is_dir() { continue; }
+        let emu_id = emu_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
 
-        let save_dirs = save_dirs_for_emulator(emu_id, &emu_dir);
+        let save_dirs = save_dirs_for_emulator(&emu_id, &emu_dir);
         for (category, dir) in save_dirs {
-            if let Ok(walker) = fs::read_dir(&dir) {
-                for file in walker.flatten() {
-                    let path = file.path();
-                    if !path.is_file() { continue; }
-                    let meta = match fs::metadata(&path) {
-                        Ok(m) => m,
-                        Err(_) => continue,
-                    };
-                    let modified = meta.modified()
-                        .map(|t| {
-                            let dt: chrono::DateTime<chrono::Local> = t.into();
-                            dt.format("%Y-%m-%d %H:%M").to_string()
-                        })
-                        .unwrap_or_default();
+            let walker = walkdir::WalkDir::new(&dir).max_depth(3).into_iter().filter_map(|e| e.ok());
+            for file in walker {
+                let path = file.path().to_path_buf();
+                if !path.is_file() { continue; }
+                let meta = match fs::metadata(&path) {
+                    Ok(m) => m,
+                    Err(_) => continue,
+                };
+                let modified = meta.modified()
+                    .map(|t| {
+                        let dt: chrono::DateTime<chrono::Local> = t.into();
+                        dt.format("%Y-%m-%d %H:%M").to_string()
+                    })
+                    .unwrap_or_default();
 
-                    entries.push(SaveEntry {
-                        emulator: emu_id.to_string(),
-                        game_name: format!("{}/{}", category, path.file_name().unwrap_or_default().to_string_lossy()),
-                        file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
-                        size: meta.len(),
-                        modified,
-                    });
-                }
+                let rel = path.strip_prefix(&dir).unwrap_or(&path);
+                entries.push(SaveEntry {
+                    emulator: emu_id.clone(),
+                    game_name: format!("{}/{}", category, rel.to_string_lossy().replace('\\', "/")),
+                    file_name: path.file_name().unwrap_or_default().to_string_lossy().to_string(),
+                    size: meta.len(),
+                    modified,
+                });
             }
         }
     }
@@ -358,7 +369,6 @@ pub async fn b2_upload_file(
     let upload_info: B2GetUploadUrlResponse = get_url_resp.json().await.map_err(|e| e.to_string())?;
 
     // Calculate SHA1
-    use std::fmt::Write as FmtWrite;
     let digest = sha1_hash(&data);
 
     // Upload
