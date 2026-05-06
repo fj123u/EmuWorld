@@ -105,11 +105,10 @@ const SAVE_EXTENSIONS: &[&str] = &[
     "rtc", "savestate",
 ];
 
-/// Known save locations for each emulator (relative to the emulator install dir)
+/// Known save locations for each emulator (relative to the emulator install dir + AppData paths)
 fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(String, PathBuf)> {
     let mut paths = Vec::new();
 
-    // Generic approach: search common folder names recursively (1 level deep for perf)
     let common_save_folders = match emulator_id {
         "retroarch" => vec!["saves", "states"],
         "duckstation" => vec!["memcards", "savestates"],
@@ -119,15 +118,107 @@ fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(Stri
         "ryubing" => vec!["save"],
         "cemu" => vec!["save"],
         "mgba" => vec!["battery", "state", "Saves"],
-        "mesen" => vec!["Saves", "SaveStates"],
+        "mesen" => vec!["Saves", "SaveStates", "RecentGames"],
         "snes9x" => vec!["Saves"],
         "melonds" => vec!["battery", "saves"],
         "rpcs3" => vec!["savedata"],
         _ => vec!["saves", "Saves", "save"],
     };
 
-    // Search recursively up to 3 levels deep for these folder names
+    // Search the install directory recursively
     find_save_dirs_recursive(install_dir, &common_save_folders, 0, 3, &mut paths);
+
+    // Also scan AppData/Roaming paths where emulators store saves externally
+    if let Some(roaming) = dirs::config_dir() {
+        let appdata_paths: Vec<(&str, PathBuf)> = match emulator_id {
+            "ryubing" | "ryujinx" => vec![
+                ("bis/user/save", roaming.join("Ryujinx").join("bis").join("user").join("save")),
+                ("bis/system/save", roaming.join("Ryujinx").join("bis").join("system").join("save")),
+            ],
+            "dolphin" => vec![
+                ("GC", roaming.join("Dolphin Emulator").join("GC")),
+                ("Wii", roaming.join("Dolphin Emulator").join("Wii")),
+                ("StateSaves", roaming.join("Dolphin Emulator").join("StateSaves")),
+            ],
+            "cemu" => vec![
+                ("save", roaming.join("Cemu").join("mlc01").join("usr").join("save")),
+            ],
+            "ppsspp" => vec![
+                ("SAVEDATA", roaming.join("PPSSPP").join("memstick").join("PSP").join("SAVEDATA")),
+                ("PPSSPP_STATE", roaming.join("PPSSPP").join("memstick").join("PSP").join("PPSSPP_STATE")),
+            ],
+            _ => vec![],
+        };
+        for (label, path) in appdata_paths {
+            if path.exists() {
+                paths.push((label.to_string(), path));
+            }
+        }
+    }
+
+    // Also scan %LOCALAPPDATA% paths
+    if let Some(local) = dirs::data_local_dir() {
+        let local_paths: Vec<(&str, PathBuf)> = match emulator_id {
+            "mesen" => vec![
+                ("Saves", local.join("Mesen").join("Saves")),
+                ("SaveStates", local.join("Mesen").join("SaveStates")),
+                ("RecentGames", local.join("Mesen").join("RecentGames")),
+            ],
+            "melonds" | "melonDS" => vec![
+                ("saves", local.join("melonDS").join("saves")),
+            ],
+            "mgba" => vec![
+                ("battery", local.join("mGBA").join("battery")),
+                ("state", local.join("mGBA").join("state")),
+            ],
+            "duckstation" => vec![
+                ("memcards", local.join("DuckStation").join("memcards")),
+                ("savestates", local.join("DuckStation").join("savestates")),
+            ],
+            "pcsx2" => vec![
+                ("memcards", local.join("PCSX2").join("memcards")),
+                ("sstates", local.join("PCSX2").join("sstates")),
+            ],
+            "rpcs3" => vec![
+                ("savedata", local.join("rpcs3").join("dev_hdd0").join("home").join("00000001").join("savedata")),
+            ],
+            _ => vec![],
+        };
+        for (label, path) in local_paths {
+            if path.exists() {
+                paths.push((label.to_string(), path));
+            }
+        }
+    }
+
+    // Check Documents folder too (some emulators use this)
+    if let Some(docs) = dirs::document_dir() {
+        let doc_paths: Vec<(&str, PathBuf)> = match emulator_id {
+            "dolphin" => vec![
+                ("GC", docs.join("Dolphin Emulator").join("GC")),
+                ("Wii", docs.join("Dolphin Emulator").join("Wii")),
+                ("StateSaves", docs.join("Dolphin Emulator").join("StateSaves")),
+            ],
+            "pcsx2" => vec![
+                ("memcards", docs.join("PCSX2").join("memcards")),
+                ("sstates", docs.join("PCSX2").join("sstates")),
+            ],
+            "duckstation" => vec![
+                ("memcards", docs.join("DuckStation").join("memcards")),
+                ("savestates", docs.join("DuckStation").join("savestates")),
+            ],
+            "rpcs3" => vec![
+                ("savedata", docs.join("rpcs3").join("dev_hdd0").join("home").join("00000001").join("savedata")),
+            ],
+            _ => vec![],
+        };
+        for (label, path) in doc_paths {
+            if path.exists() {
+                paths.push((label.to_string(), path));
+            }
+        }
+    }
+
     paths
 }
 
@@ -187,6 +278,28 @@ fn find_retroarch_base(install_dir: &PathBuf) -> PathBuf {
     install_dir.clone()
 }
 
+/// Emulators that store saves as raw binary files without standard extensions
+const APPDATA_ALL_FILES_EMULATORS: &[&str] = &["ryubing", "ryujinx", "cemu"];
+
+fn is_save_file(path: &std::path::Path, include_all: bool) -> bool {
+    if include_all {
+        // For emulators like Ryujinx that store saves as raw files (no extension)
+        // Skip common non-save extensions
+        if let Some(ext) = path.extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            let skip = ["exe", "dll", "ini", "cfg", "log", "txt", "json", "xml", "png", "jpg", "bmp", "ico", "md"];
+            return !skip.contains(&ext_str.as_str());
+        }
+        return true; // no extension = likely raw save data
+    }
+    if let Some(ext) = path.extension() {
+        let ext_str = ext.to_string_lossy().to_lowercase();
+        SAVE_EXTENSIONS.contains(&ext_str.as_str())
+    } else {
+        false
+    }
+}
+
 pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
     let base = PathBuf::from(emulators_dir);
     let mut entries = Vec::new();
@@ -209,18 +322,14 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
             emu_dir.clone()
         };
 
+        let include_all = APPDATA_ALL_FILES_EMULATORS.contains(&emu_id.as_str());
         let save_dirs = save_dirs_for_emulator(&emu_id, &effective_dir);
         for (category, dir) in save_dirs {
             let walker = walkdir::WalkDir::new(&dir).max_depth(5).into_iter().filter_map(|e| e.ok());
             for file in walker {
                 let path = file.path().to_path_buf();
                 if !path.is_file() { continue; }
-                if let Some(ext) = path.extension() {
-                    let ext_str = ext.to_string_lossy().to_lowercase();
-                    if !SAVE_EXTENSIONS.contains(&ext_str.as_str()) { continue; }
-                } else {
-                    continue;
-                }
+                if !is_save_file(&path, include_all) { continue; }
                 let meta = match fs::metadata(&path) {
                     Ok(m) => m,
                     Err(_) => continue,
@@ -258,12 +367,7 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
                     for file in walker {
                         let path = file.path().to_path_buf();
                         if !path.is_file() { continue; }
-                        if let Some(ext) = path.extension() {
-                            let ext_str = ext.to_string_lossy().to_lowercase();
-                            if !SAVE_EXTENSIONS.contains(&ext_str.as_str()) { continue; }
-                        } else {
-                            continue;
-                        }
+                        if !is_save_file(&path, false) { continue; }
                         let meta = match fs::metadata(&path) {
                             Ok(m) => m,
                             Err(_) => continue,
@@ -322,14 +426,20 @@ pub fn create_backup_zip(emulators_dir: &str) -> Result<PathBuf, String> {
 
     for emu_id in &known_emus {
         let emu_dir = base.join(emu_id);
-        if !emu_dir.exists() { continue; }
+        let effective_dir = if *emu_id == "retroarch" && emu_dir.exists() {
+            find_retroarch_base(&emu_dir)
+        } else {
+            emu_dir.clone()
+        };
 
-        let save_dirs = save_dirs_for_emulator(emu_id, &emu_dir);
+        let include_all = APPDATA_ALL_FILES_EMULATORS.contains(emu_id);
+        let save_dirs = save_dirs_for_emulator(emu_id, &effective_dir);
         for (category, dir) in save_dirs {
-            let walker = walkdir::WalkDir::new(&dir).into_iter().filter_map(|e| e.ok());
+            let walker = walkdir::WalkDir::new(&dir).max_depth(5).into_iter().filter_map(|e| e.ok());
             for entry in walker {
                 let path = entry.path();
                 if !path.is_file() { continue; }
+                if !is_save_file(path, include_all) { continue; }
                 let rel = path.strip_prefix(&dir).unwrap_or(path);
                 let archive_name = format!("{}/{}/{}", emu_id, category, rel.to_string_lossy().replace('\\', "/"));
 
