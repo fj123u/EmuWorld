@@ -695,41 +695,85 @@
       return `https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`;
     };
 
-    // Generate multiple cover URL candidates for fallback
-    const coverUrlCandidates = (console, name) => {
-      const urls = [];
-      const sys = SYSTEMS[console];
-      if (!sys) return urls;
+    // Multi-system mapping for consoles that span multiple libretro DBs
+    const MULTI_SYSTEMS = {
+      'GameCube / Wii': ['Nintendo - Wii', 'Nintendo - GameCube'],
+      'Wii U': ['Nintendo - Wii U'],
+      'Nintendo Switch': ['Nintendo - Nintendo Switch'],
+    };
 
+    // Known exact libretro names for common games that don't match cleaned filenames
+    const KNOWN_COVERS = {
+      'super mario world': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Super Mario World' },
+      'super mario bros 3': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros. 3' },
+      'super mario bros': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros.' },
+      'pikmin': { sys: 'Nintendo - GameCube', name: 'Pikmin' },
+      'zelda twilight princess': { sys: 'Nintendo - Wii', name: 'The Legend of Zelda - Twilight Princess' },
+      'zelda wind waker': { sys: 'Nintendo - GameCube', name: 'The Legend of Zelda - The Wind Waker' },
+      'pokemon version platine': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon Platinum Version' },
+      'pokemon version rubis': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Ruby Version' },
+    };
+
+    // Generate multiple cover URL candidates for fallback
+    const coverUrlCandidates = (consoleName, name) => {
+      const urls = [];
+
+      // Switch: title ID detection
       const tidMatch = String(name || '').match(/\[(0100[0-9A-Fa-f]{12})\]/);
       if (tidMatch) urls.push(`https://tinfoil.media/ti/${tidMatch[1].toUpperCase()}/256/256`);
 
       let cleaned = cleanGameName(name);
       if (!cleaned) return urls;
 
-      // Exact name
-      const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
-      urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`);
-
-      // Title-cased version
-      const titled = toTitleCase(cleaned.toLowerCase());
-      if (titled !== cleaned) {
-        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(titled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+      // Check known covers first
+      const knownKey = cleaned.toLowerCase();
+      if (KNOWN_COVERS[knownKey]) {
+        const k = KNOWN_COVERS[knownKey];
+        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(k.sys)}/Named_Boxarts/${encodeURIComponent(k.name)}.png`);
       }
 
-      // Common prefix additions (Zelda, Mario, Pokemon)
-      const PREFIXES = {
-        'zelda': 'The Legend of Zelda - ',
-        'mario': 'Super Mario ',
-        'pokemon': 'Pokemon ',
-        'pikmin': 'Pikmin',
-      };
-      const lower = cleaned.toLowerCase();
-      for (const [key, prefix] of Object.entries(PREFIXES)) {
-        if (lower.includes(key) && !lower.startsWith(prefix.toLowerCase().trim())) {
-          const suffixed = prefix + toTitleCase(cleaned);
-          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffixed.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+      // Get all candidate systems for this console
+      const systems = MULTI_SYSTEMS[consoleName]
+        ? MULTI_SYSTEMS[consoleName]
+        : (SYSTEMS[consoleName] ? [SYSTEMS[consoleName]] : []);
+
+      for (const sys of systems) {
+        // Exact cleaned name
+        const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
+        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`);
+
+        // Title-cased version
+        const titled = toTitleCase(cleaned.toLowerCase());
+        if (titled !== cleaned) {
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(titled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
         }
+
+        // With common franchise prefixes
+        const lower = cleaned.toLowerCase();
+        const PREFIXES = [
+          { match: 'zelda', prefix: 'The Legend of Zelda - ' },
+          { match: 'pokemon', prefix: 'Pokemon - ' },
+          { match: 'mario', prefix: 'Super Mario ' },
+        ];
+        for (const { match, prefix } of PREFIXES) {
+          if (lower.includes(match) && !lower.startsWith(prefix.toLowerCase().trim())) {
+            const suffixed = prefix + toTitleCase(lower.replace(match, '').trim());
+            urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffixed.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+          }
+        }
+
+        // With "." after "Bros", "Dr", "Mr", "vs" (libretro convention)
+        const withDots = cleaned.replace(/\b(Bros|Dr|Mr|vs|Vol|Jr|St)\b/gi, '$1.');
+        if (withDots !== cleaned) {
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(withDots.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+        }
+      }
+
+      // GameTDB for Wii/Wii U/GameCube (if we can extract a disc ID)
+      const discIdMatch = String(name || '').match(/\[([A-Z0-9]{6})\]/);
+      if (discIdMatch && (consoleName === 'Wii' || consoleName === 'GameCube / Wii' || consoleName === 'Wii U' || consoleName === 'GameCube')) {
+        urls.push(`https://art.gametdb.com/wii/cover/US/${discIdMatch[1]}.png`);
+        urls.push(`https://art.gametdb.com/wii/cover/EN/${discIdMatch[1]}.png`);
       }
 
       return [...new Set(urls)];
