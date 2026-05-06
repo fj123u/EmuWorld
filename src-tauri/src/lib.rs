@@ -2976,7 +2976,10 @@ async fn download_vimm_rom(
 
 #[tauri::command]
 fn save_ra_credentials(username: String, api_key: String) -> Result<(), String> {
-    retroachievements::save_config(&retroachievements::RAConfig { username: username.clone(), api_key })?;
+    let mut config = retroachievements::load_config();
+    config.username = username.clone();
+    config.api_key = api_key;
+    retroachievements::save_config(&config)?;
     if !username.is_empty() {
         achievements::unlock_single("ra_connected");
     }
@@ -2999,6 +3002,36 @@ async fn get_ra_game_progress(game_name: String, console: String) -> Result<retr
         .ok_or_else(|| format!("Game '{}' not found on RetroAchievements", game_name))?;
 
     retroachievements::get_game_progress(game_id, &config.username, &config.api_key).await
+}
+
+#[tauri::command]
+async fn ra_login(username: String, password: String) -> Result<String, String> {
+    let token = retroachievements::login_and_get_token(&username, &password).await?;
+    // Save token to config
+    let mut config = retroachievements::load_config();
+    config.username = username;
+    config.token = token.clone();
+    retroachievements::save_config(&config)?;
+    achievements::unlock_single("ra_connected");
+    Ok(token)
+}
+
+#[tauri::command]
+fn configure_ra_emulators() -> Result<Vec<String>, String> {
+    let config = retroachievements::load_config();
+    if config.username.is_empty() || config.token.is_empty() {
+        return Err("RetroAchievements token not configured. Use 'Login' first.".to_string());
+    }
+    let app_config = get_config();
+    let configured = retroachievements::inject_ra_config_into_emulators(
+        &app_config.emulators_directory,
+        &config.username,
+        &config.token,
+    );
+    if configured.is_empty() {
+        return Err("No compatible emulators found. Install RetroArch, DuckStation, PCSX2, Dolphin, or PPSSPP first.".to_string());
+    }
+    Ok(configured)
 }
 
 #[tauri::command]
@@ -3207,6 +3240,8 @@ pub fn run() {
             get_ra_credentials,
             get_ra_game_progress,
             get_ra_completed_games,
+            ra_login,
+            configure_ra_emulators,
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,

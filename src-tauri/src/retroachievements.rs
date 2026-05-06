@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub struct RAConfig {
     pub username: String,
     pub api_key: String,
+    #[serde(default)]
+    pub token: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -236,6 +238,240 @@ pub async fn get_completed_games(username: &str, api_key: &str) -> Result<Vec<RA
     }).collect();
 
     Ok(result)
+}
+
+pub async fn login_and_get_token(username: &str, password: &str) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/0.2.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let url = format!(
+        "https://retroachievements.org/dorequest.php?r=login&u={}&p={}",
+        urlencoding::encode(username),
+        urlencoding::encode(password)
+    );
+
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("RA login returned {}", resp.status()));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+
+    if json["Success"].as_bool() != Some(true) {
+        return Err(json["Error"].as_str().unwrap_or("Login failed").to_string());
+    }
+
+    json["Token"].as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "No token in response".to_string())
+}
+
+pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, token: &str) -> Vec<String> {
+    let base = PathBuf::from(emulators_dir);
+    let mut configured = Vec::new();
+
+    // RetroArch (and all retroarch-* variants share the same install)
+    let retroarch_cfg = base.join("retroarch").join("retroarch.cfg");
+    if let Some(parent) = retroarch_cfg.parent() {
+        if parent.exists() {
+            let cfg_content = fs::read_to_string(&retroarch_cfg).unwrap_or_default();
+            let new_cfg = inject_retroarch_cheevos(&cfg_content, username, token);
+            if fs::write(&retroarch_cfg, new_cfg).is_ok() {
+                configured.push("RetroArch".to_string());
+            }
+        }
+    }
+
+    // DuckStation — settings.ini
+    let duck_ini = base.join("duckstation").join("settings.ini");
+    if let Some(parent) = duck_ini.parent() {
+        if parent.exists() {
+            let content = fs::read_to_string(&duck_ini).unwrap_or_default();
+            let new_content = inject_duckstation_cheevos(&content, username, token);
+            if fs::write(&duck_ini, new_content).is_ok() {
+                configured.push("DuckStation".to_string());
+            }
+        }
+    }
+
+    // PCSX2 — inis/PCSX2.ini or portable.ini
+    let pcsx2_ini = base.join("pcsx2").join("inis").join("PCSX2.ini");
+    if let Some(parent) = pcsx2_ini.parent() {
+        if parent.exists() {
+            let content = fs::read_to_string(&pcsx2_ini).unwrap_or_default();
+            let new_content = inject_ini_section_cheevos(&content, username, token);
+            if fs::write(&pcsx2_ini, new_content).is_ok() {
+                configured.push("PCSX2".to_string());
+            }
+        }
+    }
+
+    // Dolphin — User/Config/Dolphin.ini
+    let dolphin_ini = base.join("dolphin").join("User").join("Config").join("Dolphin.ini");
+    if let Some(parent) = dolphin_ini.parent() {
+        if parent.exists() {
+            let content = fs::read_to_string(&dolphin_ini).unwrap_or_default();
+            let new_content = inject_ini_section_cheevos(&content, username, token);
+            if fs::write(&dolphin_ini, new_content).is_ok() {
+                configured.push("Dolphin".to_string());
+            }
+        }
+    }
+
+    // PPSSPP — memstick/PSP/SYSTEM/ppsspp.ini
+    let ppsspp_ini = base.join("ppsspp").join("memstick").join("PSP").join("SYSTEM").join("ppsspp.ini");
+    if !ppsspp_ini.exists() {
+        // Try alternate location
+        let alt = base.join("ppsspp").join("ppsspp.ini");
+        if alt.exists() {
+            let content = fs::read_to_string(&alt).unwrap_or_default();
+            let new_content = inject_ini_section_cheevos(&content, username, token);
+            if fs::write(&alt, new_content).is_ok() {
+                configured.push("PPSSPP".to_string());
+            }
+        }
+    } else if let Some(parent) = ppsspp_ini.parent() {
+        if parent.exists() {
+            let content = fs::read_to_string(&ppsspp_ini).unwrap_or_default();
+            let new_content = inject_ini_section_cheevos(&content, username, token);
+            if fs::write(&ppsspp_ini, new_content).is_ok() {
+                configured.push("PPSSPP".to_string());
+            }
+        }
+    }
+
+    configured
+}
+
+fn inject_retroarch_cheevos(cfg: &str, username: &str, token: &str) -> String {
+    let mut lines: Vec<String> = cfg.lines().map(|l| l.to_string()).collect();
+
+    let keys = [
+        ("cheevos_enable", "\"true\""),
+        ("cheevos_username", &format!("\"{}\"", username)),
+        ("cheevos_token", &format!("\"{}\"", token)),
+        ("cheevos_hardcore_mode_enable", "\"false\""),
+    ];
+
+    for (key, value) in &keys {
+        let prefix = format!("{} ", key);
+        let found = lines.iter_mut().find(|l| l.starts_with(&prefix) || l.starts_with(&format!("{}=", key)));
+        if let Some(line) = found {
+            *line = format!("{} = {}", key, value);
+        } else {
+            lines.push(format!("{} = {}", key, value));
+        }
+    }
+
+    lines.join("\n")
+}
+
+fn inject_duckstation_cheevos(ini: &str, username: &str, token: &str) -> String {
+    let mut lines: Vec<String> = ini.lines().map(|l| l.to_string()).collect();
+    let mut in_section = false;
+    let mut section_found = false;
+    let mut enabled_set = false;
+    let mut username_set = false;
+    let mut token_set = false;
+
+    for line in lines.iter_mut() {
+        if line.trim().starts_with('[') {
+            if in_section { break; }
+            if line.trim() == "[Cheevos]" || line.trim() == "[Achievements]" {
+                in_section = true;
+                section_found = true;
+            }
+        } else if in_section {
+            if line.starts_with("Enabled") {
+                *line = "Enabled = true".to_string();
+                enabled_set = true;
+            } else if line.starts_with("Username") {
+                *line = format!("Username = {}", username);
+                username_set = true;
+            } else if line.starts_with("Token") {
+                *line = format!("Token = {}", token);
+                token_set = true;
+            } else if line.starts_with("ChallengeMode") || line.starts_with("HardcoreMode") {
+                *line = format!("{} = false", line.split('=').next().unwrap().trim());
+            }
+        }
+    }
+
+    if !section_found {
+        lines.push(String::new());
+        lines.push("[Cheevos]".to_string());
+        lines.push("Enabled = true".to_string());
+        lines.push(format!("Username = {}", username));
+        lines.push(format!("Token = {}", token));
+        lines.push("ChallengeMode = false".to_string());
+    } else if in_section {
+        // Find where the section ends and insert missing keys
+        let section_idx = lines.iter().position(|l| l.trim() == "[Cheevos]" || l.trim() == "[Achievements]").unwrap();
+        let mut insert_at = section_idx + 1;
+        while insert_at < lines.len() && !lines[insert_at].trim().starts_with('[') {
+            insert_at += 1;
+        }
+        if !token_set { lines.insert(insert_at, format!("Token = {}", token)); }
+        if !username_set { lines.insert(insert_at, format!("Username = {}", username)); }
+        if !enabled_set { lines.insert(insert_at, "Enabled = true".to_string()); }
+    }
+
+    lines.join("\n")
+}
+
+fn inject_ini_section_cheevos(ini: &str, username: &str, token: &str) -> String {
+    let mut lines: Vec<String> = ini.lines().map(|l| l.to_string()).collect();
+    let mut in_section = false;
+    let mut section_found = false;
+    let mut enabled_set = false;
+    let mut username_set = false;
+    let mut token_set = false;
+
+    for line in lines.iter_mut() {
+        if line.trim().starts_with('[') {
+            if in_section { break; }
+            if line.trim() == "[Achievements]" {
+                in_section = true;
+                section_found = true;
+            }
+        } else if in_section {
+            if line.starts_with("Enabled") {
+                *line = "Enabled = true".to_string();
+                enabled_set = true;
+            } else if line.starts_with("Username") {
+                *line = format!("Username = {}", username);
+                username_set = true;
+            } else if line.starts_with("Token") {
+                *line = format!("Token = {}", token);
+                token_set = true;
+            } else if line.starts_with("ChallengeMode") || line.starts_with("HardcoreMode") {
+                *line = format!("{} = false", line.split('=').next().unwrap().trim());
+            }
+        }
+    }
+
+    if !section_found {
+        lines.push(String::new());
+        lines.push("[Achievements]".to_string());
+        lines.push("Enabled = true".to_string());
+        lines.push(format!("Username = {}", username));
+        lines.push(format!("Token = {}", token));
+        lines.push("ChallengeMode = false".to_string());
+    } else {
+        let section_idx = lines.iter().position(|l| l.trim() == "[Achievements]").unwrap();
+        let mut insert_at = section_idx + 1;
+        while insert_at < lines.len() && !lines[insert_at].trim().starts_with('[') {
+            insert_at += 1;
+        }
+        if !token_set { lines.insert(insert_at, format!("Token = {}", token)); }
+        if !username_set { lines.insert(insert_at, format!("Username = {}", username)); }
+        if !enabled_set { lines.insert(insert_at, "Enabled = true".to_string()); }
+    }
+
+    lines.join("\n")
 }
 
 fn clean_name(name: &str) -> String {

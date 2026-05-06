@@ -821,6 +821,9 @@ export default function App() {
   const [raLoading, setRaLoading] = useState(false);
   const [raCompletedGames, setRaCompletedGames] = useState<RACompletedGame[]>([]);
   const [raProfileLoading, setRaProfileLoading] = useState(false);
+  const [raPassword, setRaPassword] = useState("");
+  const [raLoginLoading, setRaLoginLoading] = useState(false);
+  const [raToken, setRaToken] = useState("");
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
@@ -1250,9 +1253,10 @@ export default function App() {
 
   // ---- Load RA credentials ----
   useEffect(() => {
-    invoke<{ username: string; api_key: string }>("get_ra_credentials").then(creds => {
+    invoke<{ username: string; api_key: string; token: string }>("get_ra_credentials").then(creds => {
       setRaUsername(creds.username || "");
       setRaApiKey(creds.api_key || "");
+      setRaToken(creds.token || "");
     }).catch(() => {});
   }, []);
 
@@ -1277,6 +1281,30 @@ export default function App() {
       setRaModalRom(null);
     } finally {
       setRaLoading(false);
+    }
+  }, [showToast]);
+
+  const handleRaLogin = useCallback(async () => {
+    if (!raUsername || !raPassword) return;
+    setRaLoginLoading(true);
+    try {
+      const token = await invoke<string>("ra_login", { username: raUsername, password: raPassword });
+      setRaToken(token);
+      setRaPassword("");
+      showToast("Connecté à RetroAchievements ! Token obtenu.", "success");
+    } catch (e: any) {
+      showToast(`RA Login: ${e}`, "error");
+    } finally {
+      setRaLoginLoading(false);
+    }
+  }, [raUsername, raPassword, showToast]);
+
+  const handleConfigureRaEmulators = useCallback(async () => {
+    try {
+      const configured = await invoke<string[]>("configure_ra_emulators");
+      showToast(`RetroAchievements configuré dans : ${configured.join(", ")}`, "success");
+    } catch (e: any) {
+      showToast(`${e}`, "error");
     }
   }, [showToast]);
 
@@ -3863,7 +3891,7 @@ export default function App() {
                   <div className="settings__group">
                     <div className="settings__group-title"><Trophy size={16} /> RetroAchievements</div>
                     <p className="settings__field-desc" style={{ marginBottom: 12 }}>
-                      Connectez votre compte RetroAchievements pour voir vos trophées directement sur chaque jeu.
+                      Connectez votre compte RetroAchievements pour voir vos trophées et les activer automatiquement dans vos émulateurs.
                     </p>
                     <div className="settings__field">
                       <label className="settings__field-label">Username</label>
@@ -3871,7 +3899,7 @@ export default function App() {
                         className="settings__field-input"
                         value={raUsername}
                         onChange={(e) => setRaUsername(e.target.value)}
-                        placeholder="Your RA username"
+                        placeholder="Votre pseudo RA"
                       />
                     </div>
                     <div className="settings__field">
@@ -3881,26 +3909,62 @@ export default function App() {
                         type="password"
                         value={raApiKey}
                         onChange={(e) => setRaApiKey(e.target.value)}
-                        placeholder="Your RA API key (from retroachievements.org/settings)"
+                        placeholder="API key (retroachievements.org/settings)"
                       />
                     </div>
-                    <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8 }}>
+                    <div className="settings__field">
+                      <label className="settings__field-label">Mot de passe RA</label>
+                      <input
+                        className="settings__field-input"
+                        type="password"
+                        value={raPassword}
+                        onChange={(e) => setRaPassword(e.target.value)}
+                        placeholder="Pour connecter les émulateurs automatiquement"
+                      />
+                    </div>
+                    <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
                       <button
                         className="btn btn--primary btn--sm"
                         onClick={handleSaveRaCredentials}
                         disabled={!raUsername || !raApiKey}
                       >
-                        <Check size={14} /> Sauvegarder
+                        <Check size={14} /> Sauvegarder API
+                      </button>
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={handleRaLogin}
+                        disabled={!raUsername || !raPassword || raLoginLoading}
+                        style={{ background: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" }}
+                      >
+                        {raLoginLoading ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
+                        {raLoginLoading ? " Connexion..." : " Login RA"}
                       </button>
                       {raUsername && (
                         <button
                           className="btn btn--ghost btn--sm"
                           onClick={() => openUrl(`https://retroachievements.org/user/${raUsername}`)}
                         >
-                          <ExternalLink size={14} /> Mon profil RA
+                          <ExternalLink size={14} /> Profil
                         </button>
                       )}
                     </div>
+                    {raToken && (
+                      <div className="settings__field" style={{ marginTop: 8, flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "var(--neon-green)" }}>
+                          <CheckCircle size={14} /> Token RA actif
+                        </div>
+                        <button
+                          className="btn btn--primary btn--sm"
+                          onClick={handleConfigureRaEmulators}
+                          style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}
+                        >
+                          <Gamepad2 size={14} /> Configurer les émulateurs
+                        </button>
+                        <p className="settings__field-desc" style={{ margin: 0 }}>
+                          Active les achievements dans RetroArch, DuckStation, PCSX2, Dolphin et PPSSPP.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {raUsername && raApiKey && (
