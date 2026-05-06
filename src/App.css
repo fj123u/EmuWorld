@@ -1452,6 +1452,8 @@ body {
 /* --- Account Modal Specific --- */
 .account-modal {
   width: 450px;
+  max-height: 85vh;
+  overflow-y: auto;
 }
 
 .account-modal__header {
