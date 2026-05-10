@@ -34,6 +34,7 @@
 - [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
 - [x] **Probleme covers sites web**
 - [x] **Rendre tout controlable par manette**
+- [ ] **Mannette pas parfaite**
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 
@@ -54,7 +55,7 @@
 
 ### 📊 Statistiques & Social
 
-- [ ] **Statistiques détaillées** *(moyen)* — page stats perso : graphe d'heures jouées par semaine (sparkline), top 5 jeux, top 3 consoles, streak actuel (jours consécutifs), heatmap style GitHub des sessions
+- [x] **Statistiques détaillées** *(moyen)* — page stats perso : graphe d'heures jouées par semaine (sparkline), top 5 jeux, top 3 consoles, streak actuel (jours consécutifs), heatmap style GitHub des sessions
 - [ ] **Wrap annuel / mensuel** *(gros)* — "EmuWorld Wrapped" à la Spotify : tes stats du mois en slides animées (jeu le + joué, console préférée, temps total, achievement débloqués)
 - [ ] **Partage de profil** *(moyen)* — URL publique `emuworld.app/u/username` avec stats, bibliothèque, achievements, top jeux (la web-panel actuelle enrichie)
 - [ ] **Activity feed** *(gros)* — fil d'activité entre amis : "Théo a joué 3h à Zelda", "Max a débloqué un achievement", "Léo a ajouté 12 jeux à sa bibliothèque"
@@ -79,13 +80,13 @@
 
 ### 🔧 Technique & QoL
 
-- [ ] **Import/Export de config** *(quick win)* — exporter toute sa config EmuWorld (émulateurs, paths, préférences) en JSON pour la restaurer sur un autre PC
-- [ ] **Raccourcis clavier globaux** *(quick win)* — hotkeys pour lancer le dernier jeu joué, ouvrir EmuWorld, kill l'émulateur en cours, etc. même quand l'app est minimisée
+- [x] **Import/Export de config** *(quick win)* — exporter toute sa config EmuWorld (émulateurs, paths, préférences) en JSON pour la restaurer sur un autre PC
+- [x] **Raccourcis clavier globaux** *(quick win)* — hotkeys pour lancer le dernier jeu joué, ouvrir EmuWorld, kill l'émulateur en cours, etc. même quand l'app est minimisée
 - [ ] **Multi-langue** *(moyen)* — i18n avec au minimum FR/EN, fichier JSON de traductions, détection locale système
 - [ ] **Logs & diagnostic** *(quick win)* — page dans settings qui affiche les derniers logs (lancement ému, fetch cover, erreurs) pour debug sans console
 - [ ] **Portable mode** *(moyen)* — détection d'un fichier `portable.txt` à côté de l'exe → stocke tout dans le même dossier (USB friendly)
 - [ ] **Bandwidth limiter** *(quick win)* — réglage vitesse max de download dans le store (pour pas saturer la connexion)
-- [ ] **Notifications système** *(quick win)* — notification Windows native quand un download est terminé, quand un ami se connecte, quand un achievement est débloqué
+- [x] **Notifications système** *(quick win)* — notification Windows native quand un download est terminé, quand un ami se connecte, quand un achievement est débloqué
 
 ### 🌐 Communauté & Contenu
 

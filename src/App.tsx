@@ -936,6 +936,16 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.8.0", date: "2026-05-11", changes: [
+      "📦 Import/Export config: sauvegarder toute sa config + playtime en JSON pour restaurer sur un autre PC",
+      "🔔 Notifications Windows natives: toast quand un achievement est débloqué, un download terminé, ou une session finie",
+      "⌨️ Raccourcis clavier: Ctrl+Shift+L relance le dernier jeu, Ctrl+K focus la recherche",
+    ] },
+    { version: "1.7.0", date: "2026-05-11", changes: [
+      "📊 Page Statistiques: temps total, launches, streak, top 8 jeux, top 6 consoles, heatmap 12 semaines",
+      "📁 Collections custom: créer des playlists de jeux (RPGs, Backlog, etc.), ajouter/retirer via clic droit",
+      "🖱️ Menu contextuel: clic droit sur un jeu → Jouer, Favori, Ajouter à une collection, Supprimer",
+    ] },
     { version: "1.6.0", date: "2026-05-11", changes: [
       "📋 Vue liste/grille: basculer entre covers et tableau (nom, console, temps joué, note)",
       "🔀 Tri avancé: trier par A-Z, temps joué, note, dernier joué, nb de launches",
