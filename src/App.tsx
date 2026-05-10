@@ -317,7 +317,7 @@ const GAMEPAD_ACTIONS: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup";
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -837,6 +837,19 @@ export default function App() {
   const [cloudBackups, setCloudBackups] = useState<{ file_name: string; file_id: string; size: number; upload_timestamp: number }[]>([]);
   const [backupLoading, setBackupLoading] = useState(false);
 
+  // ---- Leaderboard state ----
+  interface LeaderboardEntry {
+    user_id: string;
+    username: string;
+    avatar_url: string | null;
+    week_seconds: number;
+    week_games: number;
+    total_seconds: number;
+    total_launches: number;
+  }
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
 
@@ -1341,6 +1354,54 @@ export default function App() {
       setRaDownloadingCores(false);
     }
   }, [showToast]);
+
+  // ---- Leaderboard handler ----
+  const loadLeaderboard = useCallback(async () => {
+    setLeaderboardLoading(true);
+    try {
+      // Get all public profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .eq("public_profile", true);
+      if (!profiles || profiles.length === 0) { setLeaderboard([]); return; }
+
+      // Get all playtime_games rows for these users
+      const userIds = profiles.map(p => p.id);
+      const { data: games } = await supabase
+        .from("playtime_games")
+        .select("user_id, seconds, launches, last_played")
+        .in("user_id", userIds);
+
+      const now = Date.now();
+      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+      const entries: LeaderboardEntry[] = profiles.map(p => {
+        const userGames = (games || []).filter(g => g.user_id === p.id);
+        const weekGames = userGames.filter(g => g.last_played && new Date(g.last_played).getTime() > weekAgo);
+        const weekSeconds = weekGames.reduce((s, g) => s + (g.seconds || 0), 0);
+        const weekGamesCount = weekGames.length;
+        const totalSeconds = userGames.reduce((s, g) => s + (g.seconds || 0), 0);
+        const totalLaunches = userGames.reduce((s, g) => s + (g.launches || 0), 0);
+        return {
+          user_id: p.id,
+          username: p.username || "Anonymous",
+          avatar_url: p.avatar_url,
+          week_seconds: weekSeconds,
+          week_games: weekGamesCount,
+          total_seconds: totalSeconds,
+          total_launches: totalLaunches,
+        };
+      });
+
+      entries.sort((a, b) => b.week_seconds - a.week_seconds);
+      setLeaderboard(entries);
+    } catch (err) {
+      console.error("[Leaderboard]", err);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, []);
 
   // ---- Cloud Backup handlers ----
   const handleSaveB2Config = useCallback(async () => {
@@ -2011,28 +2072,38 @@ export default function App() {
   useEffect(() => {
     const unlisten = listen<{ console: string; name: string; seconds: number }>(
       "game-closed",
-      (event) => {
-        const mins = Math.floor(event.payload.seconds / 60);
-        if (event.payload.seconds >= 3) {
+      async (event) => {
+        const sessionSecs = event.payload.seconds;
+        if (sessionSecs >= 3) {
+          // Load fresh playtime to get updated totals
+          const pt = await invoke<PlaytimeStore>("get_playtime").catch(() => null);
+          const gameKey = `${event.payload.console}::${event.payload.name}`;
+          const gameData = pt?.games?.[gameKey];
+          const totalSecs = gameData?.seconds ?? sessionSecs;
+          const totalLaunches = gameData?.launches ?? 1;
+
+          const fmtDuration = (s: number) => {
+            if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+            if (s >= 60) return `${Math.floor(s / 60)} min`;
+            return `${s}s`;
+          };
+
+          const gameName = event.payload.name.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').replace(/\.[^.]+$/, '').trim();
           showToast(
-            `Session saved: ${event.payload.name} (${mins >= 1 ? `${mins} min` : `${event.payload.seconds}s`})`,
+            `🎮 ${gameName} — Session de ${fmtDuration(sessionSecs)} · ${totalLaunches} launch${totalLaunches > 1 ? 'es' : ''} · total ${fmtDuration(totalSecs)}`,
             "success"
           );
           scheduleCloudSync();
         }
         loadPlaytime();
         invoke("discord_set_idle").catch(() => {});
-        // Check achievements after session ends
         setTimeout(() => checkAchievements(), 500);
-        // Hidden: speed_runner (< 30s session)
-        if (event.payload.seconds > 0 && event.payload.seconds < 30) {
+        if (sessionSecs > 0 && sessionSecs < 30) {
           triggerHiddenAchievement("speed_runner");
         }
-        // Hidden: marathon (> 4h session)
-        if (event.payload.seconds >= 14400) {
+        if (sessionSecs >= 14400) {
           triggerHiddenAchievement("marathon");
         }
-        // Hidden: night_owl (2h-5h du matin)
         const hour = new Date().getHours();
         if (hour >= 2 && hour < 5) {
           triggerHiddenAchievement("night_owl");
@@ -2809,6 +2880,13 @@ export default function App() {
               {gamepadActive && <span className="sidebar__item-badge">●</span>}
             </button>
             <button
+              className={`sidebar__item ${page === "leaderboard" ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("leaderboard"); loadLeaderboard(); }}
+            >
+              <span className="sidebar__item-icon"><Trophy size={16} /></span>
+              Leaderboard
+            </button>
+            <button
               className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("backup"); invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); }}
             >
@@ -3047,6 +3125,7 @@ export default function App() {
                     {page === "installed" && "Installed Emulators"}
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
+                    {page === "leaderboard" && "Leaderboard"}
                     {page === "backup" && "Cloud Backup"}
                     {page === "controller" && "Controller"}
                   </h1>
@@ -3077,6 +3156,7 @@ export default function App() {
                     )}
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
+                    {page === "leaderboard" && "Qui joue le plus cette semaine ?"}
                     {page === "backup" && "Backblaze B2 — Sauvegardez vos parties dans le cloud"}
                     {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
                   </p>
@@ -4119,6 +4199,62 @@ export default function App() {
                       ) : null}
                     </div>
                   )}
+                </div>
+              )}
+
+              {page === "leaderboard" && (
+                <div className="settings-content">
+                  <div className="settings__group">
+                    <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span><Trophy size={16} /> Classement de la semaine</span>
+                      <button className="btn btn--ghost btn--sm" onClick={loadLeaderboard} disabled={leaderboardLoading}>
+                        <RefreshCw size={14} className={leaderboardLoading ? "animate-spin" : ""} /> Rafraîchir
+                      </button>
+                    </div>
+                    {leaderboardLoading && <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Chargement...</p>}
+                    {!leaderboardLoading && leaderboard.length === 0 && (
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucun joueur avec un profil public trouvé. Active ton profil public dans les paramètres du compte.</p>
+                    )}
+                    {leaderboard.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                        {leaderboard.map((entry, i) => {
+                          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+                          const fmtTime = (s: number) => {
+                            if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+                            if (s >= 60) return `${Math.floor(s / 60)} min`;
+                            return `${s}s`;
+                          };
+                          const isMe = entry.user_id === user?.id;
+                          return (
+                            <div key={entry.user_id} style={{
+                              display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
+                              borderRadius: 8, background: isMe ? "rgba(99, 102, 241, 0.15)" : "rgba(255,255,255,0.03)",
+                              border: isMe ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid transparent",
+                            }}>
+                              <span style={{ fontSize: "1.2rem", width: 32, textAlign: "center" }}>{medal}</span>
+                              {entry.avatar_url ? (
+                                <img src={entry.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
+                              ) : (
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700 }}>
+                                  {entry.username.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{entry.username} {isMe && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>(toi)</span>}</div>
+                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
+                                  {entry.week_games} jeu{entry.week_games > 1 ? "x" : ""} cette semaine · {entry.total_launches} launches total
+                                </div>
+                              </div>
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--accent)" }}>{fmtTime(entry.week_seconds)}</div>
+                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>total {fmtTime(entry.total_seconds)}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
