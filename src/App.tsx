@@ -53,6 +53,9 @@ import {
   Trophy,
   Cloud,
   Upload,
+  LayoutGrid,
+  List,
+  StickyNote,
 } from "lucide-react";
 
 /* ============================
@@ -139,6 +142,7 @@ interface GameEntry {
   favorite: boolean;
   last_emulator_id: string | null;
   rating?: number;
+  notes?: string;
 }
 
 interface PlaytimeStore {
@@ -534,7 +538,7 @@ const RA_SUPPORTED_CONSOLES = new Set([
   "Atari 2600", "WonderSwan",
 ]);
 
-const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate }: {
+const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
@@ -543,6 +547,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   onOpenRA?: (rom: RomFile) => void,
   onHover?: (coverUrl: string | null) => void,
   onRate?: (rom: RomFile, rating: number) => void,
+  onNotes?: (rom: RomFile) => void,
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -624,6 +629,18 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
       >
         <Trash2 size={14} />
       </button>
+
+      {/* Notes Button */}
+      {onNotes && (
+        <button
+          className="game-card__notes"
+          onClick={(e) => { e.stopPropagation(); onNotes(rom); }}
+          title="Notes"
+        >
+          <StickyNote size={14} />
+          {entry?.notes && <span className="game-card__notes-dot" />}
+        </button>
+      )}
 
       {/* RetroAchievements Button */}
       {onOpenRA && RA_SUPPORTED_CONSOLES.has(rom.console) && (
@@ -804,6 +821,9 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [sortBy, setSortBy] = useState<"name" | "playtime" | "rating" | "last_played" | "launches">("name");
+  const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated">("all");
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
@@ -2177,6 +2197,24 @@ export default function App() {
     }
   }, [loadPlaytime, showToast]);
 
+  const [notesModal, setNotesModal] = useState<{ rom: RomFile; text: string } | null>(null);
+
+  const handleOpenNotes = useCallback((rom: RomFile) => {
+    const entry = playtime.games[`${rom.console}::${rom.name}`];
+    setNotesModal({ rom, text: entry?.notes ?? "" });
+  }, [playtime]);
+
+  const handleSaveNotes = useCallback(async () => {
+    if (!notesModal) return;
+    try {
+      await invoke("set_game_notes", { console: notesModal.rom.console, name: notesModal.rom.name, notes: notesModal.text });
+      loadPlaytime();
+      setNotesModal(null);
+    } catch (err: any) {
+      showToast(`Notes failed: ${err}`, "error");
+    }
+  }, [notesModal, loadPlaytime, showToast]);
+
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
   // we pull the cloud rows for this user and overwrite the local store with
@@ -2792,7 +2830,22 @@ export default function App() {
     const emu = catalog.find((e) => e.console === g.console);
     const matchesCategory = !categoryFilter || (emu && emu.category === categoryFilter);
     const matchesConsole = !consoleFilter || g.console === consoleFilter;
-    return matchesSearch && matchesCategory && matchesConsole;
+    if (!matchesSearch || !matchesCategory || !matchesConsole) return false;
+    const entry = playtime.games[`${g.console}::${g.name}`];
+    if (filterMode === "favorites" && !entry?.favorite) return false;
+    if (filterMode === "unplayed" && entry?.launches) return false;
+    if (filterMode === "rated" && !entry?.rating) return false;
+    return true;
+  }).sort((a, b) => {
+    const ea = playtime.games[`${a.console}::${a.name}`];
+    const eb = playtime.games[`${b.console}::${b.name}`];
+    switch (sortBy) {
+      case "playtime": return (eb?.seconds ?? 0) - (ea?.seconds ?? 0);
+      case "rating": return (eb?.rating ?? 0) - (ea?.rating ?? 0);
+      case "last_played": return (eb?.last_played ?? "").localeCompare(ea?.last_played ?? "");
+      case "launches": return (eb?.launches ?? 0) - (ea?.launches ?? 0);
+      default: return a.name.localeCompare(b.name);
+    }
   });
 
   // ---- Window controls ----
@@ -3209,9 +3262,30 @@ export default function App() {
                     </button>
                   )}
                   {page === "library" && (
-                    <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
-                      <Download size={14} /> Import ROM
-                    </button>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                      <button className={`btn btn--ghost btn--sm ${viewMode === "grid" ? "btn--active" : ""}`} onClick={() => setViewMode("grid")} title="Grid view">
+                        <LayoutGrid size={14} />
+                      </button>
+                      <button className={`btn btn--ghost btn--sm ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title="List view">
+                        <List size={14} />
+                      </button>
+                      <select className="library-sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+                        <option value="name">A-Z</option>
+                        <option value="playtime">Temps joué</option>
+                        <option value="rating">Note</option>
+                        <option value="last_played">Dernier joué</option>
+                        <option value="launches">Nb launches</option>
+                      </select>
+                      <select className="library-sort-select" value={filterMode} onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}>
+                        <option value="all">Tous</option>
+                        <option value="favorites">Favoris</option>
+                        <option value="unplayed">Non joués</option>
+                        <option value="rated">Notés</option>
+                      </select>
+                      <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
+                        <Download size={14} /> Import ROM
+                      </button>
+                    </div>
                   )}
                   {(page === "catalog" || page === "library" || page === "store") && (
                     <>
@@ -3338,6 +3412,7 @@ export default function App() {
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
+                                onNotes={handleOpenNotes}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
@@ -3351,6 +3426,7 @@ export default function App() {
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
+                                onNotes={handleOpenNotes}
                               />
                             ))}
                           </div>
@@ -3941,21 +4017,48 @@ export default function App() {
                     ) : search.trim().length >= 2 ? (
                       /* ---- Global search bypasses the drill-down ---- */
                       <>
-                        <div className="game-grid">
-                          {filteredGames.map(rom => (
-                            <GameCard
-                              key={rom.path}
-                              rom={rom}
-                              onLaunch={handleLaunch}
-                              onDelete={handleDeleteRom}
-                              entry={playtime.games[`${rom.console}::${rom.name}`]}
-                              onToggleFavorite={handleToggleFavorite}
-                              onOpenRA={handleOpenRaModal}
-                              onHover={setBgCover}
-                              onRate={handleSetRating}
-                            />
-                          ))}
-                        </div>
+                        {viewMode === "grid" ? (
+                          <div className="game-grid">
+                            {filteredGames.map(rom => (
+                              <GameCard
+                                key={rom.path}
+                                rom={rom}
+                                onLaunch={handleLaunch}
+                                onDelete={handleDeleteRom}
+                                entry={playtime.games[`${rom.console}::${rom.name}`]}
+                                onToggleFavorite={handleToggleFavorite}
+                                onOpenRA={handleOpenRaModal}
+                                onHover={setBgCover}
+                                onRate={handleSetRating}
+                                onNotes={handleOpenNotes}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="game-list">
+                            <div className="game-list__header">
+                              <span className="game-list__col game-list__col--name">Nom</span>
+                              <span className="game-list__col game-list__col--console">Console</span>
+                              <span className="game-list__col game-list__col--time">Temps</span>
+                              <span className="game-list__col game-list__col--rating">Note</span>
+                              <span className="game-list__col game-list__col--actions"></span>
+                            </div>
+                            {filteredGames.map(rom => {
+                              const entry = playtime.games[`${rom.console}::${rom.name}`];
+                              return (
+                                <div key={rom.path} className="game-list__row gamepad-nav-item" onClick={() => handleLaunch(rom)}>
+                                  <span className="game-list__col game-list__col--name">{rom.name}</span>
+                                  <span className="game-list__col game-list__col--console">{rom.console}</span>
+                                  <span className="game-list__col game-list__col--time">{entry ? formatPlaytime(entry.seconds) : "—"}</span>
+                                  <span className="game-list__col game-list__col--rating">{"★".repeat(entry?.rating ?? 0)}{"☆".repeat(5 - (entry?.rating ?? 0))}</span>
+                                  <span className="game-list__col game-list__col--actions">
+                                    <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); handleDeleteRom(rom); }}><Trash2 size={12} /></button>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         {filteredGames.length === 0 && (
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
@@ -4020,23 +4123,50 @@ export default function App() {
                           })}
                       </div>
                     ) : (
-                      /* ---- Game grid for the selected console ---- */
+                      /* ---- Game grid/list for the selected console ---- */
                       <>
-                        <div className="game-grid">
-                          {filteredGames.map(rom => (
-                            <GameCard
-                              key={rom.path}
-                              rom={rom}
-                              onLaunch={handleLaunch}
-                              onDelete={handleDeleteRom}
-                              entry={playtime.games[`${rom.console}::${rom.name}`]}
-                              onToggleFavorite={handleToggleFavorite}
-                              onOpenRA={handleOpenRaModal}
-                              onHover={setBgCover}
-                              onRate={handleSetRating}
-                            />
-                          ))}
-                        </div>
+                        {viewMode === "grid" ? (
+                          <div className="game-grid">
+                            {filteredGames.map(rom => (
+                              <GameCard
+                                key={rom.path}
+                                rom={rom}
+                                onLaunch={handleLaunch}
+                                onDelete={handleDeleteRom}
+                                entry={playtime.games[`${rom.console}::${rom.name}`]}
+                                onToggleFavorite={handleToggleFavorite}
+                                onOpenRA={handleOpenRaModal}
+                                onHover={setBgCover}
+                                onRate={handleSetRating}
+                                onNotes={handleOpenNotes}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="game-list">
+                            <div className="game-list__header">
+                              <span className="game-list__col game-list__col--name">Nom</span>
+                              <span className="game-list__col game-list__col--console">Console</span>
+                              <span className="game-list__col game-list__col--time">Temps</span>
+                              <span className="game-list__col game-list__col--rating">Note</span>
+                              <span className="game-list__col game-list__col--actions"></span>
+                            </div>
+                            {filteredGames.map(rom => {
+                              const entry = playtime.games[`${rom.console}::${rom.name}`];
+                              return (
+                                <div key={rom.path} className="game-list__row gamepad-nav-item" onClick={() => handleLaunch(rom)}>
+                                  <span className="game-list__col game-list__col--name">{rom.name}</span>
+                                  <span className="game-list__col game-list__col--console">{rom.console}</span>
+                                  <span className="game-list__col game-list__col--time">{entry ? formatPlaytime(entry.seconds) : "—"}</span>
+                                  <span className="game-list__col game-list__col--rating">{"★".repeat(entry?.rating ?? 0)}{"☆".repeat(5 - (entry?.rating ?? 0))}</span>
+                                  <span className="game-list__col game-list__col--actions">
+                                    <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); handleDeleteRom(rom); }}><Trash2 size={12} /></button>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                         {filteredGames.length === 0 && (
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
@@ -4741,6 +4871,44 @@ export default function App() {
                 );
               })}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Notes Modal */}
+      <AnimatePresence>
+        {notesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="notes-modal-overlay"
+            onClick={() => setNotesModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="notes-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="notes-modal__header">
+                <StickyNote size={16} />
+                <span>Notes — {notesModal.rom.name}</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => setNotesModal(null)}><X size={14} /></button>
+              </div>
+              <textarea
+                className="notes-modal__textarea"
+                value={notesModal.text}
+                onChange={(e) => setNotesModal({ ...notesModal, text: e.target.value })}
+                placeholder="Codes, astuces, progression..."
+                autoFocus
+              />
+              <div className="notes-modal__actions">
+                <button className="btn btn--ghost btn--sm" onClick={() => setNotesModal(null)}>Annuler</button>
+                <button className="btn btn--primary btn--sm" onClick={handleSaveNotes}><Check size={14} /> Sauvegarder</button>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

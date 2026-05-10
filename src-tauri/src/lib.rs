@@ -3409,6 +3409,11 @@ fn set_game_rating(console: String, name: String, rating: u8) -> Result<(), Stri
 }
 
 #[tauri::command]
+fn set_game_notes(console: String, name: String, notes: String) -> Result<(), String> {
+    playtime::set_notes(&console, &name, &notes)
+}
+
+#[tauri::command]
 fn get_profile_stats() -> playtime::ProfileStats {
     playtime::compute_stats()
 }
@@ -3569,6 +3574,7 @@ pub fn run() {
             get_playtime,
             toggle_favorite,
             set_game_rating,
+            set_game_notes,
             get_profile_stats,
             clear_playtime,
             overwrite_playtime,

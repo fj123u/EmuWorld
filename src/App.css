@@ -898,6 +898,43 @@ body {
 /* ===== Game Grid ===== */
 .game-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
 
+/* List view */
+.game-list { display: flex; flex-direction: column; gap: 0; }
+.game-list__header {
+  display: flex; align-items: center; padding: 8px 12px;
+  font-size: 0.7rem; font-weight: 700; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+.game-list__row {
+  display: flex; align-items: center; padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  cursor: pointer; transition: background 0.15s;
+  border-radius: 6px;
+}
+.game-list__row:hover { background: rgba(99, 102, 241, 0.08); }
+.game-list__col--name { flex: 3; font-weight: 600; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.game-list__col--console { flex: 2; font-size: 0.75rem; color: var(--text-muted); }
+.game-list__col--time { flex: 1; font-size: 0.75rem; color: var(--text-secondary); }
+.game-list__col--rating { flex: 1; font-size: 0.7rem; color: #f59e0b; letter-spacing: 1px; }
+.game-list__col--actions { flex: 0 0 40px; text-align: right; }
+
+/* Library sort/filter selects */
+.library-sort-select {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.72rem;
+  padding: 5px 8px;
+  cursor: pointer;
+  outline: none;
+}
+.library-sort-select:focus { border-color: var(--accent); }
+
+/* Active toggle button */
+.btn--active { background: rgba(99, 102, 241, 0.2) !important; border-color: var(--accent) !important; }
+
 .game-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -3784,6 +3821,80 @@ body {
   background: #f59e0b;
   transform: scale(1.1);
   box-shadow: 0 0 15px rgba(245, 158, 11, 0.5);
+}
+
+/* Notes button on game card */
+.game-card__notes {
+  position: absolute;
+  top: 72px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(99, 102, 241, 0.9);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.game-card:hover .game-card__notes { opacity: 1; }
+.game-card__notes:hover {
+  background: #6366f1;
+  transform: scale(1.1);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.5);
+}
+.game-card__notes-dot {
+  position: absolute;
+  top: 2px; right: 2px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+/* Notes modal */
+.notes-modal-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+}
+.notes-modal {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.notes-modal__header {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+.notes-modal__header .btn { margin-left: auto; }
+.notes-modal__textarea {
+  width: 100%; min-height: 150px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+}
+.notes-modal__textarea:focus { border-color: var(--accent); }
+.notes-modal__actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin-top: 12px;
 }
 
 /* RA Overlay */

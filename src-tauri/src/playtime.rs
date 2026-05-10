@@ -18,6 +18,8 @@ pub struct GameEntry {
     pub last_emulator_id: Option<String>,
     #[serde(default)]
     pub rating: Option<u8>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -119,6 +121,19 @@ pub fn set_rating(console: &str, name: &str, rating: u8) -> Result<(), String> {
         ..Default::default()
     });
     entry.rating = if rating == 0 { None } else { Some(rating.min(5)) };
+    save(&store)?;
+    Ok(())
+}
+
+pub fn set_notes(console: &str, name: &str, notes: &str) -> Result<(), String> {
+    let mut store = load();
+    let k = key(console, name);
+    let entry = store.games.entry(k).or_insert(GameEntry {
+        console: console.to_string(),
+        name: name.to_string(),
+        ..Default::default()
+    });
+    entry.notes = if notes.is_empty() { None } else { Some(notes.to_string()) };
     save(&store)?;
     Ok(())
 }
