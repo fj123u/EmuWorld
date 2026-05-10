@@ -145,9 +145,15 @@ interface GameEntry {
   notes?: string;
 }
 
+interface GameCollection {
+  name: string;
+  games: string[];
+}
+
 interface PlaytimeStore {
   games: Record<string, GameEntry>;
   emulators: Record<string, number>;
+  collections: GameCollection[];
 }
 
 interface ProfileStats {
@@ -809,7 +815,7 @@ export default function App() {
   const [installed, setInstalled] = useState<string[]>([]);
   const [roms, setRoms] = useState<RomFile[]>([]);
   // Playtime / profile
-  const [playtime, setPlaytime] = useState<PlaytimeStore>({ games: {}, emulators: {} });
+  const [playtime, setPlaytime] = useState<PlaytimeStore>({ games: {}, emulators: {}, collections: [] });
   const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
   const [achievements, setAchievements] = useState<AchievementItem[]>([]);
   const [achievementRank, setAchievementRank] = useState<AchievementRank>({ count: 0, total: 23, rank: "Bronze", icon: "🥉" });
@@ -824,6 +830,9 @@ export default function App() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"name" | "playtime" | "rating" | "last_played" | "launches">("name");
   const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated">("all");
+  const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
+  const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
@@ -2244,6 +2253,45 @@ export default function App() {
     }
   }, [notesModal, loadPlaytime, showToast, scheduleCloudSync]);
 
+  const handleCreateCollection = useCallback(async (name: string) => {
+    try {
+      await invoke("create_collection", { name });
+      loadPlaytime();
+      setNewCollectionName("");
+    } catch (err: any) {
+      showToast(err, "error");
+    }
+  }, [loadPlaytime, showToast]);
+
+  const handleDeleteCollection = useCallback(async (name: string) => {
+    try {
+      await invoke("delete_collection", { name });
+      loadPlaytime();
+      if (collectionFilter === name) setCollectionFilter(null);
+    } catch (err: any) {
+      showToast(`Delete failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast, collectionFilter]);
+
+  const handleAddToCollection = useCallback(async (collectionName: string, rom: RomFile) => {
+    try {
+      await invoke("add_to_collection", { collectionName, gameKey: `${rom.console}::${rom.name}` });
+      loadPlaytime();
+      showToast(`Ajouté à "${collectionName}"`, "success");
+    } catch (err: any) {
+      showToast(`Failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast]);
+
+  const handleRemoveFromCollection = useCallback(async (collectionName: string, rom: RomFile) => {
+    try {
+      await invoke("remove_from_collection", { collectionName, gameKey: `${rom.console}::${rom.name}` });
+      loadPlaytime();
+    } catch (err: any) {
+      showToast(`Failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast]);
+
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
   // we pull the cloud rows for this user and overwrite the local store with
@@ -2267,7 +2315,7 @@ export default function App() {
           supabase.from("playtime_games").select("*").eq("user_id", currentId),
           supabase.from("playtime_emulators").select("*").eq("user_id", currentId),
         ]);
-        const cloud: PlaytimeStore = { games: {}, emulators: {} };
+        const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
         for (const row of gamesRes.data || []) {
           cloud.games[`${row.console}::${row.name}`] = {
             console: row.console,
@@ -2866,6 +2914,10 @@ export default function App() {
     if (filterMode === "favorites" && !entry?.favorite) return false;
     if (filterMode === "unplayed" && entry?.launches) return false;
     if (filterMode === "rated" && !entry?.rating) return false;
+    if (collectionFilter) {
+      const col = playtime.collections.find(c => c.name === collectionFilter);
+      if (col && !col.games.includes(`${g.console}::${g.name}`)) return false;
+    }
     return true;
   }).sort((a, b) => {
     const ea = playtime.games[`${a.console}::${a.name}`];
@@ -3313,6 +3365,15 @@ export default function App() {
                         <option value="unplayed">Non joués</option>
                         <option value="rated">Notés</option>
                       </select>
+                      <select className="library-sort-select" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
+                        <option value="">Collections</option>
+                        {playtime.collections.map(c => (
+                          <option key={c.name} value={c.name}>{c.name} ({c.games.length})</option>
+                        ))}
+                      </select>
+                      <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(true)} title="Gérer les collections">
+                        <Package size={14} />
+                      </button>
                       <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
                         <Download size={14} /> Import ROM
                       </button>
@@ -4738,6 +4799,15 @@ export default function App() {
                   >
                     {isFav ? "★ Retirer des favoris" : "☆ Mettre en favori"}
                   </button>
+                  {playtime.collections.length > 0 && playtime.collections.map(col => (
+                    <button
+                      key={col.name}
+                      className="gamepad-context-menu__btn"
+                      onClick={() => { setGamepadContextMenu(null); handleAddToCollection(col.name, rom); }}
+                    >
+                      <Package size={14} /> + {col.name}
+                    </button>
+                  ))}
                   <button
                     className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
                     onClick={() => { setGamepadContextMenu(null); handleDeleteRom(rom); }}
@@ -4902,6 +4972,61 @@ export default function App() {
                 );
               })}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Collections Modal */}
+      <AnimatePresence>
+        {showCollectionModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="notes-modal-overlay"
+            onClick={() => setShowCollectionModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="notes-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="notes-modal__header">
+                <Package size={16} />
+                <span>Collections</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(false)}><X size={14} /></button>
+              </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input
+                  className="settings__field-input"
+                  value={newCollectionName}
+                  onChange={(e) => setNewCollectionName(e.target.value)}
+                  placeholder="Nouvelle collection..."
+                  onKeyDown={(e) => { if (e.key === "Enter" && newCollectionName.trim()) handleCreateCollection(newCollectionName.trim()); }}
+                  style={{ flex: 1 }}
+                />
+                <button className="btn btn--primary btn--sm" onClick={() => { if (newCollectionName.trim()) handleCreateCollection(newCollectionName.trim()); }} disabled={!newCollectionName.trim()}>
+                  <Check size={14} /> Créer
+                </button>
+              </div>
+              {playtime.collections.length === 0 ? (
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucune collection. Crée-en une pour organiser tes jeux !</p>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 250, overflowY: "auto" }}>
+                  {playtime.collections.map(col => (
+                    <div key={col.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)" }}>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{col.name}</div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{col.games.length} jeu{col.games.length > 1 ? "x" : ""}</div>
+                      </div>
+                      <button className="btn btn--danger btn--sm" onClick={() => handleDeleteCollection(col.name)}><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

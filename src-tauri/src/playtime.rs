@@ -23,6 +23,12 @@ pub struct GameEntry {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct GameCollection {
+    pub name: String,
+    pub games: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct PlaytimeStore {
     #[serde(default)]
     pub games: HashMap<String, GameEntry>,
@@ -30,6 +36,8 @@ pub struct PlaytimeStore {
     /// have to recompute it every render.
     #[serde(default)]
     pub emulators: HashMap<String, u64>,
+    #[serde(default)]
+    pub collections: Vec<GameCollection>,
 }
 
 fn store_path() -> PathBuf {
@@ -134,6 +142,52 @@ pub fn set_notes(console: &str, name: &str, notes: &str) -> Result<(), String> {
         ..Default::default()
     });
     entry.notes = if notes.is_empty() { None } else { Some(notes.to_string()) };
+    save(&store)?;
+    Ok(())
+}
+
+pub fn create_collection(name: &str) -> Result<Vec<GameCollection>, String> {
+    let mut store = load();
+    if store.collections.iter().any(|c| c.name == name) {
+        return Err(format!("Collection '{}' already exists", name));
+    }
+    store.collections.push(GameCollection { name: name.to_string(), games: vec![] });
+    save(&store)?;
+    Ok(store.collections)
+}
+
+pub fn delete_collection(name: &str) -> Result<Vec<GameCollection>, String> {
+    let mut store = load();
+    store.collections.retain(|c| c.name != name);
+    save(&store)?;
+    Ok(store.collections)
+}
+
+pub fn rename_collection(old_name: &str, new_name: &str) -> Result<Vec<GameCollection>, String> {
+    let mut store = load();
+    if let Some(col) = store.collections.iter_mut().find(|c| c.name == old_name) {
+        col.name = new_name.to_string();
+    }
+    save(&store)?;
+    Ok(store.collections)
+}
+
+pub fn add_to_collection(collection_name: &str, game_key: &str) -> Result<(), String> {
+    let mut store = load();
+    if let Some(col) = store.collections.iter_mut().find(|c| c.name == collection_name) {
+        if !col.games.contains(&game_key.to_string()) {
+            col.games.push(game_key.to_string());
+        }
+    }
+    save(&store)?;
+    Ok(())
+}
+
+pub fn remove_from_collection(collection_name: &str, game_key: &str) -> Result<(), String> {
+    let mut store = load();
+    if let Some(col) = store.collections.iter_mut().find(|c| c.name == collection_name) {
+        col.games.retain(|g| g != game_key);
+    }
     save(&store)?;
     Ok(())
 }

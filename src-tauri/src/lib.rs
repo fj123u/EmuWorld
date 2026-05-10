@@ -3414,6 +3414,31 @@ fn set_game_notes(console: String, name: String, notes: String) -> Result<(), St
 }
 
 #[tauri::command]
+fn create_collection(name: String) -> Result<Vec<playtime::GameCollection>, String> {
+    playtime::create_collection(&name)
+}
+
+#[tauri::command]
+fn delete_collection(name: String) -> Result<Vec<playtime::GameCollection>, String> {
+    playtime::delete_collection(&name)
+}
+
+#[tauri::command]
+fn rename_collection(old_name: String, new_name: String) -> Result<Vec<playtime::GameCollection>, String> {
+    playtime::rename_collection(&old_name, &new_name)
+}
+
+#[tauri::command]
+fn add_to_collection(collection_name: String, game_key: String) -> Result<(), String> {
+    playtime::add_to_collection(&collection_name, &game_key)
+}
+
+#[tauri::command]
+fn remove_from_collection(collection_name: String, game_key: String) -> Result<(), String> {
+    playtime::remove_from_collection(&collection_name, &game_key)
+}
+
+#[tauri::command]
 fn get_profile_stats() -> playtime::ProfileStats {
     playtime::compute_stats()
 }
@@ -3575,6 +3600,11 @@ pub fn run() {
             toggle_favorite,
             set_game_rating,
             set_game_notes,
+            create_collection,
+            delete_collection,
+            rename_collection,
+            add_to_collection,
+            remove_from_collection,
             get_profile_stats,
             clear_playtime,
             overwrite_playtime,
