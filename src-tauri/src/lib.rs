@@ -763,18 +763,23 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         "NES" | "Famicom" => vec!["Nintendo - Nintendo Entertainment System"],
         "SNES" | "Super Famicom" | "Super Nintendo" => vec!["Nintendo - Super Nintendo Entertainment System"],
         "Nintendo 64" | "N64" => vec!["Nintendo - Nintendo 64"],
-        "Game Boy" => vec!["Nintendo - Game Boy"],
-        "Game Boy Color" | "GBC" => vec!["Nintendo - Game Boy Color"],
-        "Game Boy Advance" | "GBA" => vec!["Nintendo - Game Boy Advance"],
+        "Game Boy" => vec!["Nintendo - Game Boy", "Nintendo - Game Boy Color"],
+        "Game Boy Color" | "GBC" => vec!["Nintendo - Game Boy Color", "Nintendo - Game Boy"],
+        "Game Boy Advance" | "GBA" => vec!["Nintendo - Game Boy Advance", "Nintendo - Game Boy Color", "Nintendo - Game Boy"],
         "Nintendo DS" => vec!["Nintendo - Nintendo DS"],
-        "GameCube" => vec!["Nintendo - GameCube"],
+        "Nintendo 3DS" | "3DS" => vec!["Nintendo - Nintendo 3DS"],
+        "GameCube" => vec!["Nintendo - GameCube", "Nintendo - Wii"],
         "GameCube / Wii" | "GameCube - Wii" => vec!["Nintendo - Wii", "Nintendo - GameCube"],
-        "Wii" => vec!["Nintendo - Wii"],
-        "Wii U" => vec!["Nintendo - Wii U"],
+        "Wii" => vec!["Nintendo - Wii", "Nintendo - GameCube"],
+        "Wii U" => vec!["Nintendo - Wii U", "Nintendo - Wii"],
         "Nintendo Switch" => vec!["Nintendo - Nintendo Switch"],
         "Virtual Boy" => vec!["Nintendo - Virtual Boy"],
         "PlayStation 1" | "PS1" => vec!["Sony - PlayStation"],
         "PlayStation 2" | "PS2" => vec!["Sony - PlayStation 2"],
+        "PlayStation Portable" | "PSP" => vec!["Sony - PlayStation Portable"],
+        "Mega Drive" | "Genesis" => vec!["Sega - Mega Drive - Genesis"],
+        "Dreamcast" => vec!["Sega - Dreamcast"],
+        "Master System" => vec!["Sega - Master System - Mark III"],
         _ => vec![],
     };
 
@@ -1397,21 +1402,39 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
         ("Platine", "Platinum"), ("Rouge", "Red"), ("Bleu", "Blue"), ("Jaune", "Yellow"),
         ("Or", "Gold"), ("Argent", "Silver"), ("Cristal", "Crystal"), ("Rubis", "Ruby"),
         ("Saphir", "Sapphire"), ("Emeraude", "Emerald"), ("Diamant", "Diamond"),
-        ("Perle", "Pearl"), ("Noir", "Black"), ("Blanc", "White"), ("Soleil", "Sun"), ("Lune", "Moon")
+        ("Perle", "Pearl"), ("Noir", "Black"), ("Blanc", "White"), ("Soleil", "Sun"), ("Lune", "Moon"),
+        ("Rouge Feu", "FireRed"), ("Vert Feuille", "LeafGreen")
     ];
 
+    // Apply translation to both pure and full cleaned name
     let mut translated = pure.clone();
+    let mut translated_full = cleaned.clone();
     let mut matched = false;
-    for (fr, en) in fr_to_en {
+    for (fr, en) in &fr_to_en {
         if translated.contains(fr) {
             translated = translated.replace(fr, en);
             matched = true;
         }
+        if translated_full.contains(fr) {
+            translated_full = translated_full.replace(fr, en);
+        }
     }
+
+    // Fix "Pokemon - Version X" → "Pokemon - X Version" (libretro format)
+    let version_re = regex::Regex::new(r"(?i)Version (\w+)").unwrap();
+    if let Some(caps) = version_re.captures(&translated_full) {
+        let color = caps.get(1).unwrap().as_str().to_string();
+        let libretro_name = translated_full.replace(&format!("Version {}", color), &format!("{} Version", color));
+        candidates.push(libretro_name.clone());
+    }
+
     if matched {
         candidates.push(translated.clone());
         candidates.push(format!("{} (World)", translated));
         candidates.push(format!("{} (USA)", translated));
+    }
+    if translated_full != cleaned {
+        candidates.push(translated_full.clone());
     }
 
     // Add console name to force the right Wikipedia result
@@ -1442,6 +1465,41 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
     if pure.contains("1.2.Switch") || pure.contains("1 2 Switch") {
         candidates.push("1-2-Switch".to_string());
         candidates.push("1-2-Switch (video game)".to_string());
+    }
+
+    // Exact libretro filenames for games that are hard to match automatically
+    let lower_pure = pure.to_lowercase();
+    let exact_libretro: Vec<&str> = if lower_pure.contains("zelda") && lower_pure.contains("twilight") {
+        vec!["Legend of Zelda, The - Twilight Princess HD (USA) (En,Fr,Es) (Rev 2)"]
+    } else if lower_pure.contains("zelda") && lower_pure.contains("wind waker") {
+        vec!["Legend of Zelda, The - The Wind Waker HD (USA, Asia) (En,Fr,Es)"]
+    } else if lower_pure.contains("zelda") && lower_pure.contains("breath") {
+        vec!["Legend of Zelda, The - Breath of the Wild (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("mario kart 8") {
+        vec!["Mario Kart 8 (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("splatoon") && !lower_pure.contains("2") {
+        vec!["Splatoon (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("super mario 3d world") {
+        vec!["Super Mario 3D World (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("smash") && lower_pure.contains("wii u") {
+        vec!["Super Smash Bros. for Wii U (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("bayonetta 2") {
+        vec!["Bayonetta 2 (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("donkey kong") && lower_pure.contains("tropical") {
+        vec!["Donkey Kong Country - Tropical Freeze (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("pikmin 3") {
+        vec!["Pikmin 3 (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("xenoblade") && lower_pure.contains("x") {
+        vec!["Xenoblade Chronicles X (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("new super mario bros") && console == "Wii U" {
+        vec!["New Super Mario Bros. U (USA) (En,Fr,Es)"]
+    } else if lower_pure.contains("ducktales") {
+        vec!["DuckTales - Remastered (USA)"]
+    } else {
+        vec![]
+    };
+    for name in exact_libretro {
+        candidates.insert(0, name.to_string());
     }
 
     // Tomodachi Life (handles truncated "Living th..." filenames)
