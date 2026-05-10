@@ -10,6 +10,7 @@ import type { User, Provider } from "@supabase/supabase-js";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
 import {
   Search,
   Settings,
@@ -1361,9 +1362,9 @@ export default function App() {
   }, [loadData]);
 
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
+    isPermissionGranted().then(granted => {
+      if (!granted) requestPermission();
+    });
   }, []);
 
   // Global keyboard shortcuts
@@ -1678,9 +1679,7 @@ export default function App() {
       const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
       if (result) {
         showToast(`${result.icon} Achievement secret débloqué : ${result.name}`, "success");
-        if (Notification.permission === "granted") {
-          new Notification("EmuWorld — Achievement !", { body: `${result.icon} ${result.name}` });
-        }
+        sendNotification({ title: "EmuWorld — Achievement !", body: `${result.icon} ${result.name}` });
         await loadAchievements();
         syncAchievementToCloud(result);
       }
@@ -1702,9 +1701,7 @@ export default function App() {
       if (newlyUnlocked.length > 0) {
         for (const a of newlyUnlocked) {
           showToast(`${a.icon} Achievement débloqué : ${a.name}`, "success");
-          if (Notification.permission === "granted") {
-            new Notification("EmuWorld — Achievement !", { body: `${a.icon} ${a.name}` });
-          }
+          sendNotification({ title: "EmuWorld — Achievement !", body: `${a.icon} ${a.name}` });
           syncAchievementToCloud(a);
         }
         await loadAchievements();
@@ -2214,12 +2211,8 @@ export default function App() {
             totalLaunches,
           });
           // Native Windows notification
-          if (Notification.permission === "granted") {
-            const mins = Math.floor(sessionSecs / 60);
-            new Notification("EmuWorld — Session terminée", {
-              body: `${gameName} — ${mins > 0 ? `${mins} min` : `${sessionSecs}s`} jouées`,
-            });
-          }
+          const mins = Math.floor(sessionSecs / 60);
+          sendNotification({ title: "EmuWorld — Session terminée", body: `${gameName} — ${mins > 0 ? `${mins} min` : `${sessionSecs}s`} jouées` });
           // Auto-dismiss after 8 seconds
           setTimeout(() => setSessionRecap(null), 8000);
           scheduleCloudSync();
@@ -2660,9 +2653,7 @@ export default function App() {
         storeId: rom.id,
       });
       showToast(`${rom.name} téléchargé avec succès !`, "success");
-      if (Notification.permission === "granted") {
-        new Notification("EmuWorld — Téléchargement terminé", { body: rom.name });
-      }
+      sendNotification({ title: "EmuWorld — Téléchargement terminé", body: rom.name });
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
@@ -2769,9 +2760,7 @@ export default function App() {
         console: targetConsole,
       });
       showToast(`${game.name} téléchargé avec succès !`, "success");
-      if (Notification.permission === "granted") {
-        new Notification("EmuWorld — Téléchargement terminé", { body: game.name });
-      }
+      sendNotification({ title: "EmuWorld — Téléchargement terminé", body: game.name });
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {

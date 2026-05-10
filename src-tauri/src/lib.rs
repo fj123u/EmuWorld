@@ -3552,13 +3552,6 @@ fn import_config(json: String) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-async fn send_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
-    use tauri::Emitter;
-    app.emit("native-notification", serde_json::json!({ "title": title, "body": body }))
-        .map_err(|e| e.to_string())
-}
-
 pub fn run() {
     tauri::Builder::default()
         .manage(discord_rpc::RpcState::new())
@@ -3577,6 +3570,7 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             #[cfg(desktop)]
             {
@@ -3668,7 +3662,6 @@ pub fn run() {
             export_config,
             import_config,
             read_text_file,
-            send_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
