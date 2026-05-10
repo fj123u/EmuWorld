@@ -3524,6 +3524,41 @@ fn unlock_achievement(id: String) -> Option<achievements::Achievement> {
     achievements::unlock_single(&id)
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct FullExport {
+    config: AppConfig,
+    playtime: playtime::PlaytimeStore,
+}
+
+#[tauri::command]
+fn export_config() -> Result<String, String> {
+    let export = FullExport {
+        config: get_config(),
+        playtime: playtime::load(),
+    };
+    serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("Cannot read {}: {}", path, e))
+}
+
+#[tauri::command]
+fn import_config(json: String) -> Result<(), String> {
+    let imported: FullExport = serde_json::from_str(&json).map_err(|e| format!("JSON invalide: {}", e))?;
+    save_config(imported.config)?;
+    playtime::overwrite(imported.playtime)?;
+    Ok(())
+}
+
+#[tauri::command]
+async fn send_notification(app: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+    use tauri::Emitter;
+    app.emit("native-notification", serde_json::json!({ "title": title, "body": body }))
+        .map_err(|e| e.to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(discord_rpc::RpcState::new())
@@ -3630,6 +3665,10 @@ pub fn run() {
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,
+            export_config,
+            import_config,
+            read_text_file,
+            send_notification,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

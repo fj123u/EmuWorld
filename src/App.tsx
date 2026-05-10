@@ -1360,6 +1360,38 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+Shift+L → relaunch last played game
+      if (e.ctrlKey && e.shiftKey && e.key === "L") {
+        e.preventDefault();
+        const allGames = Object.values(playtime.games || {});
+        const lastGame = allGames
+          .filter(g => g.last_played)
+          .sort((a, b) => (b.last_played || "").localeCompare(a.last_played || ""))[0];
+        if (lastGame) {
+          const rom = roms.find(r => r.console === lastGame.console && r.name === lastGame.name);
+          if (rom) handleLaunch(rom);
+        }
+      }
+      // Ctrl+K → focus search bar
+      if (e.ctrlKey && e.key === "k") {
+        e.preventDefault();
+        const input = document.querySelector<HTMLInputElement>(".search-bar input");
+        if (input) input.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [playtime, roms]);
+
   // ---- Load B2 config ----
   useEffect(() => {
     invoke<{ key_id: string; app_key: string; bucket_id: string; bucket_name: string }>("get_b2_config").then(cfg => {
@@ -2175,6 +2207,13 @@ export default function App() {
             totalSeconds: totalSecs,
             totalLaunches,
           });
+          // Native Windows notification
+          if (Notification.permission === "granted") {
+            const mins = Math.floor(sessionSecs / 60);
+            new Notification("EmuWorld — Session terminée", {
+              body: `${gameName} — ${mins > 0 ? `${mins} min` : `${sessionSecs}s`} jouées`,
+            });
+          }
           // Auto-dismiss after 8 seconds
           setTimeout(() => setSessionRecap(null), 8000);
           scheduleCloudSync();
@@ -2798,6 +2837,35 @@ export default function App() {
       triggerHiddenAchievement("clear_covers");
     } catch (e: any) {
       showToast(`Error: ${e.message}`, "error");
+    }
+  };
+
+  const handleExportConfig = async () => {
+    try {
+      const json: string = await invoke("export_config");
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `emuworld-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Export sauvegardé !", "success");
+    } catch (e: any) {
+      showToast(`Erreur export: ${e}`, "error");
+    }
+  };
+
+  const handleImportConfig = async () => {
+    const result = await open({ filters: [{ name: "JSON", extensions: ["json"] }], multiple: false });
+    if (!result) return;
+    try {
+      const json: string = await invoke("read_text_file", { path: result as string });
+      await invoke("import_config", { json });
+      showToast("Import réussi ! Rechargement...", "success");
+      await loadData();
+    } catch (e: any) {
+      showToast(`Erreur import: ${e}`, "error");
     }
   };
 
@@ -4333,6 +4401,21 @@ export default function App() {
                       </div>
                       <button className="btn btn--danger btn--sm gamepad-nav-item" onClick={handleClearCache}>
                         <X size={14} /> Clear Cache
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Package size={16} /> Import / Export</div>
+                    <p className="settings__field-desc" style={{ marginBottom: 12 }}>
+                      Exportez toute votre config EmuWorld (répertoires, playtime, favoris, notes) en JSON pour la restaurer sur un autre PC.
+                    </p>
+                    <div className="settings__field" style={{ gap: 8 }}>
+                      <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={handleExportConfig}>
+                        <Upload size={14} /> Exporter
+                      </button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={handleImportConfig}>
+                        <Download size={14} /> Importer
                       </button>
                     </div>
                   </div>
