@@ -1798,7 +1798,7 @@ export default function App() {
 
       if (moveDown || moveUp || moveRight || moveLeft) {
         const SIDEBAR_SEL = ".sidebar__item";
-        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item";
+        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item, .btn, .settings__field-input, .leaderboard-entry, .changelog-card";
         const sidebarItems = document.querySelectorAll<HTMLElement>(SIDEBAR_SEL);
         const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_SEL);
         const allItems = [...sidebarItems, ...contentItems];
@@ -1816,7 +1816,7 @@ export default function App() {
             // In content: free movement with left/right + up/down by row
             const contentIdx = idx - sidebarItems.length;
             const currentContent = contentItems[contentIdx] ?? contentItems[0];
-            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card");
+            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card") || currentContent?.classList.contains("leaderboard-entry") || currentContent?.classList.contains("btn") || currentContent?.classList.contains("settings__field-input");
             const cols = isLinear ? 1 : (currentContent ? Math.max(1, Math.round((currentContent.parentElement?.clientWidth ?? 300) / Math.max(1, currentContent.clientWidth + 16))) : 1);
             let newContentIdx = contentIdx;
 
@@ -1868,8 +1868,8 @@ export default function App() {
                 setGamepadContextMenu({ type: "emu", emuId, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
               }
             }
-            // Search bar → open virtual keyboard
-            else if (el.tagName === "INPUT" && el.classList.contains("search-bar__input")) {
+            // Any input → open virtual keyboard
+            else if (el.tagName === "INPUT") {
               setGamepadKeyboard({ inputEl: el as unknown as HTMLInputElement, keyIdx: 0 });
             }
             // Vimm row → click the Download button inside
@@ -1938,7 +1938,7 @@ export default function App() {
   useEffect(() => {
     const applyFocus = () => {
       const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
-      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item");
+      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item, .btn, .settings__field-input, .leaderboard-entry, .changelog-card");
       const allItems = [...sidebarItems, ...contentItems];
       allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
@@ -4231,7 +4231,7 @@ export default function App() {
                           };
                           const isMe = entry.user_id === user?.id;
                           return (
-                            <div key={entry.user_id} style={{
+                            <div key={entry.user_id} className="leaderboard-entry" style={{
                               display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
                               borderRadius: 8, background: isMe ? "rgba(99, 102, 241, 0.15)" : "rgba(255,255,255,0.03)",
                               border: isMe ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid transparent",

@@ -33,7 +33,7 @@
 - [x] **Probleme lancement Cemu** lors du lancement d'une rom, cemu se lance bien masi pas la rom → fix: ajout flag `-g`
 - [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
 - [x] **Probleme covers sites web**
-- [ ] **Rendre tout controlable par manette**
+- [x] **Rendre tout controlable par manette**
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 
