@@ -2074,6 +2074,8 @@ export default function App() {
         first_played: g.first_played,
         favorite: g.favorite,
         last_emulator_id: g.last_emulator_id,
+        rating: g.rating ?? null,
+        notes: g.notes ?? null,
       }));
       const emuRows = Object.entries(pt.emulators).map(([id, seconds]) => ({
         user_id: user.id,
@@ -2192,10 +2194,11 @@ export default function App() {
     try {
       await invoke("set_game_rating", { console: rom.console, name: rom.name, rating });
       loadPlaytime();
+      scheduleCloudSync();
     } catch (err: any) {
       showToast(`Rating failed: ${err}`, "error");
     }
-  }, [loadPlaytime, showToast]);
+  }, [loadPlaytime, showToast, scheduleCloudSync]);
 
   const [notesModal, setNotesModal] = useState<{ rom: RomFile; text: string } | null>(null);
 
@@ -2209,11 +2212,12 @@ export default function App() {
     try {
       await invoke("set_game_notes", { console: notesModal.rom.console, name: notesModal.rom.name, notes: notesModal.text });
       loadPlaytime();
+      scheduleCloudSync();
       setNotesModal(null);
     } catch (err: any) {
       showToast(`Notes failed: ${err}`, "error");
     }
-  }, [notesModal, loadPlaytime, showToast]);
+  }, [notesModal, loadPlaytime, showToast, scheduleCloudSync]);
 
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
@@ -2249,6 +2253,8 @@ export default function App() {
             first_played: row.first_played,
             favorite: !!row.favorite,
             last_emulator_id: row.last_emulator_id,
+            rating: row.rating ?? undefined,
+            notes: row.notes ?? undefined,
           };
         }
         for (const row of emusRes.data || []) {
