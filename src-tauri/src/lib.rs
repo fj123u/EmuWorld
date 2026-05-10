@@ -954,17 +954,20 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
 
     // 3. Try Title Searching FIRST (Libretro / Wikipedia) as requested
     for search_name in &candidates {
-        // --- 3.1: Libretro ---
-        for folder in &libretro_systems {
-            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(search_name));
-            if let Ok(resp) = client.get(&url).send().await {
-                if resp.status().is_success() {
-                    if let Ok(bytes) = resp.bytes().await {
-                        if bytes.len() >= min_size {
-                            write_to_boxart_log(&format!("Result: Libretro Success ({})", search_name));
-                            let _ = std::fs::create_dir_all(&console_covers_dir);
-                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
-                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+        // --- 3.1: Libretro (with region suffix variants) ---
+        let libretro_variants = libretro_name_variants(search_name);
+        for variant in &libretro_variants {
+            for folder in &libretro_systems {
+                let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(variant));
+                if let Ok(resp) = client.get(&url).send().await {
+                    if resp.status().is_success() {
+                        if let Ok(bytes) = resp.bytes().await {
+                            if bytes.len() >= min_size {
+                                write_to_boxart_log(&format!("Result: Libretro Success ({})", variant));
+                                let _ = std::fs::create_dir_all(&console_covers_dir);
+                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                            }
                         }
                     }
                 }
@@ -1473,14 +1476,63 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
             candidates.push(titled.clone());
             // Add franchise-prefixed variants that Wikipedia/Libretro expect
             if titled.contains("Zelda") && !titled.starts_with("The Legend") {
-                candidates.push(format!("The Legend of {}", titled));
+                candidates.push(format!("The Legend of Zelda - {}", titled.replace("Zelda ", "")));
+                // Wii U titles have "HD" suffix in libretro
+                if console == "Wii U" {
+                    candidates.push(format!("The Legend of Zelda - {} HD", titled.replace("Zelda ", "")));
+                    candidates.push(format!("The Legend of Zelda - The {} HD", titled.replace("Zelda ", "")));
+                }
+            }
+        }
+    }
+
+    // Wii U: many games have "HD" in libretro name
+    if console == "Wii U" {
+        let base_for_hd = candidates.clone();
+        for c in &base_for_hd {
+            if !c.contains("HD") && !c.contains("(") {
+                candidates.push(format!("{} HD", c));
             }
         }
     }
 
     // Deduplicate and return
-    candidates.dedup();
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|c| seen.insert(c.clone()));
     candidates
+}
+
+/// Expand a single candidate into variants with region suffixes for libretro
+fn libretro_name_variants(name: &str) -> Vec<String> {
+    let regions = ["(USA)", "(USA, Europe)", "(Europe)", "(World)"];
+    let mut variants = vec![name.to_string()];
+
+    let has_region = name.contains("(USA") || name.contains("(Europe") || name.contains("(World") || name.contains("(Japan");
+
+    // Add region suffixes if not already present
+    if !has_region {
+        for region in &regions {
+            variants.push(format!("{} {}", name, region));
+        }
+    }
+
+    // "The X - Y" → "X, The - Y" inversion (libretro convention)
+    if name.starts_with("The ") {
+        let rest = &name[4..];
+        let inverted = if let Some(dash_pos) = rest.find(" - ") {
+            format!("{}, The - {}", &rest[..dash_pos], &rest[dash_pos + 3..])
+        } else {
+            format!("{}, The", rest)
+        };
+        variants.push(inverted.clone());
+        if !has_region {
+            for region in &regions {
+                variants.push(format!("{} {}", inverted, region));
+            }
+        }
+    }
+
+    variants
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
