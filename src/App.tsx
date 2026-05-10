@@ -328,7 +328,7 @@ const GAMEPAD_ACTIONS: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard";
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -1713,7 +1713,7 @@ export default function App() {
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
-    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "settings", "changelogs"];
+    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "leaderboard", "stats", "settings", "changelogs"];
     let navCooldown = 0;
 
     const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
@@ -3064,6 +3064,13 @@ export default function App() {
               Leaderboard
             </button>
             <button
+              className={`sidebar__item ${page === "stats" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("stats")}
+            >
+              <span className="sidebar__item-icon"><Activity size={16} /></span>
+              Stats
+            </button>
+            <button
               className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("backup"); invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); }}
             >
@@ -3306,6 +3313,7 @@ export default function App() {
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
                     {page === "leaderboard" && "Leaderboard"}
+                    {page === "stats" && "Statistiques"}
                     {page === "backup" && "Cloud Backup"}
                     {page === "controller" && "Controller"}
                   </h1>
@@ -3337,6 +3345,7 @@ export default function App() {
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                     {page === "leaderboard" && "Qui joue le plus cette semaine ?"}
+                    {page === "stats" && "Tes stats de jeu en détail"}
                     {page === "backup" && "Backblaze B2 — Sauvegardez vos parties dans le cloud"}
                     {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
                   </p>
@@ -4535,6 +4544,122 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {page === "stats" && (() => {
+                const fmtTime = (s: number) => {
+                  if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+                  if (s >= 60) return `${Math.floor(s / 60)} min`;
+                  return `${s}s`;
+                };
+                const games = Object.values(playtime.games);
+                const totalSeconds = games.reduce((acc, g) => acc + g.seconds, 0);
+                const totalLaunches = games.reduce((acc, g) => acc + g.launches, 0);
+                const gamesPlayed = games.filter(g => g.launches > 0).length;
+                const favCount = games.filter(g => g.favorite).length;
+                const topGames = [...games].filter(g => g.seconds > 0).sort((a, b) => b.seconds - a.seconds).slice(0, 8);
+                const maxSeconds = topGames[0]?.seconds ?? 1;
+
+                const consoleMap: Record<string, number> = {};
+                games.forEach(g => { consoleMap[g.console] = (consoleMap[g.console] || 0) + g.seconds; });
+                const topConsoles = Object.entries(consoleMap).sort((a, b) => b[1] - a[1]).slice(0, 6);
+                const maxConsoleSec = topConsoles[0]?.[1] ?? 1;
+
+                // Heatmap: last 12 weeks
+                const today = new Date();
+                const heatmapDays: { date: string; count: number }[] = [];
+                for (let i = 83; i >= 0; i--) {
+                  const d = new Date(today);
+                  d.setDate(d.getDate() - i);
+                  const ds = d.toISOString().slice(0, 10);
+                  const count = games.filter(g => g.last_played?.startsWith(ds)).length;
+                  heatmapDays.push({ date: ds, count });
+                }
+
+                // Streak
+                let streak = 0;
+                for (let i = 0; i < 365; i++) {
+                  const d = new Date(today);
+                  d.setDate(d.getDate() - i);
+                  const ds = d.toISOString().slice(0, 10);
+                  if (games.some(g => g.last_played?.startsWith(ds))) streak++;
+                  else break;
+                }
+
+                return (
+                  <div className="stats-page">
+                    {/* Big numbers */}
+                    <div className="stats-cards">
+                      <div className="stats-card">
+                        <div className="stats-card__value">{fmtTime(totalSeconds)}</div>
+                        <div className="stats-card__label">Temps total</div>
+                      </div>
+                      <div className="stats-card">
+                        <div className="stats-card__value">{totalLaunches}</div>
+                        <div className="stats-card__label">Launches</div>
+                      </div>
+                      <div className="stats-card">
+                        <div className="stats-card__value">{gamesPlayed}</div>
+                        <div className="stats-card__label">Jeux joués</div>
+                      </div>
+                      <div className="stats-card">
+                        <div className="stats-card__value">{favCount}</div>
+                        <div className="stats-card__label">Favoris</div>
+                      </div>
+                      <div className="stats-card">
+                        <div className="stats-card__value">{streak}j</div>
+                        <div className="stats-card__label">Streak</div>
+                      </div>
+                    </div>
+
+                    {/* Top games bar chart */}
+                    <div className="stats-section">
+                      <h3 className="stats-section__title">Top jeux</h3>
+                      <div className="stats-bars">
+                        {topGames.map((g, i) => (
+                          <div key={`${g.console}::${g.name}`} className="stats-bar-row">
+                            <span className="stats-bar-row__rank">{i + 1}.</span>
+                            <span className="stats-bar-row__name">{g.name}</span>
+                            <div className="stats-bar-row__bar">
+                              <div className="stats-bar-row__fill" style={{ width: `${(g.seconds / maxSeconds) * 100}%` }} />
+                            </div>
+                            <span className="stats-bar-row__time">{fmtTime(g.seconds)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Top consoles */}
+                    <div className="stats-section">
+                      <h3 className="stats-section__title">Top consoles</h3>
+                      <div className="stats-bars">
+                        {topConsoles.map(([con, secs]) => (
+                          <div key={con} className="stats-bar-row">
+                            <span className="stats-bar-row__name">{con}</span>
+                            <div className="stats-bar-row__bar">
+                              <div className="stats-bar-row__fill stats-bar-row__fill--console" style={{ width: `${(secs / maxConsoleSec) * 100}%` }} />
+                            </div>
+                            <span className="stats-bar-row__time">{fmtTime(secs)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Heatmap */}
+                    <div className="stats-section">
+                      <h3 className="stats-section__title">Activité (12 semaines)</h3>
+                      <div className="stats-heatmap">
+                        {heatmapDays.map(d => (
+                          <div
+                            key={d.date}
+                            className={`stats-heatmap__cell stats-heatmap__cell--${Math.min(d.count, 4)}`}
+                            title={`${d.date}: ${d.count} jeu${d.count > 1 ? "x" : ""}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {page === "backup" && (
                 <div className="settings-content">
