@@ -1038,6 +1038,51 @@ body {
 .toast--info { border-left: 4px solid var(--accent-blue); }
 
 /* Session Recap Popup */
+/* Launch splash overlay */
+.launch-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+}
+.launch-splash__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.launch-splash__console-icon {
+  font-size: 4rem;
+  filter: drop-shadow(0 0 20px rgba(99, 102, 241, 0.5));
+}
+.launch-splash__game {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #fff;
+  text-align: center;
+  max-width: 500px;
+  text-shadow: 0 2px 12px rgba(99, 102, 241, 0.4);
+}
+.launch-splash__console-name {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+.launch-splash__bar {
+  margin-top: 16px;
+  width: 200px;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  transform-origin: left;
+}
+
 .session-recap {
   position: fixed;
   bottom: 32px;

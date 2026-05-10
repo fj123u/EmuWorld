@@ -818,6 +818,9 @@ export default function App() {
     totalLaunches: number;
   } | null>(null);
 
+  // ---- Launch splash ----
+  const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
+
   // ---- App update state ----
   // `null` = not checked yet / no update, object = newer version available
   const [updateAvailable, setUpdateAvailable] = useState<{ version: string } | null>(null);
@@ -2704,6 +2707,10 @@ export default function App() {
         romConsole: rom.console || null,
       });
       console.log("Backend Launch Success:", res);
+      if (rom.name) {
+        setLaunchSplash({ gameName: rom.name, console: rom.console });
+        setTimeout(() => setLaunchSplash(null), 2500);
+      }
       showToast(`Launching ${rom.name}...`, "success");
       // Announce to Discord — EmuWorld stays the big image so it reads as
       // "Playing <game> via EmuWorld" in the friend list.
@@ -4734,6 +4741,53 @@ export default function App() {
                 );
               })}
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Launch Splash */}
+      <AnimatePresence>
+        {launchSplash && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="launch-splash"
+          >
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.2, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              className="launch-splash__content"
+            >
+              <div className="launch-splash__console-icon">
+                {launchSplash.console.includes("Switch") ? "🎮" :
+                 launchSplash.console.includes("Wii U") ? "🎮" :
+                 launchSplash.console.includes("Wii") ? "🕹️" :
+                 launchSplash.console.includes("GameCube") ? "🟣" :
+                 launchSplash.console.includes("Nintendo 64") ? "🔴" :
+                 launchSplash.console.includes("SNES") || launchSplash.console.includes("Super Nintendo") ? "🟪" :
+                 launchSplash.console.includes("NES") ? "⬜" :
+                 launchSplash.console.includes("Game Boy") ? "🟩" :
+                 launchSplash.console.includes("DS") || launchSplash.console.includes("3DS") ? "📱" :
+                 launchSplash.console.includes("PlayStation") || launchSplash.console.includes("PS") ? "🔵" :
+                 launchSplash.console.includes("PSP") ? "⚫" :
+                 launchSplash.console.includes("Xbox") ? "🟢" :
+                 launchSplash.console.includes("Dreamcast") ? "🌀" :
+                 launchSplash.console.includes("Sega") || launchSplash.console.includes("Mega Drive") ? "🔷" :
+                 "🎮"}
+              </div>
+              <div className="launch-splash__game">{launchSplash.gameName}</div>
+              <div className="launch-splash__console-name">{launchSplash.console}</div>
+              <motion.div
+                className="launch-splash__bar"
+                initial={{ scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 2.2, ease: "linear" }}
+              />
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
