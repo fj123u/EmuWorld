@@ -722,91 +722,94 @@
       '3DS': ['Nintendo - Nintendo 3DS', 'Nintendo - Nintendo DS'],
     };
 
-    // Known exact libretro names for common games that don't match cleaned filenames
+    // Known exact libretro names for common games (WITH region tag required by libretro)
     const KNOWN_COVERS = {
-      'super mario world': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Super Mario World' },
-      'super mario bros 3': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros. 3' },
-      'super mario bros': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros.' },
-      'pikmin': { sys: 'Nintendo - GameCube', name: 'Pikmin' },
-      'pikmin 2': { sys: 'Nintendo - GameCube', name: 'Pikmin 2' },
-      'zelda twilight princess': { sys: 'Nintendo - Wii', name: 'The Legend of Zelda - Twilight Princess' },
-      'zelda wind waker': { sys: 'Nintendo - GameCube', name: 'The Legend of Zelda - The Wind Waker' },
-      'the legend of zelda the wind waker': { sys: 'Nintendo - GameCube', name: 'The Legend of Zelda - The Wind Waker' },
-      'zelda ocarina of time': { sys: 'Nintendo - Nintendo 64', name: 'The Legend of Zelda - Ocarina of Time' },
-      'zelda majoras mask': { sys: 'Nintendo - Nintendo 64', name: "The Legend of Zelda - Majora's Mask" },
-      'zelda a link to the past': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'The Legend of Zelda - A Link to the Past' },
-      'zelda breath of the wild': { sys: 'Nintendo - Wii U', name: 'The Legend of Zelda - Breath of the Wild' },
-      'zelda links awakening': { sys: 'Nintendo - Game Boy', name: "The Legend of Zelda - Link's Awakening" },
-      'zelda minish cap': { sys: 'Nintendo - Game Boy Advance', name: 'The Legend of Zelda - The Minish Cap' },
-      'pokemon version platine': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon Platinum Version' },
-      'pokemon version rubis': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Ruby Version' },
-      'pokemon version saphir': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Sapphire Version' },
-      'pokemon version emeraude': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version' },
-      'pokemon emerald': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version' },
-      'pokemon rouge feu': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version' },
-      'pokemon firered': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version' },
-      'pokemon leafgreen': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version' },
-      'pokemon vert feuille': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version' },
-      'pokemon or heartgold': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - HeartGold Version' },
-      'pokemon argent soulsilver': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - SoulSilver Version' },
-      'pokemon noir': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version' },
-      'pokemon blanc': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version' },
-      'pokemon noir 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version 2' },
-      'pokemon blanc 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version 2' },
-      'pokemon diamant': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Diamond Version' },
-      'pokemon perle': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Pearl Version' },
-      'pokemon x': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon X' },
-      'pokemon y': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Y' },
-      'pokemon soleil': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Sun' },
-      'pokemon lune': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Moon' },
-      'mario kart wii': { sys: 'Nintendo - Wii', name: 'Mario Kart Wii' },
-      'mario kart ds': { sys: 'Nintendo - Nintendo DS', name: 'Mario Kart DS' },
-      'mario kart double dash': { sys: 'Nintendo - GameCube', name: 'Mario Kart - Double Dash!!' },
-      'mario kart 64': { sys: 'Nintendo - Nintendo 64', name: 'Mario Kart 64' },
-      'super mario 64': { sys: 'Nintendo - Nintendo 64', name: 'Super Mario 64' },
-      'super mario galaxy': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy' },
-      'super mario galaxy 2': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy 2' },
-      'super mario sunshine': { sys: 'Nintendo - GameCube', name: 'Super Mario Sunshine' },
-      'super smash bros melee': { sys: 'Nintendo - GameCube', name: 'Super Smash Bros. Melee' },
-      'super smash bros brawl': { sys: 'Nintendo - Wii', name: 'Super Smash Bros. Brawl' },
-      'wii sports': { sys: 'Nintendo - Wii', name: 'Wii Sports' },
-      'wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports Resort' },
-      'wii sports & wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports' },
-      'tomodachi life': { sys: 'Nintendo - Nintendo 3DS', name: 'Tomodachi Life' },
-      'animal crossing wild world': { sys: 'Nintendo - Nintendo DS', name: 'Animal Crossing - Wild World' },
-      'animal crossing new leaf': { sys: 'Nintendo - Nintendo 3DS', name: 'Animal Crossing - New Leaf' },
-      'metroid prime': { sys: 'Nintendo - GameCube', name: 'Metroid Prime' },
-      'metroid prime 2': { sys: 'Nintendo - GameCube', name: 'Metroid Prime 2 - Echoes' },
-      'donkey kong country': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Donkey Kong Country' },
-      'donkey kong country 2': { sys: 'Nintendo - Super Nintendo Entertainment System', name: "Donkey Kong Country 2 - Diddy's Kong Quest" },
-      'kirby super star': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Kirby Super Star' },
-      'sonic the hedgehog': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog' },
-      'sonic the hedgehog 2': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 2' },
-      'sonic the hedgehog 3': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 3' },
-      'sonic adventure 2': { sys: 'Sega - Dreamcast', name: 'Sonic Adventure 2' },
-      'crash bandicoot': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot' },
-      'crash bandicoot 2': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 2 - Cortex Strikes Back' },
-      'crash bandicoot 3': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 3 - Warped' },
-      'spyro the dragon': { sys: 'Sony - PlayStation', name: 'Spyro the Dragon' },
-      'final fantasy vii': { sys: 'Sony - PlayStation', name: 'Final Fantasy VII' },
-      'final fantasy x': { sys: 'Sony - PlayStation 2', name: 'Final Fantasy X' },
-      'kingdom hearts': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts' },
-      'kingdom hearts 2': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts II' },
-      'god of war': { sys: 'Sony - PlayStation 2', name: 'God of War' },
-      'god of war 2': { sys: 'Sony - PlayStation 2', name: 'God of War II' },
-      'gran turismo 4': { sys: 'Sony - PlayStation 2', name: 'Gran Turismo 4' },
-      'gta san andreas': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - San Andreas' },
-      'gta vice city': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - Vice City' },
-      'resident evil 4': { sys: 'Sony - PlayStation 2', name: 'Resident Evil 4' },
-      'shadow of the colossus': { sys: 'Sony - PlayStation 2', name: 'Shadow of the Colossus' },
-      'ratchet and clank': { sys: 'Sony - PlayStation 2', name: 'Ratchet & Clank' },
-      'jak and daxter': { sys: 'Sony - PlayStation 2', name: 'Jak and Daxter - The Precursor Legacy' },
-      'monster hunter freedom unite': { sys: 'Sony - PlayStation Portable', name: 'Monster Hunter Freedom Unite' },
-      'crisis core': { sys: 'Sony - PlayStation Portable', name: 'Crisis Core - Final Fantasy VII' },
-      'dragon ball z budokai tenkaichi 3': { sys: 'Nintendo - Wii', name: 'Dragon Ball Z - Budokai Tenkaichi 3' },
-      'new super mario bros wii': { sys: 'Nintendo - Wii', name: 'New Super Mario Bros. Wii' },
-      'new super mario bros': { sys: 'Nintendo - Nintendo DS', name: 'New Super Mario Bros.' },
-      'super mario 3d land': { sys: 'Nintendo - Nintendo 3DS', name: 'Super Mario 3D Land' },
+      'super mario world': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Super Mario World (USA)' },
+      'super mario bros 3': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros. 3 (USA)' },
+      'super mario bros': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros. (World)' },
+      'pikmin': { sys: 'Nintendo - GameCube', name: 'Pikmin (USA)' },
+      'pikmin 2': { sys: 'Nintendo - GameCube', name: 'Pikmin 2 (USA)' },
+      'zelda twilight princess': { sys: 'Nintendo - Wii U', name: 'Legend of Zelda, The - Twilight Princess HD (USA) (En,Fr,Es) (Rev 2)' },
+      'zelda wind waker': { sys: 'Nintendo - Wii U', name: 'Legend of Zelda, The - The Wind Waker HD (USA, Asia) (En,Fr,Es)' },
+      'the legend of zelda the wind waker': { sys: 'Nintendo - Wii U', name: 'Legend of Zelda, The - The Wind Waker HD (USA, Asia) (En,Fr,Es)' },
+      'zelda wind waker hd': { sys: 'Nintendo - Wii U', name: 'Legend of Zelda, The - The Wind Waker HD (USA, Asia) (En,Fr,Es)' },
+      'zelda ocarina of time': { sys: 'Nintendo - Nintendo 64', name: 'Legend of Zelda, The - Ocarina of Time (USA)' },
+      'zelda majoras mask': { sys: 'Nintendo - Nintendo 64', name: "Legend of Zelda, The - Majora's Mask (USA)" },
+      'zelda a link to the past': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Legend of Zelda, The - A Link to the Past (USA)' },
+      'zelda breath of the wild': { sys: 'Nintendo - Wii U', name: 'Legend of Zelda, The - Breath of the Wild (USA) (En,Fr,Es)' },
+      'zelda links awakening': { sys: 'Nintendo - Game Boy', name: "Legend of Zelda, The - Link's Awakening (USA, Europe)" },
+      'zelda minish cap': { sys: 'Nintendo - Game Boy Advance', name: 'Legend of Zelda, The - The Minish Cap (USA)' },
+      'pokemon version platine': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Platinum Version (USA)' },
+      'pokemon - version platine': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Platinum Version (USA)' },
+      'pokemon version rubis': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Ruby Version (USA, Europe)' },
+      'pokemon - version rubis': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Ruby Version (USA, Europe)' },
+      'pokemon version saphir': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Sapphire Version (USA, Europe)' },
+      'pokemon version emeraude': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version (USA, Europe)' },
+      'pokemon emerald': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version (USA, Europe)' },
+      'pokemon rouge feu': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version (USA, Europe)' },
+      'pokemon firered': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version (USA, Europe)' },
+      'pokemon leafgreen': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version (USA, Europe)' },
+      'pokemon vert feuille': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version (USA, Europe)' },
+      'pokemon or heartgold': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - HeartGold Version (USA)' },
+      'pokemon argent soulsilver': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - SoulSilver Version (USA)' },
+      'pokemon noir': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version (USA, Europe)' },
+      'pokemon blanc': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version (USA, Europe)' },
+      'pokemon noir 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version 2 (USA, Europe)' },
+      'pokemon blanc 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version 2 (USA, Europe)' },
+      'pokemon diamant': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Diamond Version (USA)' },
+      'pokemon perle': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Pearl Version (USA)' },
+      'pokemon x': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon X (USA) (En,Ja,Fr,De,Es,It,Ko)' },
+      'pokemon y': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Y (USA) (En,Ja,Fr,De,Es,It,Ko)' },
+      'pokemon soleil': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Sun (USA) (En,Ja,Fr,De,Es,It,Zh,Ko)' },
+      'pokemon lune': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Moon (USA) (En,Ja,Fr,De,Es,It,Zh,Ko)' },
+      'mario kart wii': { sys: 'Nintendo - Wii', name: 'Mario Kart Wii (USA) (En,Fr,Es)' },
+      'mario kart ds': { sys: 'Nintendo - Nintendo DS', name: 'Mario Kart DS (USA) (En,Fr,De,Es,It)' },
+      'mario kart double dash': { sys: 'Nintendo - GameCube', name: 'Mario Kart - Double Dash!! (USA)' },
+      'mario kart 64': { sys: 'Nintendo - Nintendo 64', name: 'Mario Kart 64 (USA)' },
+      'super mario 64': { sys: 'Nintendo - Nintendo 64', name: 'Super Mario 64 (USA)' },
+      'super mario galaxy': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy (USA) (En,Fr,Es)' },
+      'super mario galaxy 2': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy 2 (USA) (En,Fr,Es)' },
+      'super mario sunshine': { sys: 'Nintendo - GameCube', name: 'Super Mario Sunshine (USA)' },
+      'super smash bros melee': { sys: 'Nintendo - GameCube', name: 'Super Smash Bros. Melee (USA) (En,Ja)' },
+      'super smash bros brawl': { sys: 'Nintendo - Wii', name: 'Super Smash Bros. Brawl (USA) (En,Fr,Es)' },
+      'wii sports': { sys: 'Nintendo - Wii', name: 'Wii Sports (USA) (Rev 1)' },
+      'wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports Resort (USA) (Rev 2)' },
+      'wii sports & wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports (USA) (Rev 1)' },
+      'tomodachi life': { sys: 'Nintendo - Nintendo 3DS', name: 'Tomodachi Life (USA) (En,Fr,Es)' },
+      'animal crossing wild world': { sys: 'Nintendo - Nintendo DS', name: 'Animal Crossing - Wild World (USA) (Rev 1)' },
+      'animal crossing new leaf': { sys: 'Nintendo - Nintendo 3DS', name: 'Animal Crossing - New Leaf (USA) (En,Fr,Es)' },
+      'metroid prime': { sys: 'Nintendo - GameCube', name: 'Metroid Prime (USA)' },
+      'metroid prime 2': { sys: 'Nintendo - GameCube', name: 'Metroid Prime 2 - Echoes (USA)' },
+      'donkey kong country': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Donkey Kong Country (USA) (Rev 2)' },
+      'donkey kong country 2': { sys: 'Nintendo - Super Nintendo Entertainment System', name: "Donkey Kong Country 2 - Diddy's Kong Quest (USA) (Rev 1)" },
+      'kirby super star': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Kirby Super Star (USA)' },
+      'sonic the hedgehog': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog (USA, Europe)' },
+      'sonic the hedgehog 2': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 2 (World)' },
+      'sonic the hedgehog 3': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 3 (USA)' },
+      'sonic adventure 2': { sys: 'Sega - Dreamcast', name: 'Sonic Adventure 2 (USA)' },
+      'crash bandicoot': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot (USA)' },
+      'crash bandicoot 2': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 2 - Cortex Strikes Back (USA)' },
+      'crash bandicoot 3': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 3 - Warped (USA)' },
+      'spyro the dragon': { sys: 'Sony - PlayStation', name: 'Spyro the Dragon (USA)' },
+      'final fantasy vii': { sys: 'Sony - PlayStation', name: 'Final Fantasy VII (USA)' },
+      'final fantasy x': { sys: 'Sony - PlayStation 2', name: 'Final Fantasy X (USA)' },
+      'kingdom hearts': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts (USA)' },
+      'kingdom hearts 2': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts II (USA)' },
+      'god of war': { sys: 'Sony - PlayStation 2', name: 'God of War (USA)' },
+      'god of war 2': { sys: 'Sony - PlayStation 2', name: 'God of War II (USA)' },
+      'gran turismo 4': { sys: 'Sony - PlayStation 2', name: 'Gran Turismo 4 (USA)' },
+      'gta san andreas': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - San Andreas (USA)' },
+      'gta vice city': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - Vice City (USA)' },
+      'resident evil 4': { sys: 'Sony - PlayStation 2', name: 'Resident Evil 4 (USA)' },
+      'shadow of the colossus': { sys: 'Sony - PlayStation 2', name: 'Shadow of the Colossus (USA)' },
+      'ratchet and clank': { sys: 'Sony - PlayStation 2', name: 'Ratchet & Clank (USA)' },
+      'jak and daxter': { sys: 'Sony - PlayStation 2', name: 'Jak and Daxter - The Precursor Legacy (USA)' },
+      'monster hunter freedom unite': { sys: 'Sony - PlayStation Portable', name: 'Monster Hunter Freedom Unite (USA)' },
+      'crisis core': { sys: 'Sony - PlayStation Portable', name: 'Crisis Core - Final Fantasy VII (USA)' },
+      'dragon ball z budokai tenkaichi 3': { sys: 'Nintendo - Wii', name: 'Dragon Ball Z - Budokai Tenkaichi 3 (USA)' },
+      'new super mario bros wii': { sys: 'Nintendo - Wii', name: 'New Super Mario Bros. Wii (USA) (En,Fr,Es)' },
+      'new super mario bros': { sys: 'Nintendo - Nintendo DS', name: 'New Super Mario Bros. (USA, Europe) (En,Fr,De,Es,It)' },
+      'super mario 3d land': { sys: 'Nintendo - Nintendo 3DS', name: 'Super Mario 3D Land (USA)' },
       '1 2 switch': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
       '1-2-switch': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
       '1 2 switch proper': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
@@ -842,21 +845,40 @@
         ? MULTI_SYSTEMS[consoleName]
         : (SYSTEMS[consoleName] ? [SYSTEMS[consoleName]] : []);
 
-      for (const sys of systems) {
-        // Exact cleaned name
-        const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
-        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(safe)}.png`);
+      // Region suffixes that libretro uses in filenames
+      const REGIONS = ['(USA)', '(USA, Europe)', '(Europe)', '(World)', '(Japan, USA)', '(USA) (En,Fr,Es)', '(USA) (En,Ja)', '(USA) (En,Fr,De,Es,It)'];
 
-        // Title-cased version
-        const titled = toTitleCase(cleaned.toLowerCase());
-        if (titled !== cleaned) {
-          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(titled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+      for (const sys of systems) {
+        const safe = cleaned.replace(/[&*/:<>?\\|]/g, '_');
+        const titled = toTitleCase(cleaned.toLowerCase()).replace(/[&*/:<>?\\|]/g, '_');
+        const withDots = cleaned.replace(/\b(Bros|Dr|Mr|vs|Vol|Jr|St)\b/gi, '$1.').replace(/[&*/:<>?\\|]/g, '_');
+
+        // Base names to try
+        const baseNames = [safe];
+        if (titled !== safe) baseNames.push(titled);
+        if (withDots !== safe) baseNames.push(withDots);
+
+        // Libretro inverts "The X - Y" to "X, The - Y"
+        for (const base of [...baseNames]) {
+          if (base.startsWith('The ')) {
+            const rest = base.slice(4);
+            const dashIdx = rest.indexOf(' - ');
+            if (dashIdx > 0) {
+              baseNames.push(rest.slice(0, dashIdx) + ', The - ' + rest.slice(dashIdx + 3));
+            } else {
+              baseNames.push(rest + ', The');
+            }
+          }
         }
 
-        // With " - " instead of spaces for subtitles (e.g. "Crash Bandicoot 2 - Cortex Strikes Back")
-        const dashVariant = cleaned.replace(/(\d)\s+/, '$1 - ');
-        if (dashVariant !== cleaned) {
-          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(dashVariant.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+        // For each base name, try with region suffixes (this is the key fix)
+        for (const base of baseNames) {
+          // Without region (some entries don't have it)
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(base)}.png`);
+          // With common regions
+          for (const region of REGIONS) {
+            urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(base + ' ' + region)}.png`);
+          }
         }
 
         // With common franchise prefixes
@@ -876,20 +898,12 @@
         for (const { match, prefix } of PREFIXES) {
           if (lower.includes(match) && !lower.startsWith(prefix.toLowerCase().trim())) {
             const suffixed = prefix + toTitleCase(lower.replace(match, '').trim());
-            urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffixed.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+            const suffSafe = suffixed.replace(/[&*/:<>?\\|]/g, '_');
+            urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffSafe)}.png`);
+            for (const region of REGIONS.slice(0, 3)) {
+              urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(suffSafe + ' ' + region)}.png`);
+            }
           }
-        }
-
-        // With "." after "Bros", "Dr", "Mr", "vs" (libretro convention)
-        const withDots = cleaned.replace(/\b(Bros|Dr|Mr|vs|Vol|Jr|St)\b/gi, '$1.');
-        if (withDots !== cleaned) {
-          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(withDots.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
-        }
-
-        // Combine dots + title case
-        if (withDots !== cleaned) {
-          const dottedTitled = toTitleCase(withDots.toLowerCase());
-          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(dottedTitled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
         }
       }
 
