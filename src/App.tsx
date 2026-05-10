@@ -923,6 +923,31 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.6.0", date: "2026-05-11", changes: [
+      "📋 Vue liste/grille: basculer entre covers et tableau (nom, console, temps joué, note)",
+      "🔀 Tri avancé: trier par A-Z, temps joué, note, dernier joué, nb de launches",
+      "🔍 Filtres: afficher tous / favoris / non-joués / notés",
+      "📝 Notes par jeu: champ texte libre pour codes, astuces, progression (icône StickyNote sur la card)",
+      "⭐ Étoiles: noter chaque jeu de 1 à 5 étoiles, visible dans la grille et la liste",
+      "☁️ Rating & notes synchronisés sur Supabase avec le reste du playtime"
+    ] },
+    { version: "1.5.0", date: "2026-05-10", changes: [
+      "🎆 Fond d'écran dynamique: la cover du jeu survolé s'affiche en arrière-plan avec blur",
+      "🚀 Animation de lancement: splash plein écran avec icône console + barre de progression",
+      "🏆 Leaderboard in-app: classement hebdo par temps joué entre tous les utilisateurs",
+      "📊 Session recap: popup détaillé à la fermeture d'un émulateur (durée, launches, total)",
+      "🎮 Navigation manette étendue à toutes les pages (leaderboard, backup, settings, changelogs)",
+      "☁️ Backup cloud: scan élargi (AppData/Roaming pour Ryujinx, Dolphin, Cemu, etc.)",
+      "🗑️ Suppression de backups cloud depuis l'interface",
+      "✨ Auto-update fonctionnel: bouton 'Mise à jour' dans la titlebar + install en 1 clic"
+    ] },
+    { version: "1.4.1", date: "2026-05-09", changes: [
+      "🖼️ Fix covers Wii U: noms exacts libretro hardcodés pour les jeux populaires",
+      "🖼️ Fix covers web panel: ajout suffixes région (USA/Europe/World) + inversion 'The'",
+      "🖼️ Fix covers GBA: fallback vers GBC/GB pour les jeux Pokémon rétro",
+      "🔧 Fix warning Rust unused_mut dans generate_search_candidates",
+      "🌐 Covers GameTDB pour Wii/Wii U/DS/3DS sur le profil web"
+    ] },
     { version: "1.4.0", date: "2026-05-05", changes: [
       "🎮 Navigation manette complète: D-pad/stick pour naviguer, A pour confirmer, B pour retour",
       "📋 Menu contextuel manette: A sur un jeu → Jouer/Favori/Supprimer, sur un émulateur → Installer-Lancer/Désinstaller/Site web",
