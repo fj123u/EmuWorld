@@ -544,7 +544,7 @@ const RA_SUPPORTED_CONSOLES = new Set([
   "Atari 2600", "WonderSwan",
 ]);
 
-const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes }: {
+const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
@@ -554,6 +554,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   onHover?: (coverUrl: string | null) => void,
   onRate?: (rom: RomFile, rating: number) => void,
   onNotes?: (rom: RomFile) => void,
+  onContextMenu?: (rom: RomFile, x: number, y: number) => void,
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -589,6 +590,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
       data-rom-path={rom.path}
       onMouseEnter={() => onHover?.(cover)}
       onMouseLeave={() => onHover?.(null)}
+      onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(rom, e.clientX, e.clientY); }}
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
@@ -833,6 +835,7 @@ export default function App() {
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [newCollectionName, setNewCollectionName] = useState("");
+  const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
@@ -3505,6 +3508,7 @@ export default function App() {
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
+                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
@@ -3519,6 +3523,7 @@ export default function App() {
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
+                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             ))}
                           </div>
@@ -4106,8 +4111,8 @@ export default function App() {
                         <div className="empty-state__title">No ROMs found</div>
                         <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
                       </div>
-                    ) : search.trim().length >= 2 ? (
-                      /* ---- Global search bypasses the drill-down ---- */
+                    ) : search.trim().length >= 2 || sortBy !== "name" || filterMode !== "all" || collectionFilter ? (
+                      /* ---- Search/sort/filter bypasses the drill-down ---- */
                       <>
                         {viewMode === "grid" ? (
                           <div className="game-grid">
@@ -4123,6 +4128,7 @@ export default function App() {
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
+                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             ))}
                           </div>
@@ -4231,6 +4237,7 @@ export default function App() {
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
+                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             ))}
                           </div>
@@ -4975,6 +4982,42 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Right-click context menu on game cards */}
+      {romContextMenu && (
+        <div className="rom-context-overlay" onClick={() => setRomContextMenu(null)}>
+          <div className="rom-context-menu" style={{ left: romContextMenu.x, top: romContextMenu.y }} onClick={(e) => e.stopPropagation()}>
+            <button className="rom-context-menu__btn" onClick={() => { handleLaunch(romContextMenu.rom); setRomContextMenu(null); }}>
+              <Play size={14} /> Jouer
+            </button>
+            <button className="rom-context-menu__btn" onClick={() => { handleToggleFavorite(romContextMenu.rom); setRomContextMenu(null); }}>
+              {playtime.games[`${romContextMenu.rom.console}::${romContextMenu.rom.name}`]?.favorite ? "★ Retirer des favoris" : "☆ Mettre en favori"}
+            </button>
+            <button className="rom-context-menu__btn" onClick={() => { handleOpenNotes(romContextMenu.rom); setRomContextMenu(null); }}>
+              <StickyNote size={14} /> Notes
+            </button>
+            {playtime.collections.length > 0 && (
+              <div className="rom-context-menu__sep" />
+            )}
+            {playtime.collections.map(col => {
+              const inCol = col.games.includes(`${romContextMenu.rom.console}::${romContextMenu.rom.name}`);
+              return (
+                <button key={col.name} className="rom-context-menu__btn" onClick={() => {
+                  if (inCol) handleRemoveFromCollection(col.name, romContextMenu.rom);
+                  else handleAddToCollection(col.name, romContextMenu.rom);
+                  setRomContextMenu(null);
+                }}>
+                  <Package size={14} /> {inCol ? `✓ ${col.name}` : `+ ${col.name}`}
+                </button>
+              );
+            })}
+            <div className="rom-context-menu__sep" />
+            <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
+              <Trash2 size={14} /> Supprimer
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Collections Modal */}
       <AnimatePresence>
