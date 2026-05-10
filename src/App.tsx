@@ -4996,9 +4996,7 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { handleOpenNotes(romContextMenu.rom); setRomContextMenu(null); }}>
               <StickyNote size={14} /> Notes
             </button>
-            {playtime.collections.length > 0 && (
-              <div className="rom-context-menu__sep" />
-            )}
+            <div className="rom-context-menu__sep" />
             {playtime.collections.map(col => {
               const inCol = col.games.includes(`${romContextMenu.rom.console}::${romContextMenu.rom.name}`);
               return (
@@ -5011,6 +5009,9 @@ export default function App() {
                 </button>
               );
             })}
+            <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); setShowCollectionModal(true); }}>
+              <Package size={14} /> Nouvelle collection...
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
