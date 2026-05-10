@@ -4350,15 +4350,14 @@ body {
 
 .stats-heatmap {
   display: grid;
-  grid-template-columns: repeat(12, 14px);
-  grid-auto-rows: 14px;
-  gap: 3px;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
 }
 
 .stats-heatmap__cell {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  max-height: 28px;
   transition: all 0.2s;
 }
 
