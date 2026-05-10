@@ -1678,6 +1678,9 @@ export default function App() {
       const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
       if (result) {
         showToast(`${result.icon} Achievement secret débloqué : ${result.name}`, "success");
+        if (Notification.permission === "granted") {
+          new Notification("EmuWorld — Achievement !", { body: `${result.icon} ${result.name}` });
+        }
         await loadAchievements();
         syncAchievementToCloud(result);
       }
@@ -1699,6 +1702,9 @@ export default function App() {
       if (newlyUnlocked.length > 0) {
         for (const a of newlyUnlocked) {
           showToast(`${a.icon} Achievement débloqué : ${a.name}`, "success");
+          if (Notification.permission === "granted") {
+            new Notification("EmuWorld — Achievement !", { body: `${a.icon} ${a.name}` });
+          }
           syncAchievementToCloud(a);
         }
         await loadAchievements();
@@ -2654,6 +2660,9 @@ export default function App() {
         storeId: rom.id,
       });
       showToast(`${rom.name} téléchargé avec succès !`, "success");
+      if (Notification.permission === "granted") {
+        new Notification("EmuWorld — Téléchargement terminé", { body: rom.name });
+      }
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
@@ -2760,6 +2769,9 @@ export default function App() {
         console: targetConsole,
       });
       showToast(`${game.name} téléchargé avec succès !`, "success");
+      if (Notification.permission === "granted") {
+        new Notification("EmuWorld — Téléchargement terminé", { body: game.name });
+      }
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
