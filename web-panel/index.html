@@ -662,19 +662,32 @@
       'Game Boy Color': 'Nintendo - Game Boy Color',
       'Game Boy Advance': 'Nintendo - Game Boy Advance',
       'Nintendo DS': 'Nintendo - Nintendo DS',
+      'DS': 'Nintendo - Nintendo DS',
+      'Nintendo 3DS': 'Nintendo - Nintendo 3DS',
+      '3DS': 'Nintendo - Nintendo 3DS',
       'GameCube': 'Nintendo - GameCube',
       'GameCube / Wii': 'Nintendo - Wii',
       'Wii': 'Nintendo - Wii',
       'Wii U': 'Nintendo - Wii U',
       'Nintendo Switch': 'Nintendo - Nintendo Switch',
+      'Switch': 'Nintendo - Nintendo Switch',
       'PlayStation 1': 'Sony - PlayStation',
+      'PS1': 'Sony - PlayStation',
       'PlayStation 2': 'Sony - PlayStation 2',
+      'PS2': 'Sony - PlayStation 2',
       'PlayStation Portable': 'Sony - PlayStation Portable',
+      'PSP': 'Sony - PlayStation Portable',
+      'PlayStation 3': 'Sony - PlayStation 3',
+      'PS3': 'Sony - PlayStation 3',
       'Mega Drive': 'Sega - Mega Drive - Genesis',
+      'Genesis': 'Sega - Mega Drive - Genesis',
       'Dreamcast': 'Sega - Dreamcast',
+      'Saturn': 'Sega - Saturn',
       'Master System': 'Sega - Master System - Mark III',
       'Game Gear': 'Sega - Game Gear',
       'Arcade': 'MAME',
+      'Neo Geo': 'SNK - Neo Geo',
+      'Atari 2600': 'Atari - 2600',
     };
 
     const toTitleCase = (s) => s.replace(/\b\w/g, c => c.toUpperCase());
@@ -698,8 +711,15 @@
     // Multi-system mapping for consoles that span multiple libretro DBs
     const MULTI_SYSTEMS = {
       'GameCube / Wii': ['Nintendo - Wii', 'Nintendo - GameCube'],
-      'Wii U': ['Nintendo - Wii U'],
+      'GameCube': ['Nintendo - GameCube', 'Nintendo - Wii'],
+      'Wii': ['Nintendo - Wii', 'Nintendo - GameCube'],
+      'Wii U': ['Nintendo - Wii U', 'Nintendo - Wii'],
       'Nintendo Switch': ['Nintendo - Nintendo Switch'],
+      'Switch': ['Nintendo - Nintendo Switch'],
+      'Nintendo DS': ['Nintendo - Nintendo DS'],
+      'DS': ['Nintendo - Nintendo DS'],
+      'Nintendo 3DS': ['Nintendo - Nintendo 3DS', 'Nintendo - Nintendo DS'],
+      '3DS': ['Nintendo - Nintendo 3DS', 'Nintendo - Nintendo DS'],
     };
 
     // Known exact libretro names for common games that don't match cleaned filenames
@@ -708,10 +728,88 @@
       'super mario bros 3': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros. 3' },
       'super mario bros': { sys: 'Nintendo - Nintendo Entertainment System', name: 'Super Mario Bros.' },
       'pikmin': { sys: 'Nintendo - GameCube', name: 'Pikmin' },
+      'pikmin 2': { sys: 'Nintendo - GameCube', name: 'Pikmin 2' },
       'zelda twilight princess': { sys: 'Nintendo - Wii', name: 'The Legend of Zelda - Twilight Princess' },
       'zelda wind waker': { sys: 'Nintendo - GameCube', name: 'The Legend of Zelda - The Wind Waker' },
+      'the legend of zelda the wind waker': { sys: 'Nintendo - GameCube', name: 'The Legend of Zelda - The Wind Waker' },
+      'zelda ocarina of time': { sys: 'Nintendo - Nintendo 64', name: 'The Legend of Zelda - Ocarina of Time' },
+      'zelda majoras mask': { sys: 'Nintendo - Nintendo 64', name: "The Legend of Zelda - Majora's Mask" },
+      'zelda a link to the past': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'The Legend of Zelda - A Link to the Past' },
+      'zelda breath of the wild': { sys: 'Nintendo - Wii U', name: 'The Legend of Zelda - Breath of the Wild' },
+      'zelda links awakening': { sys: 'Nintendo - Game Boy', name: "The Legend of Zelda - Link's Awakening" },
+      'zelda minish cap': { sys: 'Nintendo - Game Boy Advance', name: 'The Legend of Zelda - The Minish Cap' },
       'pokemon version platine': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon Platinum Version' },
       'pokemon version rubis': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Ruby Version' },
+      'pokemon version saphir': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Sapphire Version' },
+      'pokemon version emeraude': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version' },
+      'pokemon emerald': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - Emerald Version' },
+      'pokemon rouge feu': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version' },
+      'pokemon firered': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - FireRed Version' },
+      'pokemon leafgreen': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version' },
+      'pokemon vert feuille': { sys: 'Nintendo - Game Boy Advance', name: 'Pokemon - LeafGreen Version' },
+      'pokemon or heartgold': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - HeartGold Version' },
+      'pokemon argent soulsilver': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - SoulSilver Version' },
+      'pokemon noir': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version' },
+      'pokemon blanc': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version' },
+      'pokemon noir 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Black Version 2' },
+      'pokemon blanc 2': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - White Version 2' },
+      'pokemon diamant': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Diamond Version' },
+      'pokemon perle': { sys: 'Nintendo - Nintendo DS', name: 'Pokemon - Pearl Version' },
+      'pokemon x': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon X' },
+      'pokemon y': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Y' },
+      'pokemon soleil': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Sun' },
+      'pokemon lune': { sys: 'Nintendo - Nintendo 3DS', name: 'Pokemon Moon' },
+      'mario kart wii': { sys: 'Nintendo - Wii', name: 'Mario Kart Wii' },
+      'mario kart ds': { sys: 'Nintendo - Nintendo DS', name: 'Mario Kart DS' },
+      'mario kart double dash': { sys: 'Nintendo - GameCube', name: 'Mario Kart - Double Dash!!' },
+      'mario kart 64': { sys: 'Nintendo - Nintendo 64', name: 'Mario Kart 64' },
+      'super mario 64': { sys: 'Nintendo - Nintendo 64', name: 'Super Mario 64' },
+      'super mario galaxy': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy' },
+      'super mario galaxy 2': { sys: 'Nintendo - Wii', name: 'Super Mario Galaxy 2' },
+      'super mario sunshine': { sys: 'Nintendo - GameCube', name: 'Super Mario Sunshine' },
+      'super smash bros melee': { sys: 'Nintendo - GameCube', name: 'Super Smash Bros. Melee' },
+      'super smash bros brawl': { sys: 'Nintendo - Wii', name: 'Super Smash Bros. Brawl' },
+      'wii sports': { sys: 'Nintendo - Wii', name: 'Wii Sports' },
+      'wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports Resort' },
+      'wii sports & wii sports resort': { sys: 'Nintendo - Wii', name: 'Wii Sports' },
+      'tomodachi life': { sys: 'Nintendo - Nintendo 3DS', name: 'Tomodachi Life' },
+      'animal crossing wild world': { sys: 'Nintendo - Nintendo DS', name: 'Animal Crossing - Wild World' },
+      'animal crossing new leaf': { sys: 'Nintendo - Nintendo 3DS', name: 'Animal Crossing - New Leaf' },
+      'metroid prime': { sys: 'Nintendo - GameCube', name: 'Metroid Prime' },
+      'metroid prime 2': { sys: 'Nintendo - GameCube', name: 'Metroid Prime 2 - Echoes' },
+      'donkey kong country': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Donkey Kong Country' },
+      'donkey kong country 2': { sys: 'Nintendo - Super Nintendo Entertainment System', name: "Donkey Kong Country 2 - Diddy's Kong Quest" },
+      'kirby super star': { sys: 'Nintendo - Super Nintendo Entertainment System', name: 'Kirby Super Star' },
+      'sonic the hedgehog': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog' },
+      'sonic the hedgehog 2': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 2' },
+      'sonic the hedgehog 3': { sys: 'Sega - Mega Drive - Genesis', name: 'Sonic the Hedgehog 3' },
+      'sonic adventure 2': { sys: 'Sega - Dreamcast', name: 'Sonic Adventure 2' },
+      'crash bandicoot': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot' },
+      'crash bandicoot 2': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 2 - Cortex Strikes Back' },
+      'crash bandicoot 3': { sys: 'Sony - PlayStation', name: 'Crash Bandicoot 3 - Warped' },
+      'spyro the dragon': { sys: 'Sony - PlayStation', name: 'Spyro the Dragon' },
+      'final fantasy vii': { sys: 'Sony - PlayStation', name: 'Final Fantasy VII' },
+      'final fantasy x': { sys: 'Sony - PlayStation 2', name: 'Final Fantasy X' },
+      'kingdom hearts': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts' },
+      'kingdom hearts 2': { sys: 'Sony - PlayStation 2', name: 'Kingdom Hearts II' },
+      'god of war': { sys: 'Sony - PlayStation 2', name: 'God of War' },
+      'god of war 2': { sys: 'Sony - PlayStation 2', name: 'God of War II' },
+      'gran turismo 4': { sys: 'Sony - PlayStation 2', name: 'Gran Turismo 4' },
+      'gta san andreas': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - San Andreas' },
+      'gta vice city': { sys: 'Sony - PlayStation 2', name: 'Grand Theft Auto - Vice City' },
+      'resident evil 4': { sys: 'Sony - PlayStation 2', name: 'Resident Evil 4' },
+      'shadow of the colossus': { sys: 'Sony - PlayStation 2', name: 'Shadow of the Colossus' },
+      'ratchet and clank': { sys: 'Sony - PlayStation 2', name: 'Ratchet & Clank' },
+      'jak and daxter': { sys: 'Sony - PlayStation 2', name: 'Jak and Daxter - The Precursor Legacy' },
+      'monster hunter freedom unite': { sys: 'Sony - PlayStation Portable', name: 'Monster Hunter Freedom Unite' },
+      'crisis core': { sys: 'Sony - PlayStation Portable', name: 'Crisis Core - Final Fantasy VII' },
+      'dragon ball z budokai tenkaichi 3': { sys: 'Nintendo - Wii', name: 'Dragon Ball Z - Budokai Tenkaichi 3' },
+      'new super mario bros wii': { sys: 'Nintendo - Wii', name: 'New Super Mario Bros. Wii' },
+      'new super mario bros': { sys: 'Nintendo - Nintendo DS', name: 'New Super Mario Bros.' },
+      'super mario 3d land': { sys: 'Nintendo - Nintendo 3DS', name: 'Super Mario 3D Land' },
+      '1 2 switch': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
+      '1-2-switch': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
+      '1 2 switch proper': { sys: 'Nintendo - Nintendo Switch', name: '1-2-Switch' },
     };
 
     // Generate multiple cover URL candidates for fallback
@@ -725,11 +823,18 @@
       let cleaned = cleanGameName(name);
       if (!cleaned) return urls;
 
-      // Check known covers first
+      // Strip scene release tags (.PROPER, .REPACK, v1.0, etc.)
+      cleaned = cleaned.replace(/\b(PROPER|REPACK|READNFO|iNTERNAL)\b/gi, '').trim();
+      cleaned = cleaned.replace(/\bv?\d+\.\d+(\.\d+)?\b/g, '').trim();
+      cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+      // Check known covers first (try multiple key formats)
       const knownKey = cleaned.toLowerCase();
-      if (KNOWN_COVERS[knownKey]) {
-        const k = KNOWN_COVERS[knownKey];
-        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(k.sys)}/Named_Boxarts/${encodeURIComponent(k.name)}.png`);
+      const knownMatch = KNOWN_COVERS[knownKey]
+        || KNOWN_COVERS[knownKey.replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim()]
+        || KNOWN_COVERS[knownKey.replace(/ /g, ' ').trim()];
+      if (knownMatch) {
+        urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(knownMatch.sys)}/Named_Boxarts/${encodeURIComponent(knownMatch.name)}.png`);
       }
 
       // Get all candidate systems for this console
@@ -748,12 +853,25 @@
           urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(titled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
         }
 
+        // With " - " instead of spaces for subtitles (e.g. "Crash Bandicoot 2 - Cortex Strikes Back")
+        const dashVariant = cleaned.replace(/(\d)\s+/, '$1 - ');
+        if (dashVariant !== cleaned) {
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(dashVariant.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+        }
+
         // With common franchise prefixes
         const lower = cleaned.toLowerCase();
         const PREFIXES = [
           { match: 'zelda', prefix: 'The Legend of Zelda - ' },
           { match: 'pokemon', prefix: 'Pokemon - ' },
           { match: 'mario', prefix: 'Super Mario ' },
+          { match: 'kirby', prefix: 'Kirby ' },
+          { match: 'metroid', prefix: 'Metroid ' },
+          { match: 'fire emblem', prefix: 'Fire Emblem - ' },
+          { match: 'final fantasy', prefix: 'Final Fantasy ' },
+          { match: 'dragon quest', prefix: 'Dragon Quest ' },
+          { match: 'mega man', prefix: 'Mega Man ' },
+          { match: 'castlevania', prefix: 'Castlevania - ' },
         ];
         for (const { match, prefix } of PREFIXES) {
           if (lower.includes(match) && !lower.startsWith(prefix.toLowerCase().trim())) {
@@ -767,13 +885,36 @@
         if (withDots !== cleaned) {
           urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(withDots.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
         }
+
+        // Combine dots + title case
+        if (withDots !== cleaned) {
+          const dottedTitled = toTitleCase(withDots.toLowerCase());
+          urls.push(`https://thumbnails.libretro.com/${encodeURIComponent(sys)}/Named_Boxarts/${encodeURIComponent(dottedTitled.replace(/[&*/:<>?\\|]/g, '_'))}.png`);
+        }
       }
 
-      // GameTDB for Wii/Wii U/GameCube (if we can extract a disc ID)
-      const discIdMatch = String(name || '').match(/\[([A-Z0-9]{6})\]/);
-      if (discIdMatch && (consoleName === 'Wii' || consoleName === 'GameCube / Wii' || consoleName === 'Wii U' || consoleName === 'GameCube')) {
-        urls.push(`https://art.gametdb.com/wii/cover/US/${discIdMatch[1]}.png`);
-        urls.push(`https://art.gametdb.com/wii/cover/EN/${discIdMatch[1]}.png`);
+      // GameTDB for Wii/Wii U/GameCube/DS/3DS (if we can extract a disc ID)
+      const discIdMatch = String(name || '').match(/\[([A-Z0-9]{4,6})\]/);
+      if (discIdMatch) {
+        const id = discIdMatch[1];
+        if (consoleName === 'Wii' || consoleName === 'GameCube / Wii' || consoleName === 'GameCube') {
+          urls.push(`https://art.gametdb.com/wii/cover/US/${id}.png`);
+          urls.push(`https://art.gametdb.com/wii/cover/EN/${id}.png`);
+          urls.push(`https://art.gametdb.com/wii/cover/FR/${id}.png`);
+        }
+        if (consoleName === 'Wii U') {
+          urls.push(`https://art.gametdb.com/wiiu/cover/US/${id}.png`);
+          urls.push(`https://art.gametdb.com/wiiu/cover/EN/${id}.png`);
+          urls.push(`https://art.gametdb.com/wiiu/cover/FR/${id}.png`);
+        }
+        if (consoleName === 'Nintendo DS') {
+          urls.push(`https://art.gametdb.com/ds/cover/US/${id}.png`);
+          urls.push(`https://art.gametdb.com/ds/cover/EN/${id}.png`);
+        }
+        if (consoleName === 'Nintendo 3DS' || consoleName === '3DS') {
+          urls.push(`https://art.gametdb.com/3ds/cover/US/${id}.png`);
+          urls.push(`https://art.gametdb.com/3ds/cover/EN/${id}.png`);
+        }
       }
 
       return [...new Set(urls)];
@@ -1119,30 +1260,35 @@
         label: '🏆 Most played',
         name: cleanGameName(mostPlayed.name),
         meta: `${mostPlayed.console} · ${fmtTime(mostPlayed.seconds)}`,
-        cover: coverUrlFor(mostPlayed.console, mostPlayed.name),
+        coverCandidates: coverUrlCandidates(mostPlayed.console, mostPlayed.name),
       });
       if (favorite) rows.push({
         label: '★ Favorite',
         name: cleanGameName(favorite.name),
         meta: `${favorite.console}${favorite.seconds > 0 ? ' · ' + fmtTime(favorite.seconds) : ''}`,
-        cover: coverUrlFor(favorite.console, favorite.name),
+        coverCandidates: coverUrlCandidates(favorite.console, favorite.name),
       });
       if (topEmu) rows.push({ label: '🕹 Top emulator', name: topEmu.emulator_id, meta: fmtTime(topEmu.seconds) });
       if (topConsole) rows.push({ label: '🎮 Top console', name: topConsole[0], meta: fmtTime(topConsole[1]) });
       if (firstPlayed) rows.push({ label: '📅 First played', name: fmtDate(firstPlayed), meta: '' });
 
-      const rowsHtml = rows.map((r) => `
+      const rowsHtml = rows.map((r) => {
+        const cands = r.coverCandidates || [];
+        const coverImg = cands.length > 0
+          ? `<img class="row__cover" src="${esc(cands[0])}" alt="" loading="lazy" data-fallbacks="${JSON.stringify(cands.slice(1)).replace(/"/g, '&quot;')}" onerror="handleCoverError(this)" />`
+          : '';
+        return `
         <div class="row">
           <div class="row__label">${r.label}</div>
           <div class="row__value row__value--with-cover">
-            ${r.cover ? `<img class="row__cover" src="${esc(r.cover)}" alt="" loading="lazy" onerror="this.style.display='none'" />` : ''}
+            ${coverImg}
             <div class="row__text">
               <span class="row__name">${esc(r.name)}</span>
               ${r.meta ? `<span class="row__meta">${esc(r.meta)}</span>` : ''}
             </div>
           </div>
         </div>
-      `).join('');
+      `;}).join('');
 
       const topGamesHtml = topGames.length > 1 ? `
         <div class="section">
@@ -1323,13 +1469,16 @@
           const key = tile.getAttribute('data-game-key');
           const g = games.find(x => (x.console + '::' + x.name) === key);
           if (!g) return;
-          const cover = coverUrlFor(g.console, g.name);
+          const detailCandidates = coverUrlCandidates(g.console, g.name);
           const cleaned = cleanGameName(g.name);
+          const detailCoverHtml = detailCandidates.length > 0
+            ? `<img class="game-detail__cover" src="${esc(detailCandidates[0])}" alt="" data-fallbacks="${JSON.stringify(detailCandidates.slice(1)).replace(/"/g, '&quot;')}" onerror="handleCoverError(this)" />`
+            : '';
 
           // Show modal with loading state
           gameDetailContent.innerHTML = `
             <div class="game-detail__header">
-              ${cover ? `<img class="game-detail__cover" src="${esc(cover)}" alt="" onerror="this.style.display='none'" />` : ''}
+              ${detailCoverHtml}
               <div>
                 <h2 class="game-detail__title">${esc(cleaned)}</h2>
                 <div class="game-detail__meta">${esc(g.console)}</div>
