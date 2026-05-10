@@ -796,6 +796,13 @@ export default function App() {
   const [installing, setInstalling] = useState<string[]>([]);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [sessionRecap, setSessionRecap] = useState<{
+    gameName: string;
+    console: string;
+    sessionSeconds: number;
+    totalSeconds: number;
+    totalLaunches: number;
+  } | null>(null);
 
   // ---- App update state ----
   // `null` = not checked yet / no update, object = newer version available
@@ -2075,24 +2082,22 @@ export default function App() {
       async (event) => {
         const sessionSecs = event.payload.seconds;
         if (sessionSecs >= 3) {
-          // Load fresh playtime to get updated totals
           const pt = await invoke<PlaytimeStore>("get_playtime").catch(() => null);
           const gameKey = `${event.payload.console}::${event.payload.name}`;
           const gameData = pt?.games?.[gameKey];
           const totalSecs = gameData?.seconds ?? sessionSecs;
           const totalLaunches = gameData?.launches ?? 1;
-
-          const fmtDuration = (s: number) => {
-            if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
-            if (s >= 60) return `${Math.floor(s / 60)} min`;
-            return `${s}s`;
-          };
-
           const gameName = event.payload.name.replace(/\[.*?\]/g, '').replace(/\(.*?\)/g, '').replace(/\.[^.]+$/, '').trim();
-          showToast(
-            `🎮 ${gameName} — Session de ${fmtDuration(sessionSecs)} · ${totalLaunches} launch${totalLaunches > 1 ? 'es' : ''} · total ${fmtDuration(totalSecs)}`,
-            "success"
-          );
+
+          setSessionRecap({
+            gameName,
+            console: event.payload.console,
+            sessionSeconds: sessionSecs,
+            totalSeconds: totalSecs,
+            totalLaunches,
+          });
+          // Auto-dismiss after 8 seconds
+          setTimeout(() => setSessionRecap(null), 8000);
           scheduleCloudSync();
         }
         loadPlaytime();
@@ -4691,6 +4696,50 @@ export default function App() {
                   </div>
                 );
               })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Session Recap Popup */}
+      <AnimatePresence>
+        {sessionRecap && (
+          <motion.div
+            initial={{ opacity: 0, y: 40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="session-recap"
+            onClick={() => setSessionRecap(null)}
+          >
+            <div className="session-recap__header">
+              <Gamepad2 size={20} />
+              <span>Session terminée</span>
+            </div>
+            <div className="session-recap__game">{sessionRecap.gameName}</div>
+            <div className="session-recap__console">{sessionRecap.console}</div>
+            <div className="session-recap__stats">
+              <div className="session-recap__stat">
+                <span className="session-recap__stat-value">
+                  {sessionRecap.sessionSeconds >= 3600
+                    ? `${Math.floor(sessionRecap.sessionSeconds / 3600)}h${String(Math.floor((sessionRecap.sessionSeconds % 3600) / 60)).padStart(2, '0')}`
+                    : sessionRecap.sessionSeconds >= 60
+                    ? `${Math.floor(sessionRecap.sessionSeconds / 60)} min`
+                    : `${sessionRecap.sessionSeconds}s`}
+                </span>
+                <span className="session-recap__stat-label">cette session</span>
+              </div>
+              <div className="session-recap__stat">
+                <span className="session-recap__stat-value">{sessionRecap.totalLaunches}</span>
+                <span className="session-recap__stat-label">launch{sessionRecap.totalLaunches > 1 ? "es" : ""}</span>
+              </div>
+              <div className="session-recap__stat">
+                <span className="session-recap__stat-value">
+                  {sessionRecap.totalSeconds >= 3600
+                    ? `${Math.floor(sessionRecap.totalSeconds / 3600)}h${String(Math.floor((sessionRecap.totalSeconds % 3600) / 60)).padStart(2, '0')}`
+                    : `${Math.floor(sessionRecap.totalSeconds / 60)} min`}
+                </span>
+                <span className="session-recap__stat-label">total</span>
+              </div>
             </div>
           </motion.div>
         )}

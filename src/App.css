@@ -1003,6 +1003,68 @@ body {
 .toast--error { border-left: 4px solid var(--neon-red); }
 .toast--info { border-left: 4px solid var(--accent-blue); }
 
+/* Session Recap Popup */
+.session-recap {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2100;
+  background: linear-gradient(135deg, rgba(30, 27, 46, 0.97) 0%, rgba(20, 18, 35, 0.98) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  border-radius: 16px;
+  padding: 20px 28px;
+  min-width: 360px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(99, 102, 241, 0.15);
+  cursor: pointer;
+  backdrop-filter: blur(20px);
+}
+.session-recap__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.session-recap__game {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 340px;
+}
+.session-recap__console {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+.session-recap__stats {
+  display: flex;
+  gap: 24px;
+}
+.session-recap__stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.session-recap__stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+.session-recap__stat-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
 /* ===== Download Banner ===== */
 .download-banner {
   position: fixed;
