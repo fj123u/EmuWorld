@@ -16,6 +16,8 @@ pub struct GameEntry {
     /// "most used emulator" stats without having to re-scan the catalog.
     #[serde(default)]
     pub last_emulator_id: Option<String>,
+    #[serde(default)]
+    pub rating: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -106,6 +108,19 @@ pub fn toggle_favorite(console: &str, name: &str) -> Result<bool, String> {
     let new_value = entry.favorite;
     save(&store)?;
     Ok(new_value)
+}
+
+pub fn set_rating(console: &str, name: &str, rating: u8) -> Result<(), String> {
+    let mut store = load();
+    let k = key(console, name);
+    let entry = store.games.entry(k).or_insert(GameEntry {
+        console: console.to_string(),
+        name: name.to_string(),
+        ..Default::default()
+    });
+    entry.rating = if rating == 0 { None } else { Some(rating.min(5)) };
+    save(&store)?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Clone, Default)]

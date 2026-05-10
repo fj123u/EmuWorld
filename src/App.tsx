@@ -138,6 +138,7 @@ interface GameEntry {
   first_played: string | null;
   favorite: boolean;
   last_emulator_id: string | null;
+  rating?: number;
 }
 
 interface PlaytimeStore {
@@ -533,13 +534,15 @@ const RA_SUPPORTED_CONSOLES = new Set([
   "Atari 2600", "WonderSwan",
 ]);
 
-const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA }: {
+const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
   entry?: GameEntry,
   onToggleFavorite?: (rom: RomFile) => void,
   onOpenRA?: (rom: RomFile) => void,
+  onHover?: (coverUrl: string | null) => void,
+  onRate?: (rom: RomFile, rating: number) => void,
 }) => {
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -573,6 +576,8 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA }
       whileTap={{ scale: 0.98 }}
       className="game-card"
       data-rom-path={rom.path}
+      onMouseEnter={() => onHover?.(cover)}
+      onMouseLeave={() => onHover?.(null)}
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
@@ -640,6 +645,15 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA }
 
       <div className="game-card__info" onClick={() => onLaunch(rom)}>
         <div className="game-card__name">{rom.name}</div>
+        <div className="game-card__rating" onClick={(e) => e.stopPropagation()}>
+          {[1, 2, 3, 4, 5].map((star) => (
+            <span
+              key={star}
+              className={`game-card__star ${(entry?.rating ?? 0) >= star ? "game-card__star--filled" : ""}`}
+              onClick={() => onRate?.(rom, (entry?.rating ?? 0) === star ? 0 : star)}
+            >★</span>
+          ))}
+        </div>
         <div className="game-card__meta">{rom.console} • {rom.extension.toUpperCase()}</div>
       </div>
     </motion.div>
@@ -856,6 +870,9 @@ export default function App() {
   }
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
+  // ---- Dynamic background ----
+  const [bgCover, setBgCover] = useState<string | null>(null);
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
@@ -2148,6 +2165,15 @@ export default function App() {
     }
   }, [loadPlaytime, showToast, scheduleCloudSync, triggerHiddenAchievement, checkAchievements]);
 
+  const handleSetRating = useCallback(async (rom: RomFile, rating: number) => {
+    try {
+      await invoke("set_game_rating", { console: rom.console, name: rom.name, rating });
+      loadPlaytime();
+    } catch (err: any) {
+      showToast(`Rating failed: ${err}`, "error");
+    }
+  }, [loadPlaytime, showToast]);
+
   // Sign-in / sign-out transitions reset the local playtime file so two
   // users on the same machine never inherit each other's stats. On sign-in
   // we pull the cloud rows for this user and overwrite the local store with
@@ -3114,6 +3140,9 @@ export default function App() {
         </aside>
 
         <main className="main-content">
+          <div className={`dynamic-bg ${bgCover ? "dynamic-bg--visible" : ""}`}>
+            {bgCover && <img src={bgCover} alt="" />}
+          </div>
           <AnimatePresence mode="wait">
             <motion.div
               key={page}
@@ -3300,6 +3329,8 @@ export default function App() {
                                 entry={playtime.games[`${favRom.console}::${favRom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
+                                onHover={setBgCover}
+                                onRate={handleSetRating}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
@@ -3311,6 +3342,8 @@ export default function App() {
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
+                                onHover={setBgCover}
+                                onRate={handleSetRating}
                               />
                             ))}
                           </div>
@@ -3911,6 +3944,8 @@ export default function App() {
                               entry={playtime.games[`${rom.console}::${rom.name}`]}
                               onToggleFavorite={handleToggleFavorite}
                               onOpenRA={handleOpenRaModal}
+                              onHover={setBgCover}
+                              onRate={handleSetRating}
                             />
                           ))}
                         </div>
@@ -3990,6 +4025,8 @@ export default function App() {
                               entry={playtime.games[`${rom.console}::${rom.name}`]}
                               onToggleFavorite={handleToggleFavorite}
                               onOpenRA={handleOpenRaModal}
+                              onHover={setBgCover}
+                              onRate={handleSetRating}
                             />
                           ))}
                         </div>

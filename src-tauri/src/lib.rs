@@ -3404,6 +3404,11 @@ fn toggle_favorite(console: String, name: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+fn set_game_rating(console: String, name: String, rating: u8) -> Result<(), String> {
+    playtime::set_rating(&console, &name, rating)
+}
+
+#[tauri::command]
 fn get_profile_stats() -> playtime::ProfileStats {
     playtime::compute_stats()
 }
@@ -3563,6 +3568,7 @@ pub fn run() {
             download_vimm_rom,
             get_playtime,
             toggle_favorite,
+            set_game_rating,
             get_profile_stats,
             clear_playtime,
             overwrite_playtime,
