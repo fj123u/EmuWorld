@@ -2298,7 +2298,7 @@ export default function App() {
 
       if (moveDown || moveUp || moveRight || moveLeft) {
         const SIDEBAR_SEL = ".sidebar__item";
-        const CONTENT_SEL = ".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item, .btn, .settings__field-input, .leaderboard-entry, .changelog-card";
+        const CONTENT_SEL = ".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item";
         const sidebarItems = document.querySelectorAll<HTMLElement>(SIDEBAR_SEL);
         const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_SEL);
         const allItems = [...sidebarItems, ...contentItems];
@@ -2316,7 +2316,7 @@ export default function App() {
             // In content: free movement with left/right + up/down by row
             const contentIdx = idx - sidebarItems.length;
             const currentContent = contentItems[contentIdx] ?? contentItems[0];
-            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card") || currentContent?.classList.contains("leaderboard-entry") || currentContent?.classList.contains("btn") || currentContent?.classList.contains("settings__field-input");
+            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card") || currentContent?.classList.contains("leaderboard-entry") || currentContent?.classList.contains("btn") || currentContent?.classList.contains("settings__field-input") || currentContent?.classList.contains("friend-card") || currentContent?.classList.contains("store-source-toggle__btn") || currentContent?.classList.contains("theme-picker__item");
             const cols = isLinear ? 1 : (currentContent ? Math.max(1, Math.round((currentContent.parentElement?.clientWidth ?? 300) / Math.max(1, currentContent.clientWidth + 16))) : 1);
             let newContentIdx = contentIdx;
 
@@ -2438,7 +2438,7 @@ export default function App() {
   useEffect(() => {
     const applyFocus = () => {
       const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
-      const contentItems = document.querySelectorAll<HTMLElement>(".game-card, .rgs-console-card, .emu-card, .vimm-game-row, .gamepad-nav-item, .btn, .settings__field-input, .leaderboard-entry, .changelog-card");
+      const contentItems = document.querySelectorAll<HTMLElement>(".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item");
       const allItems = [...sidebarItems, ...contentItems];
       allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
@@ -2452,6 +2452,13 @@ export default function App() {
     const id = setInterval(applyFocus, 100);
     return () => clearInterval(id);
   }, []);
+
+  useEffect(() => {
+    if (gamepadActive) {
+      focusIndexRef.current = 0;
+      setFocusIndex(0);
+    }
+  }, [page]);
 
   // Discord Rich Presence — idle pub on boot. Failures are expected when
   // Discord is not running; swallow them so the app doesn't spam toasts.

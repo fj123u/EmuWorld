@@ -34,7 +34,7 @@
 - [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
 - [x] **Probleme covers sites web**
 - [x] **Rendre tout controlable par manette**
-- [ ] **Mannette pas parfaite**
+- [x] **Mannette pas parfaite**
 
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 
