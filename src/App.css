@@ -5063,3 +5063,60 @@ body {
   padding: 14px 28px;
   font-size: 1rem;
 }
+
+/* ─── Guided Tour ─── */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 8000;
+}
+
+.tour-highlight {
+  position: fixed;
+  border-radius: 10px;
+  border: 2px solid var(--neon-purple);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 20px var(--neon-purple-glow);
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.tour-tooltip {
+  position: fixed;
+  width: 280px;
+  padding: 18px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-neon);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px var(--neon-purple-glow);
+  z-index: 8001;
+}
+
+.tour-tooltip__title {
+  font-size: 0.95rem;
+  font-weight: 900;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.tour-tooltip__desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.tour-tooltip__nav {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.tour-tooltip__count {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
