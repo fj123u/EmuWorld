@@ -57,6 +57,7 @@ import {
   LayoutGrid,
   List,
   StickyNote,
+  Palette,
 } from "lucide-react";
 
 /* ============================
@@ -835,6 +836,37 @@ export default function App() {
   const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated">("all");
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
+  const [theme, setThemeState] = useState<string>(() => localStorage.getItem("emuworld_theme") || "default");
+  const [accentHue, setAccentHueState] = useState<number | null>(() => {
+    const saved = localStorage.getItem("emuworld_accent_hue");
+    return saved ? parseInt(saved) : null;
+  });
+  const setTheme = (t: string) => {
+    setThemeState(t);
+    localStorage.setItem("emuworld_theme", t);
+    if (t === "default") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", t);
+  };
+  const setAccentHue = (hue: number | null) => {
+    setAccentHueState(hue);
+    if (hue === null) {
+      localStorage.removeItem("emuworld_accent_hue");
+      document.documentElement.removeAttribute("data-accent-hue");
+      document.documentElement.style.removeProperty("--custom-hue");
+    } else {
+      localStorage.setItem("emuworld_accent_hue", String(hue));
+      document.documentElement.setAttribute("data-accent-hue", "");
+      document.documentElement.style.setProperty("--custom-hue", String(hue));
+    }
+  };
+  useEffect(() => {
+    if (theme !== "default") document.documentElement.setAttribute("data-theme", theme);
+    if (accentHue !== null) {
+      document.documentElement.setAttribute("data-accent-hue", "");
+      document.documentElement.style.setProperty("--custom-hue", String(accentHue));
+    }
+  }, []);
+
   const [newCollectionName, setNewCollectionName] = useState("");
   const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -4389,6 +4421,44 @@ export default function App() {
 
               {page === "settings" && (
                 <div className="settings">
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Palette size={16} /> Thème</div>
+                    <div className="theme-picker">
+                      {[
+                        { id: "default", name: "Discord Dark", color: "#5865F2" },
+                        { id: "midnight", name: "Midnight Blue", color: "#3b82f6" },
+                        { id: "oled", name: "OLED Black", color: "#ffffff" },
+                        { id: "retro", name: "Retro Green", color: "#22c55e" },
+                        { id: "sakura", name: "Sakura", color: "#ec4899" },
+                        { id: "sunset", name: "Sunset", color: "#f59e0b" },
+                      ].map(t => (
+                        <button
+                          key={t.id}
+                          className={`theme-picker__item ${theme === t.id ? "theme-picker__item--active" : ""}`}
+                          onClick={() => { setTheme(t.id); setAccentHue(null); }}
+                        >
+                          <span className="theme-picker__swatch" style={{ background: t.color }} />
+                          <span className="theme-picker__name">{t.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="settings__field" style={{ marginTop: 12 }}>
+                      <label className="settings__field-label">Accent personnalisé</label>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        value={accentHue ?? 240}
+                        onChange={(e) => setAccentHue(parseInt(e.target.value))}
+                        className="theme-hue-slider"
+                        style={{ background: `linear-gradient(to right, hsl(0,80%,65%), hsl(60,80%,65%), hsl(120,80%,65%), hsl(180,80%,65%), hsl(240,80%,65%), hsl(300,80%,65%), hsl(360,80%,65%))` }}
+                      />
+                      {accentHue !== null && (
+                        <button className="btn btn--ghost btn--sm" onClick={() => setAccentHue(null)}>Reset</button>
+                      )}
+                    </div>
+                  </div>
+
                   <div className="settings__group">
                     <div className="settings__group-title"><FolderOpen size={16} /> Directories</div>
                     <div className="settings__field">
