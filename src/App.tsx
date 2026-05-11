@@ -3289,6 +3289,7 @@ export default function App() {
 
       <div className="app">
         <aside className="sidebar">
+          <div className="sidebar__nav">
           <div className="sidebar__section">
             <div className="sidebar__label">Navigation</div>
             <button
@@ -3548,6 +3549,7 @@ export default function App() {
             ) : null}
           </div>
 
+          </div>
           {/* User card at the bottom of the sidebar */}
           <div className="sidebar__user-card">
             {user ? (

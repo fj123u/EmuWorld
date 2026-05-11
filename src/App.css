@@ -365,8 +365,14 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   position: relative;
+}
+
+.sidebar__nav {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .sidebar::after { display: none; }
@@ -1611,7 +1617,7 @@ body {
    SIDEBAR USER CARD
    ================================================ */
 .sidebar__user-card {
-  margin-top: auto;
+  flex-shrink: 0;
   padding: 12px 14px;
   border-top: 1px solid var(--border);
 }
