@@ -964,6 +964,17 @@ export default function App() {
   const [friendPresences, setFriendPresences] = useState<PresenceEntry[]>([]);
   const [friendSearch, setFriendSearch] = useState("");
   const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [friendProfile, setFriendProfile] = useState<{
+    id: string;
+    username: string;
+    avatar_url: string | null;
+    totalSeconds: number;
+    totalLaunches: number;
+    gamesPlayed: number;
+    topGames: { name: string; console: string; seconds: number }[];
+    topConsoles: { name: string; seconds: number }[];
+    achievements: number;
+  } | null>(null);
   const [friendsLoading, setFriendsLoading] = useState(false);
 
   // ---- Dynamic background ----
@@ -1683,6 +1694,53 @@ export default function App() {
   }, [showToast, loadFriends]);
 
   // Update own presence
+  const viewFriendProfile = useCallback(async (friendId: string, username: string, avatar_url: string | null) => {
+    try {
+      // Fetch their playtime games
+      const { data: games } = await supabase
+        .from("playtime_games")
+        .select("name, console, seconds, launches")
+        .eq("user_id", friendId);
+
+      // Fetch their achievements count
+      const { count: achievementCount } = await supabase
+        .from("user_achievements")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", friendId);
+
+      const allGames = games || [];
+      const totalSeconds = allGames.reduce((s, g) => s + (g.seconds || 0), 0);
+      const totalLaunches = allGames.reduce((s, g) => s + (g.launches || 0), 0);
+      const gamesPlayed = allGames.filter(g => g.seconds > 0 || g.launches > 0).length;
+
+      const topGames = [...allGames]
+        .sort((a, b) => (b.seconds || 0) - (a.seconds || 0))
+        .slice(0, 5)
+        .map(g => ({ name: g.name, console: g.console, seconds: g.seconds || 0 }));
+
+      const consoleMap: Record<string, number> = {};
+      allGames.forEach(g => { consoleMap[g.console] = (consoleMap[g.console] || 0) + (g.seconds || 0); });
+      const topConsoles = Object.entries(consoleMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, seconds]) => ({ name, seconds }));
+
+      setFriendProfile({
+        id: friendId,
+        username,
+        avatar_url,
+        totalSeconds,
+        totalLaunches,
+        gamesPlayed,
+        topGames,
+        topConsoles,
+        achievements: achievementCount || 0,
+      });
+    } catch (err) {
+      console.error("[FriendProfile]", err);
+    }
+  }, []);
+
   const updatePresence = useCallback(async (status: "online" | "playing" | "offline", game?: string, console_name?: string) => {
     if (!user) return;
     await supabase.from("presence").upsert({
@@ -5017,7 +5075,7 @@ export default function App() {
                             (Date.now() - new Date(presence.updated_at).getTime()) < 120000;
                           const isPlaying = presence?.status === "playing";
                           return (
-                            <div key={f.id} className="friend-card">
+                            <div key={f.id} className="friend-card friend-card--clickable" onClick={() => viewFriendProfile(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null)}>
                               <div className="friend-card__avatar">
                                 {f.profile?.avatar_url ? (
                                   <img src={f.profile.avatar_url} alt="" />
@@ -5034,7 +5092,7 @@ export default function App() {
                                   {isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}
                                 </span>
                               </div>
-                              <button className="btn btn--ghost btn--sm" onClick={() => removeFriend(f.id)} style={{ marginLeft: "auto" }}>
+                              <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); removeFriend(f.id); }} style={{ marginLeft: "auto" }}>
                                 <UserX size={12} />
                               </button>
                             </div>
@@ -5042,6 +5100,82 @@ export default function App() {
                         })}
                       </div>
                     </>
+                  )}
+
+                  {/* Friend Profile Modal */}
+                  {friendProfile && (
+                    <div className="friend-profile-overlay" onClick={() => setFriendProfile(null)}>
+                      <div className="friend-profile-modal" onClick={(e) => e.stopPropagation()}>
+                        <button className="friend-profile-modal__close" onClick={() => setFriendProfile(null)}>
+                          <X size={16} />
+                        </button>
+                        <div className="friend-profile-modal__header">
+                          <div className="friend-card__avatar" style={{ transform: "scale(1.5)", marginRight: 8 }}>
+                            {friendProfile.avatar_url ? (
+                              <img src={friendProfile.avatar_url} alt="" />
+                            ) : (
+                              <div className="friend-card__avatar-placeholder">
+                                {friendProfile.username.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <h2 className="friend-profile-modal__name">{friendProfile.username}</h2>
+                            <p className="friend-profile-modal__sub">{friendProfile.achievements} achievements</p>
+                          </div>
+                        </div>
+
+                        <div className="friend-profile-modal__stats">
+                          <div className="friend-profile-modal__stat">
+                            <span className="friend-profile-modal__stat-value">
+                              {friendProfile.totalSeconds >= 3600
+                                ? `${Math.floor(friendProfile.totalSeconds / 3600)}h${String(Math.floor((friendProfile.totalSeconds % 3600) / 60)).padStart(2, '0')}`
+                                : friendProfile.totalSeconds >= 60
+                                  ? `${Math.floor(friendProfile.totalSeconds / 60)} min`
+                                  : `${friendProfile.totalSeconds}s`}
+                            </span>
+                            <span className="friend-profile-modal__stat-label">Temps total</span>
+                          </div>
+                          <div className="friend-profile-modal__stat">
+                            <span className="friend-profile-modal__stat-value">{friendProfile.totalLaunches}</span>
+                            <span className="friend-profile-modal__stat-label">Launches</span>
+                          </div>
+                          <div className="friend-profile-modal__stat">
+                            <span className="friend-profile-modal__stat-value">{friendProfile.gamesPlayed}</span>
+                            <span className="friend-profile-modal__stat-label">Jeux joués</span>
+                          </div>
+                        </div>
+
+                        {friendProfile.topGames.length > 0 && (
+                          <div className="friend-profile-modal__section">
+                            <h3 className="friend-profile-modal__section-title">Top jeux</h3>
+                            {friendProfile.topGames.map((g, i) => (
+                              <div key={`${g.console}::${g.name}`} className="friend-profile-modal__game">
+                                <span className="friend-profile-modal__game-rank">{i + 1}.</span>
+                                <span className="friend-profile-modal__game-name">{g.name}</span>
+                                <span className="friend-profile-modal__game-time">
+                                  {g.seconds >= 3600 ? `${Math.floor(g.seconds / 3600)}h${String(Math.floor((g.seconds % 3600) / 60)).padStart(2, '0')}` : g.seconds >= 60 ? `${Math.floor(g.seconds / 60)} min` : `${g.seconds}s`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {friendProfile.topConsoles.length > 0 && (
+                          <div className="friend-profile-modal__section">
+                            <h3 className="friend-profile-modal__section-title">Top consoles</h3>
+                            {friendProfile.topConsoles.map(c => (
+                              <div key={c.name} className="friend-profile-modal__game">
+                                <span className="friend-profile-modal__game-name">{c.name}</span>
+                                <span className="friend-profile-modal__game-time">
+                                  {c.seconds >= 3600 ? `${Math.floor(c.seconds / 3600)}h${String(Math.floor((c.seconds % 3600) / 60)).padStart(2, '0')}` : c.seconds >= 60 ? `${Math.floor(c.seconds / 60)} min` : `${c.seconds}s`}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

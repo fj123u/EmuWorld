@@ -4683,3 +4683,151 @@ body {
   background: rgba(245, 158, 11, 0.15);
   color: var(--neon-amber);
 }
+
+.friend-card--clickable {
+  cursor: pointer;
+}
+
+.friend-card--clickable:hover {
+  border-color: var(--neon-purple);
+  box-shadow: 0 0 8px var(--neon-purple-glow);
+}
+
+/* ─── Friend Profile Modal ─── */
+.friend-profile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  z-index: 3000;
+  display: grid;
+  place-items: center;
+}
+
+.friend-profile-modal {
+  width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.friend-profile-modal__close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.friend-profile-modal__close:hover {
+  background: var(--neon-red);
+  color: white;
+}
+
+.friend-profile-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.friend-profile-modal__name {
+  font-size: 1.2rem;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.friend-profile-modal__sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.friend-profile-modal__stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.friend-profile-modal__stat {
+  flex: 1;
+  text-align: center;
+  padding: 12px 8px;
+  border-radius: 10px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+}
+
+.friend-profile-modal__stat-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: var(--accent-blue-ink);
+}
+
+.friend-profile-modal__stat-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.friend-profile-modal__section {
+  margin-top: 16px;
+}
+
+.friend-profile-modal__section-title {
+  font-size: 0.75rem;
+  font-weight: 900;
+  color: var(--accent-blue-ink);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.friend-profile-modal__game {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.friend-profile-modal__game-rank {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  width: 20px;
+}
+
+.friend-profile-modal__game-name {
+  flex: 1;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-profile-modal__game-time {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}

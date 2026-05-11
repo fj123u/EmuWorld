@@ -13,11 +13,11 @@
 - [x] **Achievements in-app** *(gros)* — palier par installation, nb de ROMs, heures jouées, jeu favori, 10 consoles, etc. Notif in-app + badges sur le profil web
 - [x] **RetroAchievements par jeu** *(gros)* — wrapper de l'API [retroachievements.org](https://retroachievements.org), rattachement du compte, progression affichée sur la fiche jeu, auto-configuration des émulateurs (token injection + cores RetroArch), redirection automatique vers RetroArch pour les standalone sans support RA
 - [x] **Executable partageable** — workflow GitHub Actions qui build + signe le `.exe`/`.msi` à chaque tag `v*`, release en prerelease, guide dans [scratch/release_guide.md](scratch/release_guide.md)
-- [ ] **Système d'amis** *(hard)*
-  - [ ] liste d'amis (table Supabase `friendships` avec statut pending/accepted)
-  - [ ] présence : "x est en train de jouer à Y"
+- [x] **Système d'amis** *(hard)*
+  - [x] liste d'amis (table Supabase `friendships` avec statut pending/accepted)
+  - [x] présence : "x est en train de jouer à Y"
   - [ ] inviter dans un lobby
-  - [ ] voir le profil
+  - [x] voir le profil
   - [ ] chat 1:1
 - [ ] **Multijoueur / lobby** *(très hard, dépend des émulateurs)* — netplay natif supporté uniquement par certains émus (RetroArch, Dolphin, Citra). On pourrait wrapper ces features.
 - [x] **Update Automatique** — plugin Tauri updater + signing key + workflow GitHub Actions. L'app check `latest.json` au boot, affiche un bouton "✨ Mise à jour" dans la titlebar, download + relance avec progress. Guide dans [scratch/release_guide.md](scratch/release_guide.md).
@@ -44,7 +44,7 @@
 
 ### 🎨 UI / UX
 
-- [ ] **Thèmes personnalisables** *(moyen)* — 5-6 thèmes prédéfinis (dark purple actuel, midnight blue, OLED black, retro green CRT, pastel light) + accent color picker custom
+- [x] **Thèmes personnalisables** *(moyen)* — 5-6 thèmes prédéfinis (dark purple actuel, midnight blue, OLED black, retro green CRT, pastel light) + accent color picker custom
 - [x] **Animations de lancement** *(quick win)* — quand tu lances un jeu, splash animé avec le logo console + nom du jeu pendant 2-3s (style boot screen)
 - [x] **Vue en liste / grille toggle** *(quick win)* — switcher entre la grille de covers actuelle et une vue tableau (nom, console, temps joué, dernier lancement, note)
 - [x] **Tri et filtres avancés** *(moyen)* — trier par : temps joué, dernier lancé, alphabétique, note perso, nb de launches. Filtrer par : non-joués, favoris, complétés
