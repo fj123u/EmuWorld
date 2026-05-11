@@ -834,6 +834,8 @@ export default function App() {
     emulators_directory: "",
     covers_directory: "",
   });
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(0);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
@@ -1456,7 +1458,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    loadData();
+    loadData().then(() => {
+      if (!localStorage.getItem("emuworld_onboarding_done")) {
+        setShowOnboarding(true);
+      }
+    });
   }, [loadData]);
 
   useEffect(() => {
@@ -6437,6 +6443,103 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ===== ONBOARDING WIZARD ===== */}
+      {showOnboarding && (
+        <div className="onboarding-overlay">
+          <div className="onboarding-modal">
+            <div className="onboarding-modal__progress">
+              {[0, 1, 2, 3].map(i => (
+                <div key={i} className={`onboarding-modal__dot ${onboardingStep >= i ? "onboarding-modal__dot--active" : ""}`} />
+              ))}
+            </div>
+
+            {onboardingStep === 0 && (
+              <div className="onboarding-modal__step">
+                <div className="onboarding-modal__icon">🎮</div>
+                <h1 className="onboarding-modal__title">Bienvenue sur EmuWorld</h1>
+                <p className="onboarding-modal__desc">
+                  Ton lanceur d'émulateurs tout-en-un. On va configurer quelques trucs en 30 secondes.
+                </p>
+                <button className="btn btn--primary btn--lg" onClick={() => setOnboardingStep(1)}>
+                  C'est parti
+                </button>
+              </div>
+            )}
+
+            {onboardingStep === 1 && (
+              <div className="onboarding-modal__step">
+                <div className="onboarding-modal__icon">📁</div>
+                <h1 className="onboarding-modal__title">Dossier ROMs</h1>
+                <p className="onboarding-modal__desc">
+                  Où sont tes ROMs ? EmuWorld va scanner ce dossier pour trouver tes jeux.
+                </p>
+                {config.roms_directory && (
+                  <div className="onboarding-modal__path">{config.roms_directory}</div>
+                )}
+                <button className="btn btn--primary" onClick={async () => {
+                  const selected = await open({ directory: true, title: "Choisis ton dossier ROMs" });
+                  if (selected) {
+                    const newConfig = { ...config, roms_directory: selected as string };
+                    setConfig(newConfig);
+                    await invoke("save_config", { config: newConfig });
+                  }
+                }}>
+                  <FolderOpen size={16} /> Choisir le dossier
+                </button>
+                <div className="onboarding-modal__nav">
+                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(0)}>Retour</button>
+                  <button className="btn btn--primary" onClick={() => setOnboardingStep(2)} disabled={!config.roms_directory}>Suivant</button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 2 && (
+              <div className="onboarding-modal__step">
+                <div className="onboarding-modal__icon">🕹️</div>
+                <h1 className="onboarding-modal__title">Dossier Émulateurs</h1>
+                <p className="onboarding-modal__desc">
+                  Où installer les émulateurs ? EmuWorld téléchargera et gérera tout pour toi.
+                </p>
+                {config.emulators_directory && (
+                  <div className="onboarding-modal__path">{config.emulators_directory}</div>
+                )}
+                <button className="btn btn--primary" onClick={async () => {
+                  const selected = await open({ directory: true, title: "Choisis ton dossier émulateurs" });
+                  if (selected) {
+                    const newConfig = { ...config, emulators_directory: selected as string };
+                    setConfig(newConfig);
+                    await invoke("save_config", { config: newConfig });
+                  }
+                }}>
+                  <FolderOpen size={16} /> Choisir le dossier
+                </button>
+                <div className="onboarding-modal__nav">
+                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(1)}>Retour</button>
+                  <button className="btn btn--primary" onClick={() => setOnboardingStep(3)} disabled={!config.emulators_directory}>Suivant</button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 3 && (
+              <div className="onboarding-modal__step">
+                <div className="onboarding-modal__icon">✨</div>
+                <h1 className="onboarding-modal__title">C'est prêt !</h1>
+                <p className="onboarding-modal__desc">
+                  Tu peux maintenant installer des émulateurs, scanner tes ROMs et télécharger des jeux depuis le Store. Amuse-toi bien !
+                </p>
+                <button className="btn btn--primary btn--lg" onClick={() => {
+                  localStorage.setItem("emuworld_onboarding_done", "1");
+                  setShowOnboarding(false);
+                  loadData();
+                }}>
+                  Lancer EmuWorld
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ===== LOGIN MODAL ===== */}
       <AnimatePresence>

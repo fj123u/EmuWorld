@@ -4979,3 +4979,87 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ─── Onboarding Wizard ─── */
+.onboarding-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+}
+
+.onboarding-modal {
+  width: 480px;
+  max-width: 90vw;
+  text-align: center;
+}
+
+.onboarding-modal__progress {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 40px;
+}
+
+.onboarding-modal__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  transition: all 0.3s;
+}
+
+.onboarding-modal__dot--active {
+  background: var(--neon-purple);
+  box-shadow: 0 0 8px var(--neon-purple-glow);
+}
+
+.onboarding-modal__step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.onboarding-modal__icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.onboarding-modal__title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: var(--text-primary);
+}
+
+.onboarding-modal__desc {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 360px;
+  line-height: 1.5;
+}
+
+.onboarding-modal__path {
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  color: var(--accent-blue-ink);
+  font-weight: 600;
+  max-width: 100%;
+  word-break: break-all;
+}
+
+.onboarding-modal__nav {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.btn--lg {
+  padding: 14px 28px;
+  font-size: 1rem;
+}
