@@ -82,7 +82,7 @@
 
 - [x] **Import/Export de config** *(quick win)* — exporter toute sa config EmuWorld (émulateurs, paths, préférences) en JSON pour la restaurer sur un autre PC
 - [x] **Raccourcis clavier globaux** *(quick win)* — hotkeys pour lancer le dernier jeu joué, ouvrir EmuWorld, kill l'émulateur en cours, etc. même quand l'app est minimisée
-- [ ] **Multi-langue** *(moyen)* — i18n avec au minimum FR/EN, fichier JSON de traductions, détection locale système
+- [x] **Multi-langue** *(moyen)* — i18n avec au minimum FR/EN, fichier JSON de traductions, détection locale système
 - [ ] **Logs & diagnostic** *(quick win)* — page dans settings qui affiche les derniers logs (lancement ému, fetch cover, erreurs) pour debug sans console
 - [ ] **Portable mode** *(moyen)* — détection d'un fichier `portable.txt` à côté de l'exe → stocke tout dans le même dossier (USB friendly)
 - [ ] **Bandwidth limiter** *(quick win)* — réglage vitesse max de download dans le store (pour pas saturer la connexion)

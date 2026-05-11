@@ -11,6 +11,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { sendNotification, isPermissionGranted, requestPermission } from "@tauri-apps/plugin-notification";
+import { useTranslation, type Locale } from "./i18n";
 import {
   Search,
   Settings,
@@ -73,12 +74,12 @@ import {
 function Clock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    // Align the first tick to the next minute boundary, then every 30 s.
     const id = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(id);
   }, []);
-  const time = now.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const date = now.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" }).replace(".", "");
+  const loc = (localStorage.getItem("emuworld-locale") || "fr") === "en" ? "en-GB" : "fr-FR";
+  const time = now.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
+  const date = now.toLocaleDateString(loc, { day: "2-digit", month: "short" }).replace(".", "");
   return (
     <div className="titlebar__clock" data-tauri-drag-region>
       <span className="titlebar__clock-time">{time}</span>
@@ -325,7 +326,7 @@ const DEFAULT_GAMEPAD_MAPPINGS: GamepadButtonMapping[] = [
   { action: "settings", label: "Start", buttonIndex: 9 },
 ];
 
-const GAMEPAD_ACTIONS: Record<string, string> = {
+const GAMEPAD_ACTIONS_FR: Record<string, string> = {
   confirm: "Confirmer / Lancer",
   back: "Retour",
   details: "Détails",
@@ -333,6 +334,17 @@ const GAMEPAD_ACTIONS: Record<string, string> = {
   prevPage: "Page précédente",
   nextPage: "Page suivante",
   search: "Recherche",
+  settings: "Controller",
+};
+
+const GAMEPAD_ACTIONS_EN: Record<string, string> = {
+  confirm: "Confirm / Launch",
+  back: "Back",
+  details: "Details",
+  favorite: "Favorite",
+  prevPage: "Previous page",
+  nextPage: "Next page",
+  search: "Search",
   settings: "Controller",
 };
 
@@ -819,6 +831,8 @@ export default function App() {
       logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [boxartLogs]);
+
+  const { t, locale, setLocale } = useTranslation();
 
   const [page, setPage] = useState<Page>("catalog");
   const [catalog, setCatalog] = useState<EmulatorInfo[]>([]);
@@ -3461,14 +3475,14 @@ export default function App() {
         <aside className="sidebar">
           <div className="sidebar__nav">
           <div className="sidebar__section">
-            <div className="sidebar__label">Navigation</div>
+            <div className="sidebar__label">{t("nav.navigation")}</div>
             <button
               data-tour="emulators"
               className={`sidebar__item ${page === "catalog" && !categoryFilter ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("catalog"); setConsoleFilter(null); setCategoryFilter(null); }}
             >
               <span className="sidebar__item-icon"><Grid3X3 size={16} /></span>
-              Console
+              {t("nav.console")}
               <span className="sidebar__item-count">{catalog.length}</span>
             </button>
             <button
@@ -3477,7 +3491,7 @@ export default function App() {
               onClick={() => { setPage("library"); setConsoleFilter(null); }}
             >
               <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
-              Roms
+              {t("nav.roms")}
               <span className="sidebar__item-count">{roms.length}</span>
             </button>
             <button
@@ -3485,7 +3499,7 @@ export default function App() {
               onClick={() => { setPage("installed"); setConsoleFilter(null); }}
             >
               <span className="sidebar__item-icon"><HardDrive size={16} /></span>
-              Installed
+              {t("nav.installed")}
               <span className="sidebar__item-count">{installedCount}</span>
             </button>
             <button
@@ -3494,7 +3508,7 @@ export default function App() {
               onClick={() => { setPage("store"); setStoreConsoleFilter(null); }}
             >
               <span className="sidebar__item-icon"><ShoppingBag size={16} /></span>
-              Store
+              {t("nav.store")}
               <span className="sidebar__item-count">{storeRoms.length}</span>
             </button>
             <button
@@ -3502,7 +3516,7 @@ export default function App() {
               onClick={() => setPage("controller")}
             >
               <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
-              Controller
+              {t("nav.controller")}
               {gamepadActive && <span className="sidebar__item-badge">●</span>}
             </button>
             <button
@@ -3510,7 +3524,7 @@ export default function App() {
               onClick={() => { setPage("leaderboard"); loadLeaderboard(); }}
             >
               <span className="sidebar__item-icon"><Trophy size={16} /></span>
-              Leaderboard
+              {t("nav.leaderboard")}
             </button>
             <button
               data-tour="friends"
@@ -3518,7 +3532,7 @@ export default function App() {
               onClick={() => { setPage("friends"); loadFriends(); }}
             >
               <span className="sidebar__item-icon"><Users size={16} /></span>
-              Amis
+              {t("nav.friends")}
               {pendingRequests.filter(f => f.addressee_id === user?.id).length > 0 && (
                 <span className="sidebar__item-count" style={{ background: "var(--neon-red)", color: "white" }}>
                   {pendingRequests.filter(f => f.addressee_id === user?.id).length}
@@ -3530,28 +3544,28 @@ export default function App() {
               onClick={() => setPage("stats")}
             >
               <span className="sidebar__item-icon"><Activity size={16} /></span>
-              Stats
+              {t("nav.stats")}
             </button>
             <button
               className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("backup"); invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); }}
             >
               <span className="sidebar__item-icon"><Cloud size={16} /></span>
-              Backup
+              {t("nav.backup")}
             </button>
             <button
               className={`sidebar__item ${page === "settings" ? "sidebar__item--active" : ""}`}
               onClick={() => setPage("settings")}
             >
               <span className="sidebar__item-icon"><Settings size={16} /></span>
-              Settings
+              {t("nav.settings")}
             </button>
             <button
               className={`sidebar__item ${page === "changelogs" ? "sidebar__item--active" : ""}`}
               onClick={() => setPage("changelogs")}
             >
               <span className="sidebar__item-icon"><FileText size={16} /></span>
-              Changelogs
+              {t("nav.changelogs")}
             </button>
           </div>
 
@@ -3560,13 +3574,13 @@ export default function App() {
           <div className="sidebar__section">
             {page === "catalog" ? (
               <>
-                <div className="sidebar__label">Consoles</div>
+                <div className="sidebar__label">{t("nav.consoles")}</div>
                 <button
                   className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
                   onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
                 >
                   <span className="sidebar__item-icon">🕹️</span>
-                  All Categories
+                  {t("nav.allConsoles")}
                 </button>
                 {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
                   const isCatExpanded = expandedCategories.includes(category);
@@ -3608,7 +3622,7 @@ export default function App() {
             ) : page === "store" ? (
               <>
                 <div className="sidebar__divider" />
-                <div className="sidebar__label">Manufacturers</div>
+                <div className="sidebar__label">{t("nav.manufacturers")}</div>
                 {storeMode === "vimm"
                   ? (() => {
                       const manus = Array.from(new Set(vimmConsoles.map((c) => c.manufacturer)));
@@ -3638,7 +3652,7 @@ export default function App() {
               </>
             ) : page === "library" ? (
               <>
-                <div className="sidebar__label">Library</div>
+                <div className="sidebar__label">{t("nav.library")}</div>
                 <button
                   className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
                   onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
@@ -3770,16 +3784,16 @@ export default function App() {
               <div className="main-content__header">
                 <div>
                   <h1 className="main-content__title">
-                    {page === "catalog" && "Emulator Console"}
-                    {page === "library" && "ROMs"}
-                    {page === "installed" && "Installed Emulators"}
+                    {page === "catalog" && t("header.emulators")}
+                    {page === "library" && t("header.library")}
+                    {page === "installed" && t("header.installedEmulators")}
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
-                    {page === "settings" && "Settings"}
-                    {page === "leaderboard" && "Leaderboard"}
-                    {page === "friends" && "Amis"}
-                    {page === "stats" && "Statistiques"}
-                    {page === "backup" && "Cloud Backup"}
-                    {page === "controller" && "Controller"}
+                    {page === "settings" && t("header.settings")}
+                    {page === "leaderboard" && t("header.leaderboard")}
+                    {page === "friends" && t("header.friends")}
+                    {page === "stats" && t("header.stats")}
+                    {page === "backup" && t("header.backup")}
+                    {page === "controller" && t("header.controller")}
                   </h1>
                   <p className="main-content__subtitle">
                     {page === "catalog" && (
@@ -3807,12 +3821,12 @@ export default function App() {
                           : `${roms.length} game${roms.length === 1 ? "" : "s"} — pick a manufacturer`
                     )}
                     {page === "installed" && `${installedCount} installed`}
-                    {page === "settings" && "Configure your experience"}
-                    {page === "leaderboard" && "Qui joue le plus cette semaine ?"}
-                    {page === "friends" && `${friends.length} ami${friends.length !== 1 ? "s" : ""}`}
-                    {page === "stats" && "Tes stats de jeu en détail"}
-                    {page === "backup" && "Backblaze B2 — Sauvegardez vos parties dans le cloud"}
-                    {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
+                    {page === "settings" && t("subtitle.settings")}
+                    {page === "leaderboard" && t("subtitle.leaderboard")}
+                    {page === "friends" && `${friends.length} ${t("nav.friends").toLowerCase()}`}
+                    {page === "stats" && t("subtitle.stats")}
+                    {page === "backup" && t("subtitle.backup")}
+                    {page === "controller" && (gamepadActive ? t("subtitle.controllerConnected") : t("subtitle.controllerNone"))}
                   </p>
                 </div>
                 <div className="main-content__actions">
@@ -4776,7 +4790,28 @@ export default function App() {
               {page === "settings" && (
                 <div className="settings">
                   <div className="settings__group">
-                    <div className="settings__group-title"><Palette size={16} /> Thème</div>
+                    <div className="settings__group-title"><Globe size={16} /> {t("settings.language")}</div>
+                    <p className="settings__field-desc" style={{ marginBottom: 12 }}>
+                      {t("settings.languageDesc")}
+                    </p>
+                    <div className="settings__field" style={{ gap: 8 }}>
+                      <button
+                        className={`btn btn--sm ${locale === "fr" ? "btn--primary" : "btn--ghost"}`}
+                        onClick={() => setLocale("fr")}
+                      >
+                        🇫🇷 Français
+                      </button>
+                      <button
+                        className={`btn btn--sm ${locale === "en" ? "btn--primary" : "btn--ghost"}`}
+                        onClick={() => setLocale("en")}
+                      >
+                        🇬🇧 English
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Palette size={16} /> {t("settings.theme")}</div>
                     <div className="theme-picker">
                       {[
                         { id: "default", name: "Discord Dark", color: "#5865F2" },
@@ -4785,19 +4820,19 @@ export default function App() {
                         { id: "retro", name: "Retro Green", color: "#22c55e" },
                         { id: "sakura", name: "Sakura", color: "#ec4899" },
                         { id: "sunset", name: "Sunset", color: "#f59e0b" },
-                      ].map(t => (
+                      ].map(th => (
                         <button
-                          key={t.id}
-                          className={`theme-picker__item ${theme === t.id ? "theme-picker__item--active" : ""}`}
-                          onClick={() => { setTheme(t.id); setAccentHue(null); }}
+                          key={th.id}
+                          className={`theme-picker__item ${theme === th.id ? "theme-picker__item--active" : ""}`}
+                          onClick={() => { setTheme(th.id); setAccentHue(null); }}
                         >
-                          <span className="theme-picker__swatch" style={{ background: t.color }} />
-                          <span className="theme-picker__name">{t.name}</span>
+                          <span className="theme-picker__swatch" style={{ background: th.color }} />
+                          <span className="theme-picker__name">{th.name}</span>
                         </button>
                       ))}
                     </div>
                     <div className="settings__field" style={{ marginTop: 12 }}>
-                      <label className="settings__field-label">Accent personnalisé</label>
+                      <label className="settings__field-label">{t("settings.customAccent")}</label>
                       <input
                         type="range"
                         min="0"
@@ -4808,58 +4843,58 @@ export default function App() {
                         style={{ background: `linear-gradient(to right, hsl(0,80%,65%), hsl(60,80%,65%), hsl(120,80%,65%), hsl(180,80%,65%), hsl(240,80%,65%), hsl(300,80%,65%), hsl(360,80%,65%))` }}
                       />
                       {accentHue !== null && (
-                        <button className="btn btn--ghost btn--sm" onClick={() => setAccentHue(null)}>Reset</button>
+                        <button className="btn btn--ghost btn--sm" onClick={() => setAccentHue(null)}>{t("settings.reset")}</button>
                       )}
                     </div>
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><FolderOpen size={16} /> Directories</div>
+                    <div className="settings__group-title"><FolderOpen size={16} /> {t("settings.directories")}</div>
                     <div className="settings__field">
-                      <label className="settings__field-label">ROMs Folder</label>
+                      <label className="settings__field-label">{t("settings.romsFolder")}</label>
                       <input className="settings__field-input" value={config.roms_directory} readOnly />
-                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("roms_directory")}>Browse</button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("roms_directory")}>{t("settings.browse")}</button>
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">Emulators Folder</label>
+                      <label className="settings__field-label">{t("settings.emulatorsFolder")}</label>
                       <input className="settings__field-input" value={config.emulators_directory} readOnly />
-                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("emulators_directory")}>Browse</button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("emulators_directory")}>{t("settings.browse")}</button>
                     </div>
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><RefreshCw size={16} /> Maintenance</div>
+                    <div className="settings__group-title"><RefreshCw size={16} /> {t("settings.maintenance")}</div>
                     <div className="settings__field">
                       <div className="settings__field-info">
-                        <label className="settings__field-label">Cover Art Cache</label>
-                        <p className="settings__field-desc">Clear locally stored boxart images. Useful if some covers are wrong.</p>
+                        <label className="settings__field-label">{t("settings.coverCache")}</label>
+                        <p className="settings__field-desc">{t("settings.coverCacheDesc")}</p>
                       </div>
                       <button className="btn btn--danger btn--sm gamepad-nav-item" onClick={handleClearCache}>
-                        <X size={14} /> Clear Cache
+                        <X size={14} /> {t("settings.clearCache")}
                       </button>
                     </div>
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><Package size={16} /> Import / Export</div>
+                    <div className="settings__group-title"><Package size={16} /> {t("settings.importExport")}</div>
                     <p className="settings__field-desc" style={{ marginBottom: 12 }}>
-                      Exportez toute votre config EmuWorld (répertoires, playtime, favoris, notes) en JSON pour la restaurer sur un autre PC.
+                      {t("settings.importExportDesc")}
                     </p>
                     <div className="settings__field" style={{ gap: 8 }}>
                       <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={handleExportConfig}>
-                        <Upload size={14} /> Exporter
+                        <Upload size={14} /> {t("settings.export")}
                       </button>
                       <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={handleImportConfig}>
-                        <Download size={14} /> Importer
+                        <Download size={14} /> {t("settings.import")}
                       </button>
                     </div>
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><Activity size={16} /> Boxart Fetch Logs</div>
+                    <div className="settings__group-title"><Activity size={16} /> {t("settings.boxartLogs")}</div>
                     <div className="settings__logs">
                       {boxartLogs.length === 0 ? (
-                        <p className="settings__field-desc">No logs yet. Try refreshing a game's boxart.</p>
+                        <p className="settings__field-desc">{t("settings.noLogs")}</p>
                       ) : (
                         <div className="logs-container">
                           {boxartLogs.map((log, i) => (
@@ -4878,37 +4913,37 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><Trophy size={16} /> RetroAchievements</div>
+                    <div className="settings__group-title"><Trophy size={16} /> {t("settings.retroachievements")}</div>
                     <p className="settings__field-desc" style={{ marginBottom: 12 }}>
-                      Connectez votre compte RetroAchievements pour voir vos trophées et les activer automatiquement dans vos émulateurs.
+                      {t("settings.raDesc")}
                     </p>
                     <div className="settings__field">
-                      <label className="settings__field-label">Username</label>
+                      <label className="settings__field-label">{t("settings.raUsername")}</label>
                       <input
                         className="settings__field-input"
                         value={raUsername}
                         onChange={(e) => setRaUsername(e.target.value)}
-                        placeholder="Votre pseudo RA"
+                        placeholder={t("settings.raUsernamePlaceholder")}
                       />
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">API Key</label>
+                      <label className="settings__field-label">{t("settings.raApiKey")}</label>
                       <input
                         className="settings__field-input"
                         type="password"
                         value={raApiKey}
                         onChange={(e) => setRaApiKey(e.target.value)}
-                        placeholder="API key (retroachievements.org/settings)"
+                        placeholder={t("settings.raApiKeyPlaceholder")}
                       />
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">Mot de passe RA</label>
+                      <label className="settings__field-label">{t("settings.raPassword")}</label>
                       <input
                         className="settings__field-input"
                         type="password"
                         value={raPassword}
                         onChange={(e) => setRaPassword(e.target.value)}
-                        placeholder="Pour connecter les émulateurs automatiquement"
+                        placeholder={t("settings.raPasswordPlaceholder")}
                       />
                     </div>
                     <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
@@ -4917,7 +4952,7 @@ export default function App() {
                         onClick={handleSaveRaCredentials}
                         disabled={!raUsername || !raApiKey}
                       >
-                        <Check size={14} /> Sauvegarder API
+                        <Check size={14} /> {t("settings.raSaveApi")}
                       </button>
                       <button
                         className="btn btn--primary btn--sm"
@@ -4926,21 +4961,21 @@ export default function App() {
                         style={{ background: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" }}
                       >
                         {raLoginLoading ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
-                        {raLoginLoading ? " Connexion..." : " Login RA"}
+                        {raLoginLoading ? ` ${t("settings.raConnecting")}` : ` ${t("settings.raLogin")}`}
                       </button>
                       {raUsername && (
                         <button
                           className="btn btn--ghost btn--sm"
                           onClick={() => openUrl(`https://retroachievements.org/user/${raUsername}`)}
                         >
-                          <ExternalLink size={14} /> Profil
+                          <ExternalLink size={14} /> {t("settings.profile")}
                         </button>
                       )}
                     </div>
                     {raToken && (
                       <div className="settings__field" style={{ marginTop: 8, flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "var(--neon-green)" }}>
-                          <CheckCircle size={14} /> Token RA actif
+                          <CheckCircle size={14} /> {t("settings.raTokenActive")}
                         </div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
@@ -4948,7 +4983,7 @@ export default function App() {
                             onClick={handleConfigureRaEmulators}
                             style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}
                           >
-                            <Gamepad2 size={14} /> Configurer les émulateurs
+                            <Gamepad2 size={14} /> {t("settings.raConfigureEmulators")}
                           </button>
                           <button
                             className="btn btn--primary btn--sm"
@@ -4957,11 +4992,11 @@ export default function App() {
                             style={{ background: "linear-gradient(180deg, #6366f1 0%, #4f46e5 100%)" }}
                           >
                             {raDownloadingCores ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
-                            {raDownloadingCores ? " Téléchargement..." : " Installer les cores"}
+                            {raDownloadingCores ? ` ${t("settings.raDownloading")}` : ` ${t("settings.raInstallCores")}`}
                           </button>
                         </div>
                         <p className="settings__field-desc" style={{ margin: 0 }}>
-                          Active les achievements dans RetroArch, DuckStation, PCSX2, Dolphin et PPSSPP. Les jeux NES/SNES/GB/GBA/N64/DS seront lancés via RetroArch avec RA activé.
+                          {t("settings.raEmuDesc")}
                         </p>
                       </div>
                     )}
@@ -4970,9 +5005,9 @@ export default function App() {
                   {raUsername && raApiKey && (
                     <div className="settings__group">
                       <div className="settings__group-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span><Trophy size={16} /> Jeux complétés (100%)</span>
+                        <span><Trophy size={16} /> {t("settings.raCompletedGames")}</span>
                         <button className="btn btn--ghost btn--sm" onClick={handleLoadRaProfile} disabled={raProfileLoading}>
-                          <RefreshCw size={12} className={raProfileLoading ? "animate-spin" : ""} /> {raProfileLoading ? "Chargement..." : "Charger"}
+                          <RefreshCw size={12} className={raProfileLoading ? "animate-spin" : ""} /> {raProfileLoading ? t("settings.raLoading") : t("settings.raLoad")}
                         </button>
                       </div>
                       {raCompletedGames.length > 0 ? (
@@ -5000,7 +5035,7 @@ export default function App() {
                           ))}
                         </div>
                       ) : !raProfileLoading ? (
-                        <p className="settings__field-desc">Cliquez "Charger" pour voir vos jeux 100%.</p>
+                        <p className="settings__field-desc">{t("settings.raLoadPrompt")}</p>
                       ) : null}
                     </div>
                   )}
@@ -5011,12 +5046,12 @@ export default function App() {
                 <div className="settings-content">
                   <div className="settings__group">
                     <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span><Trophy size={16} /> Classement de la semaine</span>
+                      <span><Trophy size={16} /> {t("leaderboard.weeklyRanking")}</span>
                       <button className="btn btn--ghost btn--sm" onClick={loadLeaderboard} disabled={leaderboardLoading}>
-                        <RefreshCw size={14} className={leaderboardLoading ? "animate-spin" : ""} /> Rafraîchir
+                        <RefreshCw size={14} className={leaderboardLoading ? "animate-spin" : ""} /> {t("leaderboard.refresh")}
                       </button>
                     </div>
-                    {leaderboardLoading && <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Chargement...</p>}
+                    {leaderboardLoading && <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{t("leaderboard.loading")}</p>}
                     {!leaderboardLoading && leaderboard.length === 0 && (
                       <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucun joueur avec un profil public trouvé. Active ton profil public dans les paramètres du compte.</p>
                     )}
@@ -5637,7 +5672,7 @@ export default function App() {
                       <div className="controller-mapping">
                         {gamepadConfig.mappings.map(mapping => (
                           <div key={mapping.action} className="controller-mapping__row">
-                            <span className="controller-mapping__action">{GAMEPAD_ACTIONS[mapping.action]}</span>
+                            <span className="controller-mapping__action">{(locale === "fr" ? GAMEPAD_ACTIONS_FR : GAMEPAD_ACTIONS_EN)[mapping.action]}</span>
                             <button
                               className={`controller-mapping__btn gamepad-nav-item ${remappingAction === mapping.action ? "controller-mapping__btn--listening" : ""}`}
                               onClick={() => setRemappingAction(remappingAction === mapping.action ? null : mapping.action)}
