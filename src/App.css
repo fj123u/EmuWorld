@@ -353,7 +353,7 @@ body {
 .titlebar__btn--close:hover { background: var(--neon-red); color: white; }
 
 /* ===== App Layout ===== */
-.app { display: flex; height: 100vh; padding-top: var(--titlebar-height); }
+.app { display: flex; height: calc(100vh - var(--titlebar-height)); margin-top: var(--titlebar-height); overflow: hidden; }
 
 /* ===== Sidebar ===== */
 .sidebar {
