@@ -58,6 +58,10 @@ import {
   List,
   StickyNote,
   Palette,
+  Users,
+  UserPlus,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 
 /* ============================
@@ -330,7 +334,7 @@ const GAMEPAD_ACTIONS: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats";
+type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -938,6 +942,29 @@ export default function App() {
   }
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+
+  // ---- Friends system ----
+  interface Friendship {
+    id: string;
+    requester_id: string;
+    addressee_id: string;
+    status: "pending" | "accepted" | "blocked";
+    created_at: string;
+    profile?: { username: string | null; avatar_url: string | null };
+  }
+  interface PresenceEntry {
+    user_id: string;
+    status: "online" | "playing" | "offline";
+    current_game: string | null;
+    current_console: string | null;
+    updated_at: string;
+  }
+  const [friends, setFriends] = useState<Friendship[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<Friendship[]>([]);
+  const [friendPresences, setFriendPresences] = useState<PresenceEntry[]>([]);
+  const [friendSearch, setFriendSearch] = useState("");
+  const [friendSearchResults, setFriendSearchResults] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
 
   // ---- Dynamic background ----
   const [bgCover, setBgCover] = useState<string | null>(null);
@@ -1562,6 +1589,141 @@ export default function App() {
     }
   }, []);
 
+  // ---- Friends handlers ----
+  const loadFriends = useCallback(async () => {
+    if (!user) return;
+    setFriendsLoading(true);
+    try {
+      // Get all friendships involving this user
+      const { data } = await supabase
+        .from("friendships")
+        .select("*")
+        .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+      if (!data) { setFriends([]); setPendingRequests([]); return; }
+
+      // Collect all friend user IDs to fetch profiles
+      const friendIds = data.map(f => f.requester_id === user.id ? f.addressee_id : f.requester_id);
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", friendIds);
+
+      const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+      const enriched: Friendship[] = data.map(f => {
+        const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
+        return { ...f, profile: profileMap.get(otherId) || { username: null, avatar_url: null } };
+      });
+
+      setFriends(enriched.filter(f => f.status === "accepted"));
+      setPendingRequests(enriched.filter(f => f.status === "pending"));
+
+      // Load presence for accepted friends
+      const acceptedIds = enriched.filter(f => f.status === "accepted").map(f =>
+        f.requester_id === user.id ? f.addressee_id : f.requester_id
+      );
+      if (acceptedIds.length > 0) {
+        const { data: presences } = await supabase
+          .from("presence")
+          .select("*")
+          .in("user_id", acceptedIds);
+        setFriendPresences(presences || []);
+      }
+    } catch (err) {
+      console.error("[Friends]", err);
+    } finally {
+      setFriendsLoading(false);
+    }
+  }, [user]);
+
+  const searchFriends = useCallback(async (query: string) => {
+    if (!user || query.trim().length < 2) { setFriendSearchResults([]); return; }
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .ilike("username", `%${query}%`)
+      .neq("id", user.id)
+      .limit(10);
+    setFriendSearchResults(data || []);
+  }, [user]);
+
+  const sendFriendRequest = useCallback(async (addresseeId: string) => {
+    if (!user) return;
+    const { error } = await supabase.from("friendships").insert({
+      requester_id: user.id,
+      addressee_id: addresseeId,
+      status: "pending",
+    });
+    if (error) {
+      if (error.code === "23505") showToast("Demande déjà envoyée", "info");
+      else showToast(`Erreur: ${error.message}`, "error");
+    } else {
+      showToast("Demande d'ami envoyée !", "success");
+      loadFriends();
+    }
+  }, [user, showToast, loadFriends]);
+
+  const acceptFriendRequest = useCallback(async (friendshipId: string) => {
+    await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId);
+    showToast("Ami accepté !", "success");
+    loadFriends();
+  }, [showToast, loadFriends]);
+
+  const declineFriendRequest = useCallback(async (friendshipId: string) => {
+    await supabase.from("friendships").delete().eq("id", friendshipId);
+    showToast("Demande refusée", "info");
+    loadFriends();
+  }, [showToast, loadFriends]);
+
+  const removeFriend = useCallback(async (friendshipId: string) => {
+    await supabase.from("friendships").delete().eq("id", friendshipId);
+    showToast("Ami supprimé", "info");
+    loadFriends();
+  }, [showToast, loadFriends]);
+
+  // Update own presence
+  const updatePresence = useCallback(async (status: "online" | "playing" | "offline", game?: string, console_name?: string) => {
+    if (!user) return;
+    await supabase.from("presence").upsert({
+      user_id: user.id,
+      status,
+      current_game: game || null,
+      current_console: console_name || null,
+    });
+  }, [user]);
+
+  // Set online when logged in, offline on unmount
+  useEffect(() => {
+    if (user) {
+      updatePresence("online");
+      const interval = setInterval(() => updatePresence("online"), 60000);
+      return () => { clearInterval(interval); updatePresence("offline"); };
+    }
+  }, [user, updatePresence]);
+
+  // Load friends on login
+  useEffect(() => { if (user) loadFriends(); }, [user, loadFriends]);
+
+  // Realtime subscription for friend requests
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("friendships-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` }, () => {
+        loadFriends();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "presence" }, (payload) => {
+        setFriendPresences(prev => {
+          const updated = payload.new as PresenceEntry;
+          const without = prev.filter(p => p.user_id !== updated.user_id);
+          return [...without, updated];
+        });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, loadFriends]);
+
   // ---- Cloud Backup handlers ----
   const handleSaveB2Config = useCallback(async () => {
     try {
@@ -1790,7 +1952,7 @@ export default function App() {
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
-    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "leaderboard", "stats", "settings", "changelogs"];
+    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "leaderboard", "friends", "stats", "settings", "changelogs"];
     let navCooldown = 0;
 
     const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
@@ -2260,6 +2422,7 @@ export default function App() {
           scheduleCloudSync();
         }
         loadPlaytime();
+        updatePresence("online");
         invoke("discord_set_idle").catch(() => {});
         setTimeout(() => checkAchievements(), 500);
         if (sessionSecs > 0 && sessionSecs < 30) {
@@ -2938,6 +3101,7 @@ export default function App() {
         romConsole: rom.console || null,
       });
       console.log("Backend Launch Success:", res);
+      updatePresence("playing", rom.name, rom.console);
       if (rom.name) {
         setLaunchSplash({ gameName: rom.name, console: rom.console });
         setTimeout(() => setLaunchSplash(null), 2500);
@@ -3173,6 +3337,18 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><Trophy size={16} /></span>
               Leaderboard
+            </button>
+            <button
+              className={`sidebar__item ${page === "friends" ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("friends"); loadFriends(); }}
+            >
+              <span className="sidebar__item-icon"><Users size={16} /></span>
+              Amis
+              {pendingRequests.filter(f => f.addressee_id === user?.id).length > 0 && (
+                <span className="sidebar__item-count" style={{ background: "var(--neon-red)", color: "white" }}>
+                  {pendingRequests.filter(f => f.addressee_id === user?.id).length}
+                </span>
+              )}
             </button>
             <button
               className={`sidebar__item ${page === "stats" ? "sidebar__item--active" : ""}`}
@@ -3424,6 +3600,7 @@ export default function App() {
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && "Settings"}
                     {page === "leaderboard" && "Leaderboard"}
+                    {page === "friends" && "Amis"}
                     {page === "stats" && "Statistiques"}
                     {page === "backup" && "Cloud Backup"}
                     {page === "controller" && "Controller"}
@@ -3456,6 +3633,7 @@ export default function App() {
                     {page === "installed" && `${installedCount} installed`}
                     {page === "settings" && "Configure your experience"}
                     {page === "leaderboard" && "Qui joue le plus cette semaine ?"}
+                    {page === "friends" && `${friends.length} ami${friends.length !== 1 ? "s" : ""}`}
                     {page === "stats" && "Tes stats de jeu en détail"}
                     {page === "backup" && "Backblaze B2 — Sauvegardez vos parties dans le cloud"}
                     {page === "controller" && (gamepadActive ? "Manette connectée" : "Aucune manette détectée")}
@@ -4706,6 +4884,163 @@ export default function App() {
                       </div>
                     )}
                   </div>
+                </div>
+              )}
+
+              {page === "friends" && (
+                <div className="settings-content">
+                  {!user ? (
+                    <div className="settings__group">
+                      <p className="settings__field-desc">Connecte-toi pour ajouter des amis et voir leur activité.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Search for users */}
+                      <div className="settings__group">
+                        <div className="settings__group-title"><UserPlus size={16} /> Ajouter un ami</div>
+                        <div className="settings__field">
+                          <input
+                            className="settings__field-input"
+                            placeholder="Rechercher un pseudo..."
+                            value={friendSearch}
+                            onChange={(e) => { setFriendSearch(e.target.value); searchFriends(e.target.value); }}
+                          />
+                        </div>
+                        {friendSearchResults.length > 0 && (
+                          <div className="friends-search-results">
+                            {friendSearchResults.map(u => {
+                              const alreadyFriend = friends.some(f =>
+                                f.requester_id === u.id || f.addressee_id === u.id
+                              );
+                              const alreadyPending = pendingRequests.some(f =>
+                                f.requester_id === u.id || f.addressee_id === u.id
+                              );
+                              return (
+                                <div key={u.id} className="friend-card">
+                                  <div className="friend-card__avatar">
+                                    {u.avatar_url ? (
+                                      <img src={u.avatar_url} alt="" />
+                                    ) : (
+                                      <div className="friend-card__avatar-placeholder">
+                                        {(u.username || "?").slice(0, 2).toUpperCase()}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="friend-card__name">{u.username}</span>
+                                  {alreadyFriend ? (
+                                    <span className="friend-card__badge friend-card__badge--accepted"><UserCheck size={12} /> Ami</span>
+                                  ) : alreadyPending ? (
+                                    <span className="friend-card__badge friend-card__badge--pending">En attente</span>
+                                  ) : (
+                                    <button className="btn btn--primary btn--sm" onClick={() => sendFriendRequest(u.id)}>
+                                      <UserPlus size={12} /> Ajouter
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pending requests */}
+                      {pendingRequests.filter(f => f.addressee_id === user.id).length > 0 && (
+                        <div className="settings__group">
+                          <div className="settings__group-title"><UserPlus size={16} /> Demandes reçues</div>
+                          {pendingRequests.filter(f => f.addressee_id === user.id).map(req => (
+                            <div key={req.id} className="friend-card">
+                              <div className="friend-card__avatar">
+                                {req.profile?.avatar_url ? (
+                                  <img src={req.profile.avatar_url} alt="" />
+                                ) : (
+                                  <div className="friend-card__avatar-placeholder">
+                                    {(req.profile?.username || "?").slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
+                              <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
+                                <button className="btn btn--primary btn--sm" onClick={() => acceptFriendRequest(req.id)}>
+                                  <UserCheck size={12} /> Accepter
+                                </button>
+                                <button className="btn btn--danger btn--sm" onClick={() => declineFriendRequest(req.id)}>
+                                  <UserX size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Sent pending */}
+                      {pendingRequests.filter(f => f.requester_id === user.id).length > 0 && (
+                        <div className="settings__group">
+                          <div className="settings__group-title"><UserPlus size={16} /> Demandes envoyées</div>
+                          {pendingRequests.filter(f => f.requester_id === user.id).map(req => (
+                            <div key={req.id} className="friend-card">
+                              <div className="friend-card__avatar">
+                                {req.profile?.avatar_url ? (
+                                  <img src={req.profile.avatar_url} alt="" />
+                                ) : (
+                                  <div className="friend-card__avatar-placeholder">
+                                    {(req.profile?.username || "?").slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
+                              <span className="friend-card__badge friend-card__badge--pending">En attente...</span>
+                              <button className="btn btn--ghost btn--sm" onClick={() => declineFriendRequest(req.id)} style={{ marginLeft: "auto" }}>
+                                <X size={12} /> Annuler
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Friends list */}
+                      <div className="settings__group">
+                        <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span><Users size={16} /> Mes amis ({friends.length})</span>
+                          <button className="btn btn--ghost btn--sm" onClick={loadFriends} disabled={friendsLoading}>
+                            <RefreshCw size={12} className={friendsLoading ? "animate-spin" : ""} /> Rafraîchir
+                          </button>
+                        </div>
+                        {friends.length === 0 && !friendsLoading && (
+                          <p className="settings__field-desc">Aucun ami pour l'instant. Cherche un pseudo ci-dessus pour en ajouter !</p>
+                        )}
+                        {friends.map(f => {
+                          const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
+                          const presence = friendPresences.find(p => p.user_id === otherId);
+                          const isOnline = presence && presence.status !== "offline" &&
+                            (Date.now() - new Date(presence.updated_at).getTime()) < 120000;
+                          const isPlaying = presence?.status === "playing";
+                          return (
+                            <div key={f.id} className="friend-card">
+                              <div className="friend-card__avatar">
+                                {f.profile?.avatar_url ? (
+                                  <img src={f.profile.avatar_url} alt="" />
+                                ) : (
+                                  <div className="friend-card__avatar-placeholder">
+                                    {(f.profile?.username || "?").slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className={`friend-card__status ${isOnline ? (isPlaying ? "friend-card__status--playing" : "friend-card__status--online") : "friend-card__status--offline"}`} />
+                              </div>
+                              <div className="friend-card__info">
+                                <span className="friend-card__name">{f.profile?.username || "Anonyme"}</span>
+                                <span className="friend-card__activity">
+                                  {isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}
+                                </span>
+                              </div>
+                              <button className="btn btn--ghost btn--sm" onClick={() => removeFriend(f.id)} style={{ marginLeft: "auto" }}>
+                                <UserX size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 

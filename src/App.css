@@ -4564,3 +4564,114 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   cursor: pointer;
 }
+
+/* ─── Friends System ─── */
+.friends-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.friend-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  transition: all 0.2s;
+}
+
+.friend-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+.friend-card__avatar {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.friend-card__avatar img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.friend-card__avatar-placeholder {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-active);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.friend-card__status {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-card);
+}
+
+.friend-card__status--online {
+  background: var(--neon-green);
+}
+
+.friend-card__status--playing {
+  background: var(--neon-purple);
+  box-shadow: 0 0 6px var(--neon-purple-glow);
+}
+
+.friend-card__status--offline {
+  background: var(--text-muted);
+}
+
+.friend-card__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.friend-card__name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.friend-card__activity {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.friend-card__badge {
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-left: auto;
+}
+
+.friend-card__badge--accepted {
+  background: rgba(35, 165, 90, 0.15);
+  color: var(--neon-green);
+}
+
+.friend-card__badge--pending {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--neon-amber);
+}
