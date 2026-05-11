@@ -62,6 +62,8 @@ import {
   UserPlus,
   UserCheck,
   UserX,
+  MessageCircle,
+  Send,
 } from "lucide-react";
 
 /* ============================
@@ -977,6 +979,22 @@ export default function App() {
   } | null>(null);
   const [friendsLoading, setFriendsLoading] = useState(false);
 
+  // ---- Chat state ----
+  interface ChatMessage {
+    id: string;
+    sender_id: string;
+    receiver_id: string;
+    content: string;
+    created_at: string;
+    read_at: string | null;
+  }
+  const [chatOpen, setChatOpen] = useState<{ id: string; username: string; avatar_url: string | null } | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
   // ---- Dynamic background ----
   const [bgCover, setBgCover] = useState<string | null>(null);
 
@@ -1740,6 +1758,93 @@ export default function App() {
       console.error("[FriendProfile]", err);
     }
   }, []);
+
+  // ---- Chat handlers ----
+  const loadChatMessages = useCallback(async (friendId: string) => {
+    if (!user) return;
+    setChatLoading(true);
+    const { data } = await supabase
+      .from("messages")
+      .select("*")
+      .or(`and(sender_id.eq.${user.id},receiver_id.eq.${friendId}),and(sender_id.eq.${friendId},receiver_id.eq.${user.id})`)
+      .order("created_at", { ascending: true })
+      .limit(100);
+    setChatMessages(data || []);
+    setChatLoading(false);
+    // Mark unread as read
+    await supabase
+      .from("messages")
+      .update({ read_at: new Date().toISOString() })
+      .eq("sender_id", friendId)
+      .eq("receiver_id", user.id)
+      .is("read_at", null);
+    setUnreadCounts(prev => ({ ...prev, [friendId]: 0 }));
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+  }, [user]);
+
+  const openChat = useCallback((friendId: string, username: string, avatar_url: string | null) => {
+    setChatOpen({ id: friendId, username, avatar_url });
+    loadChatMessages(friendId);
+  }, [loadChatMessages]);
+
+  const sendMessage = useCallback(async () => {
+    if (!user || !chatOpen || !chatInput.trim()) return;
+    const content = chatInput.trim();
+    setChatInput("");
+    const { data } = await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: chatOpen.id,
+      content,
+    }).select().single();
+    if (data) {
+      setChatMessages(prev => [...prev, data]);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }, [user, chatOpen, chatInput]);
+
+  const loadUnreadCounts = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("messages")
+      .select("sender_id")
+      .eq("receiver_id", user.id)
+      .is("read_at", null);
+    if (data) {
+      const counts: Record<string, number> = {};
+      data.forEach(m => { counts[m.sender_id] = (counts[m.sender_id] || 0) + 1; });
+      setUnreadCounts(counts);
+    }
+  }, [user]);
+
+  // Load unread counts when friends load
+  useEffect(() => { if (user) loadUnreadCounts(); }, [user, loadUnreadCounts]);
+
+  // Realtime chat subscription
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("chat-realtime")
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "messages",
+        filter: `receiver_id=eq.${user.id}`,
+      }, (payload) => {
+        const msg = payload.new as ChatMessage;
+        // If chat is open with this sender, add message and mark read
+        if (chatOpen && msg.sender_id === chatOpen.id) {
+          setChatMessages(prev => [...prev, msg]);
+          setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+          supabase.from("messages").update({ read_at: new Date().toISOString() }).eq("id", msg.id).then();
+        } else {
+          // Increment unread count
+          setUnreadCounts(prev => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] || 0) + 1 }));
+          sendNotification({ title: "EmuWorld — Nouveau message", body: `Message reçu` });
+        }
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, chatOpen]);
 
   const updatePresence = useCallback(async (status: "online" | "playing" | "offline", game?: string, console_name?: string) => {
     if (!user) return;
@@ -5092,14 +5197,73 @@ export default function App() {
                                   {isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}
                                 </span>
                               </div>
-                              <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); removeFriend(f.id); }} style={{ marginLeft: "auto" }}>
-                                <UserX size={12} />
-                              </button>
+                              <div style={{ display: "flex", gap: 4, marginLeft: "auto", alignItems: "center" }}>
+                                {unreadCounts[otherId] > 0 && (
+                                  <span className="friend-card__unread">{unreadCounts[otherId]}</span>
+                                )}
+                                <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
+                                  <MessageCircle size={12} />
+                                </button>
+                                <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); removeFriend(f.id); }}>
+                                  <UserX size={12} />
+                                </button>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
                     </>
+                  )}
+
+                  {/* Chat Panel */}
+                  {chatOpen && (
+                    <div className="chat-overlay" onClick={() => setChatOpen(null)}>
+                      <div className="chat-panel" onClick={(e) => e.stopPropagation()}>
+                        <div className="chat-panel__header">
+                          <div className="friend-card__avatar">
+                            {chatOpen.avatar_url ? (
+                              <img src={chatOpen.avatar_url} alt="" />
+                            ) : (
+                              <div className="friend-card__avatar-placeholder">
+                                {chatOpen.username.slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                          </div>
+                          <span className="chat-panel__name">{chatOpen.username}</span>
+                          <button className="friend-profile-modal__close" onClick={() => setChatOpen(null)}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                        <div className="chat-panel__messages">
+                          {chatLoading && <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem" }}>Chargement...</p>}
+                          {!chatLoading && chatMessages.length === 0 && (
+                            <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 40 }}>Aucun message. Dis bonjour !</p>
+                          )}
+                          {chatMessages.map(msg => (
+                            <div key={msg.id} className={`chat-bubble ${msg.sender_id === user!.id ? "chat-bubble--mine" : "chat-bubble--theirs"}`}>
+                              <p className="chat-bubble__text">{msg.content}</p>
+                              <span className="chat-bubble__time">
+                                {new Date(msg.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                              </span>
+                            </div>
+                          ))}
+                          <div ref={chatEndRef} />
+                        </div>
+                        <div className="chat-panel__input">
+                          <input
+                            className="chat-panel__input-field"
+                            placeholder="Écrire un message..."
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
+                            autoFocus
+                          />
+                          <button className="chat-panel__send" onClick={sendMessage} disabled={!chatInput.trim()}>
+                            <Send size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
                   {/* Friend Profile Modal */}

@@ -18,7 +18,7 @@
   - [x] présence : "x est en train de jouer à Y"
   - [ ] inviter dans un lobby
   - [x] voir le profil
-  - [ ] chat 1:1
+  - [x] chat 1:1
 - [ ] **Multijoueur / lobby** *(très hard, dépend des émulateurs)* — netplay natif supporté uniquement par certains émus (RetroArch, Dolphin, Citra). On pourrait wrapper ces features.
 - [x] **Update Automatique** — plugin Tauri updater + signing key + workflow GitHub Actions. L'app check `latest.json` au boot, affiche un bouton "✨ Mise à jour" dans la titlebar, download + relance avec progress. Guide dans [scratch/release_guide.md](scratch/release_guide.md).
 - [x] **leaderboard in app**
