@@ -1907,6 +1907,25 @@ export default function App() {
     }
   }, [user, chatOpen, chatInput]);
 
+  const sendChatImage = useCallback(async (file: File) => {
+    if (!user || !chatOpen) return;
+    const ext = file.name.split(".").pop() || "png";
+    const path = `chat/${user.id}/${Date.now()}.${ext}`;
+    const { error: uploadErr } = await supabase.storage.from("chat-images").upload(path, file, { contentType: file.type });
+    if (uploadErr) { showToast("Image upload failed", "error"); return; }
+    const { data: urlData } = supabase.storage.from("chat-images").getPublicUrl(path);
+    const imageUrl = urlData.publicUrl;
+    const { data } = await supabase.from("messages").insert({
+      sender_id: user.id,
+      receiver_id: chatOpen.id,
+      content: `[img]${imageUrl}`,
+    }).select().single();
+    if (data) {
+      setChatMessages(prev => [...prev, data]);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }, [user, chatOpen, showToast]);
+
   const loadUnreadCounts = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
@@ -5491,7 +5510,11 @@ export default function App() {
                           )}
                           {chatMessages.map(msg => (
                             <div key={msg.id} className={`chat-bubble ${msg.sender_id === user!.id ? "chat-bubble--mine" : "chat-bubble--theirs"}`}>
-                              <p className="chat-bubble__text">{msg.content}</p>
+                              {msg.content.startsWith("[img]") ? (
+                                <img className="chat-bubble__image" src={msg.content.slice(5)} alt="" onClick={() => window.open(msg.content.slice(5), "_blank")} />
+                              ) : (
+                                <p className="chat-bubble__text">{msg.content}</p>
+                              )}
                               <span className="chat-bubble__time">
                                 {new Date(msg.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                               </span>
@@ -5508,6 +5531,14 @@ export default function App() {
                             onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
                             autoFocus
                           />
+                          <label className="chat-panel__image-btn" title="Envoyer une image">
+                            <Camera size={16} />
+                            <input type="file" accept="image/*" hidden onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) sendChatImage(file);
+                              e.target.value = "";
+                            }} />
+                          </label>
                           <button className="chat-panel__send" onClick={sendMessage} disabled={!chatInput.trim()}>
                             <Send size={16} />
                           </button>

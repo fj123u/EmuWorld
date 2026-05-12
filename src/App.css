@@ -4980,6 +4980,40 @@ body {
   cursor: not-allowed;
 }
 
+.chat-panel__image-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.chat-panel__image-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: var(--neon-purple);
+}
+
+.chat-bubble__image {
+  max-width: 220px;
+  max-height: 200px;
+  border-radius: 8px;
+  cursor: pointer;
+  object-fit: cover;
+  display: block;
+}
+
+.chat-bubble__image:hover {
+  opacity: 0.85;
+}
+
 /* ─── Onboarding Wizard ─── */
 .onboarding-overlay {
   position: fixed;
