@@ -3678,6 +3678,196 @@ fn delete_screenshot(path: String) -> Result<(), String> {
     fs::remove_file(&path).map_err(|e| format!("Cannot delete screenshot: {}", e))
 }
 
+// ===== Cheat Codes Database =====
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct CheatCode {
+    id: String,
+    name: String,
+    code: String,
+    cheat_type: String, // "Action Replay", "GameShark", "Game Genie", "Raw", etc.
+    enabled: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+struct CheatStore {
+    cheats: std::collections::HashMap<String, Vec<CheatCode>>, // key = "{console}/{game_name}"
+}
+
+fn cheats_path() -> PathBuf {
+    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    path.push("EmuWorld");
+    let _ = fs::create_dir_all(&path);
+    path.push("cheats.json");
+    path
+}
+
+fn load_cheats() -> CheatStore {
+    let path = cheats_path();
+    if let Ok(data) = fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        CheatStore::default()
+    }
+}
+
+fn save_cheats(store: &CheatStore) -> Result<(), String> {
+    let path = cheats_path();
+    let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
+    fs::write(&path, data).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_cheats(game_name: String, console: String) -> Vec<CheatCode> {
+    let store = load_cheats();
+    let key = format!("{}/{}", console, game_name);
+    store.cheats.get(&key).cloned().unwrap_or_default()
+}
+
+#[tauri::command]
+fn add_cheat(game_name: String, console: String, name: String, code: String, cheat_type: String) -> Result<Vec<CheatCode>, String> {
+    let mut store = load_cheats();
+    let key = format!("{}/{}", console, game_name);
+    let entry = store.cheats.entry(key.clone()).or_default();
+    let id = format!("{}_{}", chrono::Utc::now().timestamp_millis(), entry.len());
+    entry.push(CheatCode { id, name, code, cheat_type, enabled: true });
+    save_cheats(&store)?;
+    Ok(store.cheats.get(&key).cloned().unwrap_or_default())
+}
+
+#[tauri::command]
+fn toggle_cheat(game_name: String, console: String, cheat_id: String) -> Result<Vec<CheatCode>, String> {
+    let mut store = load_cheats();
+    let key = format!("{}/{}", console, game_name);
+    if let Some(cheats) = store.cheats.get_mut(&key) {
+        if let Some(c) = cheats.iter_mut().find(|c| c.id == cheat_id) {
+            c.enabled = !c.enabled;
+        }
+    }
+    save_cheats(&store)?;
+    Ok(store.cheats.get(&key).cloned().unwrap_or_default())
+}
+
+#[tauri::command]
+fn delete_cheat(game_name: String, console: String, cheat_id: String) -> Result<Vec<CheatCode>, String> {
+    let mut store = load_cheats();
+    let key = format!("{}/{}", console, game_name);
+    if let Some(cheats) = store.cheats.get_mut(&key) {
+        cheats.retain(|c| c.id != cheat_id);
+    }
+    save_cheats(&store)?;
+    Ok(store.cheats.get(&key).cloned().unwrap_or_default())
+}
+
+#[tauri::command]
+async fn search_cheats_online(game_name: String, console: String) -> Result<Vec<CheatCode>, String> {
+    let console_folder = match console.to_lowercase().as_str() {
+        "nes" | "nintendo entertainment system" => "Nintendo - Nintendo Entertainment System",
+        "snes" | "super nintendo" => "Nintendo - Super Nintendo Entertainment System",
+        "gb" | "game boy" => "Nintendo - Game Boy",
+        "gbc" | "game boy color" => "Nintendo - Game Boy Color",
+        "gba" | "game boy advance" => "Nintendo - Game Boy Advance",
+        "n64" | "nintendo 64" => "Nintendo - Nintendo 64",
+        "nds" | "nintendo ds" => "Nintendo - Nintendo DS",
+        "genesis" | "mega drive" | "megadrive" => "Sega - Mega Drive - Genesis",
+        "master system" => "Sega - Master System - Mark III",
+        "game gear" => "Sega - Game Gear",
+        "psx" | "ps1" | "playstation" => "Sony - PlayStation",
+        "psp" => "Sony - PlayStation Portable",
+        "pce" | "pc engine" | "turbografx" => "NEC - PC Engine - TurboGrafx 16",
+        _ => return Ok(vec![]),
+    };
+
+    let clean = game_name
+        .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '[', ']'], "")
+        .trim().to_string();
+
+    let encoded_folder = urlencoding::encode(console_folder);
+    let encoded_name = urlencoding::encode(&clean);
+    let url = format!(
+        "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/{}/{}.cht",
+        encoded_folder, encoded_name
+    );
+
+    let client = reqwest::Client::new();
+    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        let url2 = format!(
+            "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/{}/{}.cht",
+            encoded_folder,
+            urlencoding::encode(&clean.replace(' ', "%20"))
+        );
+        let resp2 = client.get(&url2).send().await.map_err(|e| e.to_string())?;
+        if !resp2.status().is_success() {
+            return Ok(vec![]);
+        }
+        let text = resp2.text().await.map_err(|e| e.to_string())?;
+        return Ok(parse_cht_file(&text));
+    }
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    Ok(parse_cht_file(&text))
+}
+
+fn parse_cht_file(content: &str) -> Vec<CheatCode> {
+    let mut cheats = Vec::new();
+    let mut names: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+    let mut codes: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+
+    for line in content.lines() {
+        let line = line.trim();
+        if line.starts_with("cheat") {
+            if let Some(rest) = line.strip_prefix("cheat") {
+                let rest = rest.trim();
+                if let Some(idx_str) = rest.strip_suffix("_desc") {
+                    let idx_str = idx_str.trim_start_matches('_');
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        if let Some(val) = line.split('=').nth(1) {
+                            let val = val.trim().trim_matches('"');
+                            names.insert(idx, val.to_string());
+                        }
+                    }
+                } else if let Some(idx_str) = rest.strip_suffix("_code") {
+                    let idx_str = idx_str.trim_start_matches('_');
+                    if let Ok(idx) = idx_str.parse::<usize>() {
+                        if let Some(val) = line.split('=').nth(1) {
+                            let val = val.trim().trim_matches('"');
+                            codes.insert(idx, val.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let max_idx = names.keys().chain(codes.keys()).max().copied().unwrap_or(0);
+    for i in 0..=max_idx {
+        if let Some(code) = codes.get(&i) {
+            let name = names.get(&i).cloned().unwrap_or_else(|| format!("Cheat {}", i + 1));
+            cheats.push(CheatCode {
+                id: format!("online_{}", i),
+                name,
+                code: code.clone(),
+                cheat_type: "RetroArch".to_string(),
+                enabled: false,
+            });
+        }
+    }
+    cheats
+}
+
+#[tauri::command]
+fn import_cheats(game_name: String, console: String, new_cheats: Vec<CheatCode>) -> Result<Vec<CheatCode>, String> {
+    let mut store = load_cheats();
+    let key = format!("{}/{}", console, game_name);
+    let entry = store.cheats.entry(key.clone()).or_default();
+    for c in new_cheats {
+        let id = format!("{}_{}", chrono::Utc::now().timestamp_millis(), entry.len());
+        entry.push(CheatCode { id, name: c.name, code: c.code, cheat_type: c.cheat_type, enabled: c.enabled });
+    }
+    save_cheats(&store)?;
+    Ok(store.cheats.get(&key).cloned().unwrap_or_default())
+}
+
 #[tauri::command]
 async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
     use notify::{Watcher, RecursiveMode, Event, EventKind};
@@ -3892,6 +4082,12 @@ pub fn run() {
             delete_screenshot,
             clear_achievements,
             overwrite_achievements,
+            get_cheats,
+            add_cheat,
+            toggle_cheat,
+            delete_cheat,
+            search_cheats_online,
+            import_cheats,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

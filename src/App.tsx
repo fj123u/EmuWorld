@@ -65,6 +65,7 @@ import {
   UserX,
   MessageCircle,
   Send,
+  Zap,
 } from "lucide-react";
 
 /* ============================
@@ -194,6 +195,14 @@ interface AchievementRank {
   total: number;
   rank: string;
   icon: string;
+}
+
+interface CheatCodeEntry {
+  id: string;
+  name: string;
+  code: string;
+  cheat_type: string;
+  enabled: boolean;
 }
 
 interface RomStoreEntry {
@@ -956,6 +965,8 @@ export default function App() {
   const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
   const [screenshotLightbox, setScreenshotLightbox] = useState<string | null>(null);
+  const [cheatsPanel, setCheatsPanel] = useState<{ gameName: string; console: string; cheats: CheatCodeEntry[]; searching: boolean; onlineResults: CheatCodeEntry[] } | null>(null);
+  const [newCheatForm, setNewCheatForm] = useState({ name: "", code: "", cheat_type: "Action Replay" });
   const currentPlayingGameRef = useRef(currentPlayingGame);
   currentPlayingGameRef.current = currentPlayingGame;
 
@@ -6271,6 +6282,13 @@ export default function App() {
             }}>
               <Camera size={14} /> Screenshots
             </button>
+            <button className="rom-context-menu__btn" onClick={async () => {
+              const codes = await invoke<CheatCodeEntry[]>("get_cheats", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
+              setCheatsPanel({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, cheats: codes, searching: false, onlineResults: [] });
+              setRomContextMenu(null);
+            }}>
+              <Zap size={14} /> Cheat Codes
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
@@ -6344,6 +6362,121 @@ export default function App() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Cheat Codes Panel */}
+      {cheatsPanel && (
+        <div className="rom-context-overlay" onClick={() => setCheatsPanel(null)}>
+          <div className="cheats-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="cheats-panel__header">
+              <h3><Zap size={16} /> Cheat Codes — {cheatsPanel.gameName}</h3>
+              <button className="btn btn--ghost btn--sm" onClick={() => setCheatsPanel(null)}><X size={14} /></button>
+            </div>
+
+            <div className="cheats-panel__body">
+              {/* Saved cheats */}
+              {cheatsPanel.cheats.length > 0 && (
+                <div className="cheats-panel__section">
+                  <h4>Codes sauvegardés</h4>
+                  <div className="cheats-panel__list">
+                    {cheatsPanel.cheats.map(c => (
+                      <div key={c.id} className={`cheats-panel__item ${c.enabled ? "cheats-panel__item--active" : ""}`}>
+                        <div className="cheats-panel__item-info">
+                          <span className="cheats-panel__item-name">{c.name}</span>
+                          <code className="cheats-panel__item-code">{c.code}</code>
+                          <span className="cheats-panel__item-type">{c.cheat_type}</span>
+                        </div>
+                        <div className="cheats-panel__item-actions">
+                          <button className={`btn btn--ghost btn--sm ${c.enabled ? "btn--active" : ""}`} onClick={async () => {
+                            const updated = await invoke<CheatCodeEntry[]>("toggle_cheat", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, cheatId: c.id });
+                            setCheatsPanel(prev => prev ? { ...prev, cheats: updated } : null);
+                          }} title={c.enabled ? "Désactiver" : "Activer"}>
+                            {c.enabled ? <Check size={12} /> : <X size={12} />}
+                          </button>
+                          <button className="btn btn--ghost btn--sm" onClick={async () => {
+                            const updated = await invoke<CheatCodeEntry[]>("delete_cheat", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, cheatId: c.id });
+                            setCheatsPanel(prev => prev ? { ...prev, cheats: updated } : null);
+                          }} title="Supprimer">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Add cheat form */}
+              <div className="cheats-panel__section">
+                <h4>Ajouter un code</h4>
+                <div className="cheats-panel__form">
+                  <input type="text" placeholder="Nom (ex: Vies infinies)" value={newCheatForm.name} onChange={e => setNewCheatForm(p => ({ ...p, name: e.target.value }))} />
+                  <input type="text" placeholder="Code (ex: 01094DD8)" value={newCheatForm.code} onChange={e => setNewCheatForm(p => ({ ...p, code: e.target.value }))} />
+                  <select value={newCheatForm.cheat_type} onChange={e => setNewCheatForm(p => ({ ...p, cheat_type: e.target.value }))}>
+                    <option>Action Replay</option>
+                    <option>GameShark</option>
+                    <option>Game Genie</option>
+                    <option>CodeBreaker</option>
+                    <option>Raw</option>
+                  </select>
+                  <button className="btn btn--primary btn--sm" disabled={!newCheatForm.name || !newCheatForm.code} onClick={async () => {
+                    const updated = await invoke<CheatCodeEntry[]>("add_cheat", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, name: newCheatForm.name, code: newCheatForm.code, cheatType: newCheatForm.cheat_type });
+                    setCheatsPanel(prev => prev ? { ...prev, cheats: updated } : null);
+                    setNewCheatForm({ name: "", code: "", cheat_type: "Action Replay" });
+                  }}>
+                    + Ajouter
+                  </button>
+                </div>
+              </div>
+
+              {/* Search online */}
+              <div className="cheats-panel__section">
+                <h4>Rechercher en ligne (LibRetro DB)</h4>
+                <button className="btn btn--secondary btn--sm" disabled={cheatsPanel.searching} onClick={async () => {
+                  setCheatsPanel(prev => prev ? { ...prev, searching: true } : null);
+                  try {
+                    const results = await invoke<CheatCodeEntry[]>("search_cheats_online", { gameName: cheatsPanel.gameName, console: cheatsPanel.console });
+                    setCheatsPanel(prev => prev ? { ...prev, searching: false, onlineResults: results } : null);
+                  } catch {
+                    setCheatsPanel(prev => prev ? { ...prev, searching: false } : null);
+                    showToast("Aucun cheat trouvé en ligne", "info");
+                  }
+                }}>
+                  {cheatsPanel.searching ? <RefreshCw size={12} className="animate-spin" /> : <Search size={12} />}
+                  {cheatsPanel.searching ? " Recherche..." : " Chercher des codes"}
+                </button>
+
+                {cheatsPanel.onlineResults.length > 0 && (
+                  <div className="cheats-panel__online-results">
+                    <div className="cheats-panel__online-header">
+                      <span>{cheatsPanel.onlineResults.length} codes trouvés</span>
+                      <button className="btn btn--primary btn--sm" onClick={async () => {
+                        const updated = await invoke<CheatCodeEntry[]>("import_cheats", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, newCheats: cheatsPanel.onlineResults });
+                        setCheatsPanel(prev => prev ? { ...prev, cheats: updated, onlineResults: [] } : null);
+                        showToast(`${cheatsPanel.onlineResults.length} codes importés !`, "success");
+                      }}>
+                        Tout importer
+                      </button>
+                    </div>
+                    <div className="cheats-panel__list">
+                      {cheatsPanel.onlineResults.slice(0, 20).map(c => (
+                        <div key={c.id} className="cheats-panel__item">
+                          <div className="cheats-panel__item-info">
+                            <span className="cheats-panel__item-name">{c.name}</span>
+                            <code className="cheats-panel__item-code">{c.code}</code>
+                          </div>
+                        </div>
+                      ))}
+                      {cheatsPanel.onlineResults.length > 20 && (
+                        <p style={{ opacity: 0.5, fontSize: 12, padding: "8px 0" }}>+ {cheatsPanel.onlineResults.length - 20} autres codes...</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
