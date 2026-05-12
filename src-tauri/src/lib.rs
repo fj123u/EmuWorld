@@ -417,27 +417,127 @@ async fn launch_emulator(
         cmd.arg(&final_path);
     }
 
-    // Inject cheat codes for RetroArch
+    // Inject cheat codes based on emulator type
     if let (Some(rom), Some(game_name), Some(console)) = (rom_path.as_ref(), rom_name.as_ref(), rom_console.as_ref()) {
-        let is_retroarch = use_retroarch || effective_id.starts_with("retroarch");
-        if is_retroarch {
-            let cheats = get_cheats(game_name.clone(), console.clone());
-            let enabled_cheats: Vec<&CheatCode> = cheats.iter().filter(|c| c.enabled).collect();
-            if !enabled_cheats.is_empty() {
-                let rom_stem = PathBuf::from(rom).file_stem()
-                    .unwrap_or_default().to_string_lossy().to_string();
+        let cheats = get_cheats(game_name.clone(), console.clone());
+        let enabled_cheats: Vec<&CheatCode> = cheats.iter().filter(|c| c.enabled).collect();
+        if !enabled_cheats.is_empty() {
+            let rom_stem = PathBuf::from(rom).file_stem()
+                .unwrap_or_default().to_string_lossy().to_string();
+            let is_retroarch = use_retroarch || effective_id.starts_with("retroarch");
+
+            if is_retroarch {
+                // RetroArch: write .cht in cheats/<core>/
                 let core_folder = ra_core.unwrap_or("").replace("_libretro.dll", "").replace(".dll", "");
                 let cheats_dir = install_dir.join("cheats").join(&core_folder);
                 let _ = fs::create_dir_all(&cheats_dir);
                 let cht_path = cheats_dir.join(format!("{}.cht", rom_stem));
-                let mut cht_content = format!("cheats = {}\n\n", enabled_cheats.len());
+                let mut content = format!("cheats = {}\n\n", enabled_cheats.len());
                 for (i, c) in enabled_cheats.iter().enumerate() {
-                    cht_content.push_str(&format!("cheat{}_desc = \"{}\"\n", i, c.name));
-                    cht_content.push_str(&format!("cheat{}_code = \"{}\"\n", i, c.code));
-                    cht_content.push_str(&format!("cheat{}_enable = true\n\n", i));
+                    content.push_str(&format!("cheat{}_desc = \"{}\"\n", i, c.name));
+                    content.push_str(&format!("cheat{}_code = \"{}\"\n", i, c.code));
+                    content.push_str(&format!("cheat{}_enable = true\n\n", i));
                 }
-                let _ = fs::write(&cht_path, &cht_content);
-                println!("[Launch] Wrote {} cheats to {:?}", enabled_cheats.len(), cht_path);
+                let _ = fs::write(&cht_path, &content);
+                println!("[Launch] RetroArch: wrote {} cheats to {:?}", enabled_cheats.len(), cht_path);
+
+            } else if effective_id == "dolphin" {
+                // Dolphin: write to User/GameSettings/<GameID>.ini
+                // GameID = first 6 chars of the ROM filename (common convention) or use full stem
+                let user_dir = install_dir.join("User");
+                let gs_dir = user_dir.join("GameSettings");
+                let _ = fs::create_dir_all(&gs_dir);
+                // Try to extract Game ID from ROM filename (e.g., "GALE01" from common naming)
+                let game_id = if rom_stem.len() >= 6 && rom_stem.chars().take(6).all(|c| c.is_alphanumeric()) {
+                    rom_stem[..6].to_string()
+                } else {
+                    rom_stem.clone()
+                };
+                let ini_path = gs_dir.join(format!("{}.ini", game_id));
+                let mut existing = fs::read_to_string(&ini_path).unwrap_or_default();
+                // Remove old cheat sections if present
+                if let Some(pos) = existing.find("[ActionReplay_Enabled]") {
+                    existing.truncate(pos);
+                }
+                let mut ar_section = String::from("[ActionReplay_Enabled]\n");
+                let mut ar_codes = String::from("[ActionReplay]\n");
+                for c in &enabled_cheats {
+                    let safe_name = c.name.replace('\n', " ");
+                    ar_section.push_str(&format!("${}\n", safe_name));
+                    ar_codes.push_str(&format!("${}\n", safe_name));
+                    for line in c.code.split('+') {
+                        ar_codes.push_str(&format!("{}\n", line.trim()));
+                    }
+                }
+                existing.push_str(&ar_section);
+                existing.push('\n');
+                existing.push_str(&ar_codes);
+                let _ = fs::write(&ini_path, &existing);
+                println!("[Launch] Dolphin: wrote {} cheats to {:?}", enabled_cheats.len(), ini_path);
+
+            } else if effective_id == "ppsspp" {
+                // PPSSPP: CWCheat format in memstick/PSP/Cheats/cheat.db
+                let cheats_dir = install_dir.join("memstick").join("PSP").join("Cheats");
+                let _ = fs::create_dir_all(&cheats_dir);
+                let db_path = cheats_dir.join("cheat.db");
+                let mut existing = fs::read_to_string(&db_path).unwrap_or_default();
+                // Add our game's cheats
+                let game_header = format!("_S {}", rom_stem.replace(' ', ""));
+                // Remove old entry for same game if present
+                if let Some(pos) = existing.find(&game_header) {
+                    let end = existing[pos+1..].find("\n_S ").map(|p| pos + 1 + p).unwrap_or(existing.len());
+                    existing.replace_range(pos..end, "");
+                }
+                let mut section = format!("{}\n_G {}\n", game_header, game_name);
+                for c in &enabled_cheats {
+                    section.push_str(&format!("_C1 {}\n", c.name));
+                    for line in c.code.split('+') {
+                        let line = line.trim();
+                        if !line.is_empty() {
+                            section.push_str(&format!("_L {}\n", line));
+                        }
+                    }
+                }
+                existing.push_str(&section);
+                let _ = fs::write(&db_path, &existing);
+                println!("[Launch] PPSSPP: wrote {} cheats to {:?}", enabled_cheats.len(), db_path);
+
+            } else if effective_id == "duckstation" {
+                // Duckstation: writes cheats/<game_id>.cht in a simple format
+                let cheats_dir = install_dir.join("cheats");
+                let _ = fs::create_dir_all(&cheats_dir);
+                let cht_path = cheats_dir.join(format!("{}.cht", rom_stem));
+                let mut content = String::new();
+                for c in &enabled_cheats {
+                    content.push_str(&format!("[{}]\n", c.name));
+                    for line in c.code.split('+') {
+                        let line = line.trim();
+                        if !line.is_empty() {
+                            content.push_str(&format!("{}\n", line));
+                        }
+                    }
+                    content.push('\n');
+                }
+                let _ = fs::write(&cht_path, &content);
+                println!("[Launch] Duckstation: wrote {} cheats to {:?}", enabled_cheats.len(), cht_path);
+
+            } else if effective_id == "pcsx2" {
+                // PCSX2: pnach format in cheats/ — filename is CRC-based but we use rom stem
+                let cheats_dir = install_dir.join("cheats");
+                let _ = fs::create_dir_all(&cheats_dir);
+                let pnach_path = cheats_dir.join(format!("{}.pnach", rom_stem));
+                let mut content = String::from("// EmuWorld auto-generated cheats\n");
+                for c in &enabled_cheats {
+                    content.push_str(&format!("// {}\n", c.name));
+                    for line in c.code.split('+') {
+                        let line = line.trim();
+                        if !line.is_empty() {
+                            content.push_str(&format!("patch=1,EE,{}\n", line));
+                        }
+                    }
+                }
+                let _ = fs::write(&pnach_path, &content);
+                println!("[Launch] PCSX2: wrote {} cheats to {:?}", enabled_cheats.len(), pnach_path);
             }
         }
     }
