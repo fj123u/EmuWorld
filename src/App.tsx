@@ -1554,7 +1554,10 @@ export default function App() {
       if (e.key === "F11") {
         e.preventDefault();
         const win = getCurrentWindow();
-        win.isFullscreen().then(fs => win.setFullscreen(!fs)).catch(() => {});
+        win.isFullscreen().then(fs => {
+          win.setFullscreen(!fs);
+          setIsFullscreen(!fs);
+        }).catch(() => {});
       }
     };
     window.addEventListener("keydown", handler);
@@ -3511,9 +3514,9 @@ export default function App() {
   const toggleFullscreen = async () => {
     if (!appWindow) return;
     try {
-      const next = !isFullscreen;
-      await appWindow.setFullscreen(next);
-      setIsFullscreen(next);
+      const current = await appWindow.isFullscreen();
+      await appWindow.setFullscreen(!current);
+      setIsFullscreen(!current);
     } catch (err) {
       console.error("Fullscreen error:", err);
     }

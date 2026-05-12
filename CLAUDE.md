@@ -52,3 +52,10 @@ GitHub Actions workflow (`.github/workflows/release.yml`) triggers on `v*` tags.
 - ROM detection uses file extensions matched against the emulator catalog; updates/DLCs are filtered by title ID patterns (Switch: non-000 suffix, Wii U: 0005000E/C prefix).
 - Box art fetching cascades: local cache → tinfoil.media (Switch) → libretro thumbnails (raw then stripped name) → web scraping fallbacks.
 - The Rust backend uses `reqwest` for HTTP, `zip`/`sevenz-rust` for archive extraction, `scraper` for HTML parsing, `walkdir` for recursive FS scans.
+
+## Workflow After Each Feature/Fix
+
+1. **Commit + push** immediately after implementing
+2. **Check off** the task in `scratch/plan.md`
+3. **Propose next ideas** — suggest 3-4 options for what to work on next (from plan.md or new ideas)
+4. Always include the `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` trailer
