@@ -2310,6 +2310,12 @@ export default function App() {
         setGamepadTick(t => t + 1);
       }
 
+      // Don't process navigation when a game is running (emulator handles input)
+      if (currentPlayingGameRef.current) {
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
       const config = gamepadConfigRef.current;
       const prev = lastGamepadButtonsRef.current;
       const justPressed = buttons.map((pressed, i) => pressed && !(prev[i] ?? false));
