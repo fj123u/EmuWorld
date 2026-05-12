@@ -3531,6 +3531,56 @@ struct FullExport {
 }
 
 #[tauri::command]
+async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
+    use notify::{Watcher, RecursiveMode, Event, EventKind};
+    use std::sync::mpsc;
+
+    let config = get_config();
+    let dir = config.roms_directory.clone();
+    if dir.is_empty() { return Err("No ROMs directory configured".into()); }
+    let path = PathBuf::from(&dir);
+    if !path.exists() { return Err("ROMs directory does not exist".into()); }
+
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+        let mut watcher = match notify::recommended_watcher(tx) {
+            Ok(w) => w,
+            Err(_) => return,
+        };
+        if watcher.watch(&path, RecursiveMode::Recursive).is_err() { return; }
+
+        let catalog = emulators::get_catalog();
+        let supported_exts: std::collections::HashSet<String> = catalog.iter()
+            .flat_map(|e| e.supported_extensions.iter().cloned())
+            .collect();
+
+        loop {
+            match rx.recv() {
+                Ok(Ok(event)) => {
+                    if matches!(event.kind, EventKind::Create(_)) {
+                        let new_roms: Vec<String> = event.paths.iter()
+                            .filter(|p| {
+                                p.extension()
+                                    .map(|e| supported_exts.contains(&e.to_string_lossy().to_lowercase()))
+                                    .unwrap_or(false)
+                            })
+                            .filter_map(|p| p.file_stem().map(|s| s.to_string_lossy().to_string()))
+                            .collect();
+                        if !new_roms.is_empty() {
+                            let _ = handle.emit("roms-detected", &new_roms);
+                        }
+                    }
+                }
+                Ok(Err(_)) => {}
+                Err(_) => break,
+            }
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
 fn export_config() -> Result<String, String> {
     let export = FullExport {
         config: get_config(),
@@ -3662,6 +3712,7 @@ pub fn run() {
             export_config,
             import_config,
             read_text_file,
+            watch_roms_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

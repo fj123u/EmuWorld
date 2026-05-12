@@ -1529,6 +1529,22 @@ export default function App() {
     });
   }, []);
 
+  // ROM directory watcher — auto-detect new files
+  useEffect(() => {
+    invoke("watch_roms_directory").catch(() => {});
+    const unlisten = listen<string[]>("roms-detected", (event) => {
+      const names = event.payload;
+      if (names.length > 0) {
+        const label = names.length === 1
+          ? names[0]
+          : `${names.length} new ROMs`;
+        showToast(`📂 ${label} detected — refreshing library`, "info");
+        loadData();
+      }
+    });
+    return () => { unlisten.then(f => f()); };
+  }, [loadData, showToast]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

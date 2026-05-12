@@ -74,7 +74,7 @@
 - [ ] **Screenshare / Screenshots** *(moyen)* — capturer un screenshot depuis l'émulateur en un raccourci, galerie intégrée dans la fiche du jeu
 - [x] **Notes par jeu** *(quick win)* — champ texte libre sur chaque fiche jeu pour noter des codes, astuces, où on en est, etc.
 - [x] **Rating / Note perso** *(quick win)* — étoiles ou note /10 sur chaque jeu, visible dans la bibliothèque et utilisable comme filtre/tri
-- [ ] **Détection auto des ROMs** *(moyen)* — watcher sur le dossier ROMs qui détecte les nouveaux fichiers et propose automatiquement de les ajouter à la bibliothèque sans rescan manuel
+- [x] **Détection auto des ROMs** *(moyen)* — watcher sur le dossier ROMs qui détecte les nouveaux fichiers et propose automatiquement de les ajouter à la bibliothèque sans rescan manuel
 - [ ] **Cheat codes database** *(moyen)* — intégrer une base de cheats (Action Replay, GameShark) par jeu, activables en un clic avant le lancement
 - [ ] **Speed run timer** *(gros)* — chrono intégré avec splits, comparable avec tes propres records et éventuellement ceux des amis (comme livesplit)
 
