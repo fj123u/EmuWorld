@@ -3531,6 +3531,69 @@ struct FullExport {
 }
 
 #[tauri::command]
+fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
+    use std::process::Command as Cmd;
+
+    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.push("EmuWorld");
+    base.push("screenshots");
+    let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    base.push(&safe_console);
+    base.push(&safe_name);
+    let _ = fs::create_dir_all(&base);
+
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
+    let filename = format!("screenshot_{}.png", timestamp);
+    let filepath = base.join(&filename);
+
+    // Use PowerShell to capture the primary screen
+    let ps_script = format!(
+        r#"Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()"#,
+        filepath.to_string_lossy().replace('\\', "\\\\")
+    );
+
+    let output = Cmd::new("powershell")
+        .args(["-NoProfile", "-Command", &ps_script])
+        .output()
+        .map_err(|e| format!("Failed to run screenshot: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("Screenshot failed: {}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    Ok(filepath.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_screenshots(game_name: String, console: String) -> Vec<String> {
+    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.push("EmuWorld");
+    base.push("screenshots");
+    let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    base.push(&safe_console);
+    base.push(&safe_name);
+
+    if !base.exists() { return vec![]; }
+
+    let mut files: Vec<_> = fs::read_dir(&base)
+        .map(|rd| rd.filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().map(|x| x == "png").unwrap_or(false))
+            .map(|e| e.path().to_string_lossy().to_string())
+            .collect())
+        .unwrap_or_default();
+    files.sort();
+    files.reverse();
+    files
+}
+
+#[tauri::command]
+fn delete_screenshot(path: String) -> Result<(), String> {
+    fs::remove_file(&path).map_err(|e| format!("Cannot delete screenshot: {}", e))
+}
+
+#[tauri::command]
 async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
     use notify::{Watcher, RecursiveMode, Event, EventKind};
     use std::sync::mpsc;
@@ -3713,6 +3776,9 @@ pub fn run() {
             import_config,
             read_text_file,
             watch_roms_directory,
+            take_screenshot,
+            get_screenshots,
+            delete_screenshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");

@@ -951,6 +951,10 @@ export default function App() {
 
   // ---- Launch splash ----
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
+  const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
+  const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; paths: string[] } | null>(null);
+  const currentPlayingGameRef = useRef(currentPlayingGame);
+  currentPlayingGameRef.current = currentPlayingGame;
 
   // ---- App update state ----
   // `null` = not checked yet / no update, object = newer version available
@@ -1565,6 +1569,18 @@ export default function App() {
         e.preventDefault();
         const input = document.querySelector<HTMLInputElement>(".search-bar input");
         if (input) input.focus();
+      }
+      // Ctrl+F12 → screenshot
+      if (e.ctrlKey && e.key === "F12") {
+        e.preventDefault();
+        const game = currentPlayingGameRef.current;
+        if (game) {
+          invoke<string>("take_screenshot", { gameName: game.name, console: game.console })
+            .then(() => showToast("📸 Screenshot saved!", "success"))
+            .catch(() => showToast("Screenshot failed", "error"));
+        } else {
+          showToast("No game running — launch a game first", "info");
+        }
       }
       // F11 → toggle fullscreen
       if (e.key === "F11") {
@@ -2716,6 +2732,7 @@ export default function App() {
           scheduleCloudSync();
         }
         loadPlaytime();
+        setCurrentPlayingGame(null);
         updatePresence("online");
         invoke("discord_set_idle").catch(() => {});
         setTimeout(() => checkAchievements(), 500);
@@ -3396,6 +3413,7 @@ export default function App() {
       });
       console.log("Backend Launch Success:", res);
       updatePresence("playing", rom.name, rom.console);
+      setCurrentPlayingGame({ name: rom.name, console: rom.console });
       if (rom.name) {
         setLaunchSplash({ gameName: rom.name, console: rom.console });
         setTimeout(() => setLaunchSplash(null), 2500);
@@ -6168,10 +6186,46 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); setShowCollectionModal(true); }}>
               <Package size={14} /> Nouvelle collection...
             </button>
+            <button className="rom-context-menu__btn" onClick={async () => {
+              const paths = await invoke<string[]>("get_screenshots", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
+              setScreenshotGallery({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, paths });
+              setRomContextMenu(null);
+            }}>
+              <Camera size={14} /> Screenshots
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Screenshots Gallery Modal */}
+      {screenshotGallery && (
+        <div className="rom-context-overlay" onClick={() => setScreenshotGallery(null)}>
+          <div className="screenshot-gallery" onClick={(e) => e.stopPropagation()}>
+            <div className="screenshot-gallery__header">
+              <h3><Camera size={16} /> {screenshotGallery.gameName}</h3>
+              <button className="btn btn--ghost btn--sm" onClick={() => setScreenshotGallery(null)}><X size={14} /></button>
+            </div>
+            {screenshotGallery.paths.length === 0 ? (
+              <p className="settings__field-desc" style={{ textAlign: "center", padding: 40 }}>
+                No screenshots yet. Press <strong>Ctrl+F12</strong> while playing to capture.
+              </p>
+            ) : (
+              <div className="screenshot-gallery__grid">
+                {screenshotGallery.paths.map(p => (
+                  <div key={p} className="screenshot-gallery__item">
+                    <img src={convertFileSrc(p)} alt="" />
+                    <button className="screenshot-gallery__delete" onClick={async () => {
+                      await invoke("delete_screenshot", { path: p });
+                      setScreenshotGallery(prev => prev ? { ...prev, paths: prev.paths.filter(x => x !== p) } : null);
+                    }}><Trash2 size={12} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
