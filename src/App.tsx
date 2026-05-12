@@ -1550,27 +1550,16 @@ export default function App() {
         const input = document.querySelector<HTMLInputElement>(".search-bar input");
         if (input) input.focus();
       }
-      // F11 → toggle Big Picture mode (fullscreen)
+      // F11 → toggle fullscreen
       if (e.key === "F11") {
         e.preventDefault();
         const win = getCurrentWindow();
-        if (bigPictureMode) {
-          setBigPictureMode(false);
-          win.setFullscreen(false).catch(() => {});
-        } else {
-          setBigPictureMode(true);
-          win.setFullscreen(true).catch(() => {});
-        }
-      }
-      // Escape → exit Big Picture
-      if (e.key === "Escape" && bigPictureMode) {
-        setBigPictureMode(false);
-        getCurrentWindow().setFullscreen(false).catch(() => {});
+        win.isFullscreen().then(fs => win.setFullscreen(!fs)).catch(() => {});
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [playtime, roms, bigPictureMode]);
+  }, [playtime, roms]);
 
   // ---- Load B2 config ----
   useEffect(() => {
@@ -2385,10 +2374,7 @@ export default function App() {
         }
         if (getAction("back")) {
           if (bpConsoleFilterRef.current) { setBpConsoleFilter(null); setBpSelectedIndex(0); }
-          else {
-            setBigPictureMode(false);
-            getCurrentWindow().setFullscreen(false).catch(() => {});
-          }
+          else setBigPictureMode(false);
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
@@ -3524,11 +3510,10 @@ export default function App() {
 
   const toggleFullscreen = async () => {
     if (!appWindow) return;
-    const enteringBP = !bigPictureMode;
-    setBigPictureMode(enteringBP);
     try {
-      await appWindow.setFullscreen(enteringBP);
-      setIsFullscreen(enteringBP);
+      const next = !isFullscreen;
+      await appWindow.setFullscreen(next);
+      setIsFullscreen(next);
     } catch (err) {
       console.error("Fullscreen error:", err);
     }
@@ -3536,10 +3521,7 @@ export default function App() {
 
   const exitBigPicture = useCallback(() => {
     setBigPictureMode(false);
-    if (appWindow) {
-      appWindow.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
-    }
-  }, [appWindow]);
+  }, []);
 
   useEffect(() => {
     if (bigPictureMode) {
@@ -3649,9 +3631,6 @@ export default function App() {
         )}
         <div className="titlebar__controls">
           <button className="titlebar__btn" onClick={minimize} title="Réduire"><Minus size={14} /></button>
-          <button className="titlebar__btn" onClick={maximize} title="Agrandir / Restaurer">
-            {isMaximized ? <Minimize2 size={12} /> : <Square size={12} />}
-          </button>
           <button className="titlebar__btn" onClick={toggleFullscreen} title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}>
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
