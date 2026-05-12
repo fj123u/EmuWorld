@@ -1907,11 +1907,28 @@ export default function App() {
     }
   }, [user, chatOpen, chatInput]);
 
+  const compressImage = (file: File, maxWidth = 800, quality = 0.7): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((blob) => resolve(blob!), "image/jpeg", quality);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const sendChatImage = useCallback(async (file: File) => {
     if (!user || !chatOpen) return;
-    const ext = file.name.split(".").pop() || "png";
-    const path = `chat/${user.id}/${Date.now()}.${ext}`;
-    const { error: uploadErr } = await supabase.storage.from("chat-images").upload(path, file, { contentType: file.type });
+    if (file.size > 10 * 1024 * 1024) { showToast("Image trop lourde (max 10 MB)", "error"); return; }
+    const compressed = await compressImage(file);
+    const path = `chat/${user.id}/${Date.now()}.jpg`;
+    const { error: uploadErr } = await supabase.storage.from("chat-images").upload(path, compressed, { contentType: "image/jpeg" });
     if (uploadErr) { showToast("Image upload failed", "error"); return; }
     const { data: urlData } = supabase.storage.from("chat-images").getPublicUrl(path);
     const imageUrl = urlData.publicUrl;
