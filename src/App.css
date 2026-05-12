@@ -5226,6 +5226,27 @@ body {
   opacity: 1;
 }
 
+.screenshot-gallery--all {
+  width: min(95vw, 1100px);
+  max-height: 85vh;
+}
+
+.screenshot-gallery__games {
+  padding: 12px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.screenshot-gallery__game-section {}
+
+.screenshot-gallery__game-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 10px;
+}
+
 /* ============================================
    BIG PICTURE MODE
    ============================================ */

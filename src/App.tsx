@@ -953,6 +953,8 @@ export default function App() {
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
   const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; paths: string[] } | null>(null);
+  const [allScreenshots, setAllScreenshots] = useState<[string, string, string[]][]>([]);
+  const [showAllScreenshots, setShowAllScreenshots] = useState(false);
   const currentPlayingGameRef = useRef(currentPlayingGame);
   currentPlayingGameRef.current = currentPlayingGame;
 
@@ -4125,6 +4127,13 @@ export default function App() {
                       <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(true)} title="Gérer les collections">
                         <Package size={14} />
                       </button>
+                      <button className="btn btn--ghost btn--sm" onClick={async () => {
+                        const all = await invoke<[string, string, string[]][]>("get_all_screenshots");
+                        setAllScreenshots(all);
+                        setShowAllScreenshots(true);
+                      }} title="Screenshots">
+                        <Camera size={14} />
+                      </button>
                       <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
                         <Download size={14} /> Import ROM
                       </button>
@@ -6290,6 +6299,44 @@ export default function App() {
                       await invoke("delete_screenshot", { path: p });
                       setScreenshotGallery(prev => prev ? { ...prev, paths: prev.paths.filter(x => x !== p) } : null);
                     }}><Trash2 size={12} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* All Screenshots Gallery Modal */}
+      {showAllScreenshots && (
+        <div className="rom-context-overlay" onClick={() => setShowAllScreenshots(false)}>
+          <div className="screenshot-gallery screenshot-gallery--all" onClick={(e) => e.stopPropagation()}>
+            <div className="screenshot-gallery__header">
+              <h3><Camera size={16} /> All Screenshots</h3>
+              <button className="btn btn--ghost btn--sm" onClick={() => setShowAllScreenshots(false)}><X size={14} /></button>
+            </div>
+            {allScreenshots.length === 0 ? (
+              <p className="settings__field-desc" style={{ textAlign: "center", padding: 40 }}>
+                No screenshots yet. Press <strong>Ctrl+F12</strong> while playing to capture.
+              </p>
+            ) : (
+              <div className="screenshot-gallery__games">
+                {allScreenshots.map(([gameName, consoleName, paths]) => (
+                  <div key={`${consoleName}-${gameName}`} className="screenshot-gallery__game-section">
+                    <h4 className="screenshot-gallery__game-title">{gameName} <span style={{ opacity: 0.5, fontSize: 12 }}>({consoleName})</span></h4>
+                    <div className="screenshot-gallery__grid">
+                      {paths.map(p => (
+                        <div key={p} className="screenshot-gallery__item">
+                          <img src={convertFileSrc(p)} alt="" />
+                          <button className="screenshot-gallery__delete" onClick={async () => {
+                            await invoke("delete_screenshot", { path: p });
+                            setAllScreenshots(prev => prev.map(([g, c, ps]): [string, string, string[]] =>
+                              g === gameName && c === consoleName ? [g, c, ps.filter(x => x !== p)] : [g, c, ps]
+                            ).filter(([, , ps]) => ps.length > 0));
+                          }}><Trash2 size={12} /></button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

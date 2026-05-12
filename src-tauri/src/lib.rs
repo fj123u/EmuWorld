@@ -3555,9 +3555,8 @@ fn set_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>, game
 }
 
 #[tauri::command]
-async fn take_screenshot(app_handle: tauri::AppHandle, game_name: String, console: String) -> Result<String, String> {
+fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
-    use tauri::Manager;
 
     let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     base.push("EmuWorld");
@@ -3573,12 +3572,6 @@ async fn take_screenshot(app_handle: tauri::AppHandle, game_name: String, consol
     let filepath = base.join(&filename);
     let path_str = filepath.to_string_lossy().to_string();
 
-    // Minimize EmuWorld so the emulator/game is visible for capture
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.minimize();
-    }
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-
     let ps_script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save(\"{}\"); $g.Dispose(); $bmp.Dispose()",
         path_str.replace('\\', "/")
@@ -3589,17 +3582,46 @@ async fn take_screenshot(app_handle: tauri::AppHandle, game_name: String, consol
         .output()
         .map_err(|e| format!("Failed to run screenshot: {}", e))?;
 
-    // Restore EmuWorld window
-    if let Some(window) = app_handle.get_webview_window("main") {
-        let _ = window.unminimize();
-    }
-
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Screenshot failed: {}", stderr));
     }
 
     Ok(filepath.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn get_all_screenshots() -> Vec<(String, String, Vec<String>)> {
+    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
+    base.push("EmuWorld");
+    base.push("screenshots");
+    let mut results: Vec<(String, String, Vec<String>)> = Vec::new();
+    if !base.exists() { return results; }
+    if let Ok(consoles) = fs::read_dir(&base) {
+        for console_entry in consoles.flatten() {
+            if !console_entry.path().is_dir() { continue; }
+            let console_name = console_entry.file_name().to_string_lossy().to_string();
+            if let Ok(games) = fs::read_dir(console_entry.path()) {
+                for game_entry in games.flatten() {
+                    if !game_entry.path().is_dir() { continue; }
+                    let game_name = game_entry.file_name().to_string_lossy().to_string();
+                    let mut paths: Vec<String> = Vec::new();
+                    if let Ok(files) = fs::read_dir(game_entry.path()) {
+                        for file in files.flatten() {
+                            if file.path().extension().map(|e| e == "png").unwrap_or(false) {
+                                paths.push(file.path().to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                    if !paths.is_empty() {
+                        paths.sort();
+                        results.push((game_name, console_name.clone(), paths));
+                    }
+                }
+            }
+        }
+    }
+    results
 }
 
 #[tauri::command]
@@ -3752,23 +3774,20 @@ pub fn run() {
                 let shortcut_handle = app.handle().clone();
                 app.global_shortcut().on_shortcut("ctrl+f12", move |_app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let handle = shortcut_handle.clone();
-                        tauri::async_runtime::spawn(async move {
-                            use tauri::Manager;
-                            let (game_name, console) = {
-                                let state = handle.state::<Mutex<CurrentPlayingState>>();
-                                let s = state.lock().unwrap();
-                                (s.game_name.clone(), s.console.clone())
-                            };
-                            if let (Some(name), Some(cons)) = (game_name, console) {
-                                match take_screenshot(handle.clone(), name, cons).await {
-                                    Ok(_) => { let _ = handle.emit("screenshot-taken", "ok"); }
-                                    Err(e) => { let _ = handle.emit("screenshot-error", e); }
-                                }
-                            } else {
-                                let _ = handle.emit("screenshot-error", "no_game_running");
+                        use tauri::Manager;
+                        let (game_name, console) = {
+                            let state = shortcut_handle.state::<Mutex<CurrentPlayingState>>();
+                            let s = state.lock().unwrap();
+                            (s.game_name.clone(), s.console.clone())
+                        };
+                        if let (Some(name), Some(cons)) = (game_name, console) {
+                            match take_screenshot(name, cons) {
+                                Ok(_) => { let _ = shortcut_handle.emit("screenshot-taken", "ok"); }
+                                Err(e) => { let _ = shortcut_handle.emit("screenshot-error", e); }
                             }
-                        });
+                        } else {
+                            let _ = shortcut_handle.emit("screenshot-error", "no_game_running");
+                        }
                     }
                 }).map_err(|e| eprintln!("[global-shortcut] failed: {}", e)).ok();
             }
@@ -3843,6 +3862,7 @@ pub fn run() {
             set_current_playing,
             take_screenshot,
             get_screenshots,
+            get_all_screenshots,
             delete_screenshot,
             clear_achievements,
             overwrite_achievements,
