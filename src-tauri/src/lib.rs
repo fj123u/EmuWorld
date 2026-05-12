@@ -3590,12 +3590,19 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     Ok(filepath.to_string_lossy().to_string())
 }
 
+#[derive(Serialize, Clone)]
+struct AllScreenshotsGroup {
+    game_name: String,
+    console: String,
+    screenshots: Vec<ScreenshotEntry>,
+}
+
 #[tauri::command]
-fn get_all_screenshots() -> Vec<(String, String, Vec<String>)> {
+fn get_all_screenshots() -> Vec<AllScreenshotsGroup> {
     let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     base.push("EmuWorld");
     base.push("screenshots");
-    let mut results: Vec<(String, String, Vec<String>)> = Vec::new();
+    let mut results: Vec<AllScreenshotsGroup> = Vec::new();
     if !base.exists() { return results; }
     if let Ok(consoles) = fs::read_dir(&base) {
         for console_entry in consoles.flatten() {
@@ -3605,17 +3612,23 @@ fn get_all_screenshots() -> Vec<(String, String, Vec<String>)> {
                 for game_entry in games.flatten() {
                     if !game_entry.path().is_dir() { continue; }
                     let game_name = game_entry.file_name().to_string_lossy().to_string();
-                    let mut paths: Vec<String> = Vec::new();
+                    let mut screenshots: Vec<ScreenshotEntry> = Vec::new();
                     if let Ok(files) = fs::read_dir(game_entry.path()) {
                         for file in files.flatten() {
                             if file.path().extension().map(|e| e == "png").unwrap_or(false) {
-                                paths.push(file.path().to_string_lossy().to_string());
+                                if let Ok(bytes) = fs::read(file.path()) {
+                                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                    screenshots.push(ScreenshotEntry {
+                                        path: file.path().to_string_lossy().to_string(),
+                                        data_url: format!("data:image/png;base64,{}", b64),
+                                    });
+                                }
                             }
                         }
                     }
-                    if !paths.is_empty() {
-                        paths.sort();
-                        results.push((game_name, console_name.clone(), paths));
+                    if !screenshots.is_empty() {
+                        screenshots.sort_by(|a, b| a.path.cmp(&b.path));
+                        results.push(AllScreenshotsGroup { game_name, console: console_name.clone(), screenshots });
                     }
                 }
             }
@@ -3624,8 +3637,14 @@ fn get_all_screenshots() -> Vec<(String, String, Vec<String>)> {
     results
 }
 
+#[derive(Serialize, Clone)]
+struct ScreenshotEntry {
+    path: String,
+    data_url: String,
+}
+
 #[tauri::command]
-fn get_screenshots(game_name: String, console: String) -> Vec<String> {
+fn get_screenshots(game_name: String, console: String) -> Vec<ScreenshotEntry> {
     let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     base.push("EmuWorld");
     base.push("screenshots");
@@ -3639,12 +3658,19 @@ fn get_screenshots(game_name: String, console: String) -> Vec<String> {
     let mut files: Vec<_> = fs::read_dir(&base)
         .map(|rd| rd.filter_map(|e| e.ok())
             .filter(|e| e.path().extension().map(|x| x == "png").unwrap_or(false))
-            .map(|e| e.path().to_string_lossy().to_string())
+            .map(|e| e.path())
             .collect())
         .unwrap_or_default();
     files.sort();
     files.reverse();
-    files
+    files.iter().filter_map(|p| {
+        let bytes = fs::read(p).ok()?;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+        Some(ScreenshotEntry {
+            path: p.to_string_lossy().to_string(),
+            data_url: format!("data:image/png;base64,{}", b64),
+        })
+    }).collect()
 }
 
 #[tauri::command]

@@ -952,8 +952,8 @@ export default function App() {
   // ---- Launch splash ----
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
-  const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; paths: string[] } | null>(null);
-  const [allScreenshots, setAllScreenshots] = useState<[string, string, string[]][]>([]);
+  const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; entries: { path: string; data_url: string }[] } | null>(null);
+  const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
   const currentPlayingGameRef = useRef(currentPlayingGame);
   currentPlayingGameRef.current = currentPlayingGame;
@@ -4128,7 +4128,7 @@ export default function App() {
                         <Package size={14} />
                       </button>
                       <button className="btn btn--ghost btn--sm" onClick={async () => {
-                        const all = await invoke<[string, string, string[]][]>("get_all_screenshots");
+                        const all = await invoke<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>("get_all_screenshots");
                         setAllScreenshots(all);
                         setShowAllScreenshots(true);
                       }} title="Screenshots">
@@ -6264,8 +6264,8 @@ export default function App() {
               <Package size={14} /> Nouvelle collection...
             </button>
             <button className="rom-context-menu__btn" onClick={async () => {
-              const paths = await invoke<string[]>("get_screenshots", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
-              setScreenshotGallery({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, paths });
+              const entries = await invoke<{ path: string; data_url: string }[]>("get_screenshots", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
+              setScreenshotGallery({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, entries });
               setRomContextMenu(null);
             }}>
               <Camera size={14} /> Screenshots
@@ -6286,18 +6286,18 @@ export default function App() {
               <h3><Camera size={16} /> {screenshotGallery.gameName}</h3>
               <button className="btn btn--ghost btn--sm" onClick={() => setScreenshotGallery(null)}><X size={14} /></button>
             </div>
-            {screenshotGallery.paths.length === 0 ? (
+            {screenshotGallery.entries.length === 0 ? (
               <p className="settings__field-desc" style={{ textAlign: "center", padding: 40 }}>
                 No screenshots yet. Press <strong>Ctrl+F12</strong> while playing to capture.
               </p>
             ) : (
               <div className="screenshot-gallery__grid">
-                {screenshotGallery.paths.map(p => (
-                  <div key={p} className="screenshot-gallery__item">
-                    <img src={convertFileSrc(p)} alt="" />
+                {screenshotGallery.entries.map(s => (
+                  <div key={s.path} className="screenshot-gallery__item">
+                    <img src={s.data_url} alt="" />
                     <button className="screenshot-gallery__delete" onClick={async () => {
-                      await invoke("delete_screenshot", { path: p });
-                      setScreenshotGallery(prev => prev ? { ...prev, paths: prev.paths.filter(x => x !== p) } : null);
+                      await invoke("delete_screenshot", { path: s.path });
+                      setScreenshotGallery(prev => prev ? { ...prev, entries: prev.entries.filter(x => x.path !== s.path) } : null);
                     }}><Trash2 size={12} /></button>
                   </div>
                 ))}
@@ -6321,18 +6321,20 @@ export default function App() {
               </p>
             ) : (
               <div className="screenshot-gallery__games">
-                {allScreenshots.map(([gameName, consoleName, paths]) => (
-                  <div key={`${consoleName}-${gameName}`} className="screenshot-gallery__game-section">
-                    <h4 className="screenshot-gallery__game-title">{gameName} <span style={{ opacity: 0.5, fontSize: 12 }}>({consoleName})</span></h4>
+                {allScreenshots.map(group => (
+                  <div key={`${group.console}-${group.game_name}`} className="screenshot-gallery__game-section">
+                    <h4 className="screenshot-gallery__game-title">{group.game_name} <span style={{ opacity: 0.5, fontSize: 12 }}>({group.console})</span></h4>
                     <div className="screenshot-gallery__grid">
-                      {paths.map(p => (
-                        <div key={p} className="screenshot-gallery__item">
-                          <img src={convertFileSrc(p)} alt="" />
+                      {group.screenshots.map(s => (
+                        <div key={s.path} className="screenshot-gallery__item">
+                          <img src={s.data_url} alt="" />
                           <button className="screenshot-gallery__delete" onClick={async () => {
-                            await invoke("delete_screenshot", { path: p });
-                            setAllScreenshots(prev => prev.map(([g, c, ps]): [string, string, string[]] =>
-                              g === gameName && c === consoleName ? [g, c, ps.filter(x => x !== p)] : [g, c, ps]
-                            ).filter(([, , ps]) => ps.length > 0));
+                            await invoke("delete_screenshot", { path: s.path });
+                            setAllScreenshots(prev => prev.map(g =>
+                              g.game_name === group.game_name && g.console === group.console
+                                ? { ...g, screenshots: g.screenshots.filter(x => x.path !== s.path) }
+                                : g
+                            ).filter(g => g.screenshots.length > 0));
                           }}><Trash2 size={12} /></button>
                         </div>
                       ))}
