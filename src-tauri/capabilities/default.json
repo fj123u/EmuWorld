@@ -29,6 +29,7 @@
     "shell:allow-open",
     "updater:default",
     "process:default",
-    "notification:default"
+    "notification:default",
+    "global-shortcut:allow-register"
   ]
 }

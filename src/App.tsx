@@ -1549,6 +1549,21 @@ export default function App() {
     return () => { unlisten.then(f => f()); };
   }, [loadData, showToast]);
 
+  // Global screenshot events (from Ctrl+F12 global shortcut registered in Rust)
+  useEffect(() => {
+    const u1 = listen<string>("screenshot-taken", () => {
+      showToast("📸 Screenshot saved!", "success");
+    });
+    const u2 = listen<string>("screenshot-error", (event) => {
+      if (event.payload === "no_game_running") {
+        showToast("No game running — launch a game first", "info");
+      } else {
+        showToast("Screenshot failed", "error");
+      }
+    });
+    return () => { u1.then(f => f()); u2.then(f => f()); };
+  }, [showToast]);
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1570,17 +1585,9 @@ export default function App() {
         const input = document.querySelector<HTMLInputElement>(".search-bar input");
         if (input) input.focus();
       }
-      // Ctrl+F12 → screenshot
+      // Ctrl+F12 → screenshot (fallback when app is focused; global shortcut handles background)
       if (e.ctrlKey && e.key === "F12") {
         e.preventDefault();
-        const game = currentPlayingGameRef.current;
-        if (game) {
-          invoke<string>("take_screenshot", { gameName: game.name, console: game.console })
-            .then(() => showToast("📸 Screenshot saved!", "success"))
-            .catch(() => showToast("Screenshot failed", "error"));
-        } else {
-          showToast("No game running — launch a game first", "info");
-        }
       }
       // F11 → toggle fullscreen
       if (e.key === "F11") {
@@ -2769,6 +2776,7 @@ export default function App() {
         }
         loadPlaytime();
         setCurrentPlayingGame(null);
+        invoke("set_current_playing", { gameName: null, console: null });
         updatePresence("online");
         invoke("discord_set_idle").catch(() => {});
         setTimeout(() => checkAchievements(), 500);
@@ -3461,6 +3469,7 @@ export default function App() {
       console.log("Backend Launch Success:", res);
       updatePresence("playing", rom.name, rom.console);
       setCurrentPlayingGame({ name: rom.name, console: rom.console });
+      invoke("set_current_playing", { gameName: rom.name, console: rom.console });
       if (rom.name) {
         setLaunchSplash({ gameName: rom.name, console: rom.console });
         setTimeout(() => setLaunchSplash(null), 2500);

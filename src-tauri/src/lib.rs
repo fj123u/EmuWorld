@@ -3,11 +3,18 @@ use regex::Regex;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::Emitter;
 use reqwest;
 use urlencoding;
 use base64::Engine;
 use std::io::Write;
+
+#[derive(Default)]
+struct CurrentPlayingState {
+    game_name: Option<String>,
+    console: Option<String>,
+}
 
 mod emulators;
 mod playtime;
@@ -3541,6 +3548,13 @@ struct FullExport {
 }
 
 #[tauri::command]
+fn set_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>, game_name: Option<String>, console: Option<String>) {
+    let mut s = state.lock().unwrap();
+    s.game_name = game_name;
+    s.console = console;
+}
+
+#[tauri::command]
 async fn take_screenshot(app_handle: tauri::AppHandle, game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
     use tauri::Manager;
@@ -3691,6 +3705,8 @@ fn import_config(json: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .manage(discord_rpc::RpcState::new())
+        .manage(Mutex::new(CurrentPlayingState::default()))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_fs::init())
@@ -3730,6 +3746,31 @@ pub fn run() {
                 // Start gamepad polling thread
                 let gamepad_handle = app.handle().clone();
                 gamepad::start_gamepad_thread(gamepad_handle);
+
+                // Register global Ctrl+F12 for screenshots (works even when game is focused)
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let shortcut_handle = app.handle().clone();
+                app.global_shortcut().on_shortcut("ctrl+f12", move |_app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let handle = shortcut_handle.clone();
+                        tauri::async_runtime::spawn(async move {
+                            use tauri::Manager;
+                            let (game_name, console) = {
+                                let state = handle.state::<Mutex<CurrentPlayingState>>();
+                                let s = state.lock().unwrap();
+                                (s.game_name.clone(), s.console.clone())
+                            };
+                            if let (Some(name), Some(cons)) = (game_name, console) {
+                                match take_screenshot(handle.clone(), name, cons).await {
+                                    Ok(_) => { let _ = handle.emit("screenshot-taken", "ok"); }
+                                    Err(e) => { let _ = handle.emit("screenshot-error", e); }
+                                }
+                            } else {
+                                let _ = handle.emit("screenshot-error", "no_game_running");
+                            }
+                        });
+                    }
+                }).map_err(|e| eprintln!("[global-shortcut] failed: {}", e)).ok();
             }
             Ok(())
         })
@@ -3799,6 +3840,7 @@ pub fn run() {
             import_config,
             read_text_file,
             watch_roms_directory,
+            set_current_playing,
             take_screenshot,
             get_screenshots,
             delete_screenshot,
