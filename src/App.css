@@ -5226,6 +5226,46 @@ body {
   opacity: 1;
 }
 
+.screenshot-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.screenshot-lightbox img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
+}
+
+.screenshot-lightbox__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.screenshot-lightbox__close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 .screenshot-gallery--all {
   width: min(95vw, 1100px);
   max-height: 85vh;

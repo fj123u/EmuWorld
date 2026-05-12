@@ -955,6 +955,7 @@ export default function App() {
   const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; entries: { path: string; data_url: string }[] } | null>(null);
   const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
+  const [screenshotLightbox, setScreenshotLightbox] = useState<string | null>(null);
   const currentPlayingGameRef = useRef(currentPlayingGame);
   currentPlayingGameRef.current = currentPlayingGame;
 
@@ -6294,7 +6295,7 @@ export default function App() {
               <div className="screenshot-gallery__grid">
                 {screenshotGallery.entries.map(s => (
                   <div key={s.path} className="screenshot-gallery__item">
-                    <img src={s.data_url} alt="" />
+                    <img src={s.data_url} alt="" onClick={() => setScreenshotLightbox(s.data_url)} />
                     <button className="screenshot-gallery__delete" onClick={async () => {
                       await invoke("delete_screenshot", { path: s.path });
                       setScreenshotGallery(prev => prev ? { ...prev, entries: prev.entries.filter(x => x.path !== s.path) } : null);
@@ -6327,7 +6328,7 @@ export default function App() {
                     <div className="screenshot-gallery__grid">
                       {group.screenshots.map(s => (
                         <div key={s.path} className="screenshot-gallery__item">
-                          <img src={s.data_url} alt="" />
+                          <img src={s.data_url} alt="" onClick={() => setScreenshotLightbox(s.data_url)} />
                           <button className="screenshot-gallery__delete" onClick={async () => {
                             await invoke("delete_screenshot", { path: s.path });
                             setAllScreenshots(prev => prev.map(g =>
@@ -6344,6 +6345,14 @@ export default function App() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Screenshot Lightbox */}
+      {screenshotLightbox && (
+        <div className="screenshot-lightbox" onClick={() => setScreenshotLightbox(null)}>
+          <img src={screenshotLightbox} alt="" />
+          <button className="screenshot-lightbox__close" onClick={() => setScreenshotLightbox(null)}><X size={20} /></button>
         </div>
       )}
 
