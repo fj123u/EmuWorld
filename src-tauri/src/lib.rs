@@ -3556,20 +3556,21 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S").to_string();
     let filename = format!("screenshot_{}.png", timestamp);
     let filepath = base.join(&filename);
+    let path_str = filepath.to_string_lossy().to_string();
 
-    // Use PowerShell to capture the primary screen
     let ps_script = format!(
-        r#"Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()"#,
-        filepath.to_string_lossy().replace('\\', "\\\\")
+        "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save(\"{}\"); $g.Dispose(); $bmp.Dispose()",
+        path_str.replace('\\', "/")
     );
 
     let output = Cmd::new("powershell")
-        .args(["-NoProfile", "-Command", &ps_script])
+        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script])
         .output()
         .map_err(|e| format!("Failed to run screenshot: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!("Screenshot failed: {}", String::from_utf8_lossy(&output.stderr)));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Screenshot failed: {}", stderr));
     }
 
     Ok(filepath.to_string_lossy().to_string())
