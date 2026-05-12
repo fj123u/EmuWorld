@@ -417,6 +417,31 @@ async fn launch_emulator(
         cmd.arg(&final_path);
     }
 
+    // Inject cheat codes for RetroArch
+    if let (Some(rom), Some(game_name), Some(console)) = (rom_path.as_ref(), rom_name.as_ref(), rom_console.as_ref()) {
+        let is_retroarch = use_retroarch || effective_id.starts_with("retroarch");
+        if is_retroarch {
+            let cheats = get_cheats(game_name.clone(), console.clone());
+            let enabled_cheats: Vec<&CheatCode> = cheats.iter().filter(|c| c.enabled).collect();
+            if !enabled_cheats.is_empty() {
+                let rom_stem = PathBuf::from(rom).file_stem()
+                    .unwrap_or_default().to_string_lossy().to_string();
+                let core_folder = ra_core.unwrap_or("").replace("_libretro.dll", "").replace(".dll", "");
+                let cheats_dir = install_dir.join("cheats").join(&core_folder);
+                let _ = fs::create_dir_all(&cheats_dir);
+                let cht_path = cheats_dir.join(format!("{}.cht", rom_stem));
+                let mut cht_content = format!("cheats = {}\n\n", enabled_cheats.len());
+                for (i, c) in enabled_cheats.iter().enumerate() {
+                    cht_content.push_str(&format!("cheat{}_desc = \"{}\"\n", i, c.name));
+                    cht_content.push_str(&format!("cheat{}_code = \"{}\"\n", i, c.code));
+                    cht_content.push_str(&format!("cheat{}_enable = true\n\n", i));
+                }
+                let _ = fs::write(&cht_path, &cht_content);
+                println!("[Launch] Wrote {} cheats to {:?}", enabled_cheats.len(), cht_path);
+            }
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;

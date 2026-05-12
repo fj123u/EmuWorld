@@ -6395,11 +6395,11 @@ export default function App() {
                           <span className="cheats-panel__item-type">{c.cheat_type}</span>
                         </div>
                         <div className="cheats-panel__item-actions">
-                          <button className={`btn btn--ghost btn--sm ${c.enabled ? "btn--active" : ""}`} onClick={async () => {
+                          <button className={`cheats-panel__toggle ${c.enabled ? "cheats-panel__toggle--on" : ""}`} onClick={async () => {
                             const updated = await invoke<CheatCodeEntry[]>("toggle_cheat", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, cheatId: c.id });
                             setCheatsPanel(prev => prev ? { ...prev, cheats: updated } : null);
                           }} title={c.enabled ? "Désactiver" : "Activer"}>
-                            {c.enabled ? <Check size={12} /> : <X size={12} />}
+                            <span className="cheats-panel__toggle-knob" />
                           </button>
                           <button className="btn btn--ghost btn--sm" onClick={async () => {
                             const updated = await invoke<CheatCodeEntry[]>("delete_cheat", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, cheatId: c.id });
