@@ -102,6 +102,14 @@ pub fn save(store: &AchievementsStore) -> Result<(), String> {
     std::fs::write(&path, data).map_err(|e| e.to_string())
 }
 
+pub fn clear() -> Result<(), String> {
+    save(&AchievementsStore::default())
+}
+
+pub fn overwrite(unlocked: HashMap<String, String>) -> Result<(), String> {
+    save(&AchievementsStore { unlocked })
+}
+
 pub fn get_all_with_status() -> Vec<Achievement> {
     let store = load();
     let defs = all_achievements();

@@ -2899,14 +2899,17 @@ export default function App() {
       if (!currentId) {
         // Sign-out: drop local history so the next signed-in user gets a clean slate.
         await invoke("clear_playtime").catch(() => {});
+        await invoke("clear_achievements").catch(() => {});
         await loadPlaytime();
+        await loadAchievements();
         return;
       }
-      // Sign-in: fetch this user's rows and replace the local store with them.
+      // Sign-in: fetch this user's playtime and achievements from cloud.
       try {
-        const [gamesRes, emusRes] = await Promise.all([
+        const [gamesRes, emusRes, achievRes] = await Promise.all([
           supabase.from("playtime_games").select("*").eq("user_id", currentId),
           supabase.from("playtime_emulators").select("*").eq("user_id", currentId),
+          supabase.from("user_achievements").select("*").eq("user_id", currentId),
         ]);
         const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
         for (const row of gamesRes.data || []) {
@@ -2928,11 +2931,19 @@ export default function App() {
         }
         await invoke("overwrite_playtime", { store: cloud });
         await loadPlaytime();
+
+        // Restore achievements from cloud
+        const unlocked: Record<string, string> = {};
+        for (const row of achievRes.data || []) {
+          unlocked[row.achievement_id] = row.unlocked_at;
+        }
+        await invoke("overwrite_achievements", { unlocked });
+        await loadAchievements();
       } catch (err) {
         console.error("[EmuWorld] Cloud pull failed:", err);
       }
     })();
-  }, [user, loadPlaytime]);
+  }, [user, loadPlaytime, loadAchievements]);
 
   const [isTogglingPublic, setIsTogglingPublic] = useState(false);
   const handleTogglePublicProfile = useCallback(async () => {

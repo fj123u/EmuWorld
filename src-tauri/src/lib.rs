@@ -3524,6 +3524,16 @@ fn unlock_achievement(id: String) -> Option<achievements::Achievement> {
     achievements::unlock_single(&id)
 }
 
+#[tauri::command]
+fn clear_achievements() -> Result<(), String> {
+    achievements::clear()
+}
+
+#[tauri::command]
+fn overwrite_achievements(unlocked: std::collections::HashMap<String, String>) -> Result<(), String> {
+    achievements::overwrite(unlocked)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct FullExport {
     config: AppConfig,
@@ -3779,6 +3789,8 @@ pub fn run() {
             take_screenshot,
             get_screenshots,
             delete_screenshot,
+            clear_achievements,
+            overwrite_achievements,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
