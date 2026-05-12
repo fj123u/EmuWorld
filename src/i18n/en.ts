@@ -282,6 +282,20 @@ const en: Translations = {
     signedOut: "Signed out",
   },
 
+  // Gamepad labels
+  gamepad: {
+    confirm: "Confirm",
+    back: "Back",
+  },
+
+  // Big Picture
+  bigPicture: {
+    exit: "Exit",
+    title: "Big Picture Mode",
+    games: "games",
+    game: "game",
+  },
+
   // Toasts
   toast: {
     connected: "Connected successfully! 🎉",

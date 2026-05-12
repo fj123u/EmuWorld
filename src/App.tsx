@@ -705,8 +705,48 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   );
 };
 
-const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: { 
-  rom: RomStoreEntry, 
+const BigPictureCard = ({ rom, focused, entry, onLaunch }: {
+  rom: RomFile;
+  focused: boolean;
+  entry?: GameEntry;
+  onLaunch: () => void;
+}) => {
+  const [cover, setCover] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("fetch_boxart", { gameName: rom.name, console: rom.console })
+      .then(setCover)
+      .catch(() => {});
+  }, [rom.name, rom.console]);
+
+  return (
+    <motion.div
+      className={`bp-card gamepad-nav-item ${focused ? "bp-card--focused" : ""}`}
+      onClick={onLaunch}
+      whileHover={{ scale: 1.04 }}
+      whileTap={{ scale: 0.96 }}
+    >
+      <div className="bp-card__cover">
+        {cover ? (
+          <img src={cover} alt={rom.name} />
+        ) : (
+          <div className="bp-card__placeholder">
+            <span>🎮</span>
+          </div>
+        )}
+      </div>
+      <div className="bp-card__info">
+        <div className="bp-card__name">{rom.name}</div>
+        {entry && entry.seconds > 0 && (
+          <div className="bp-card__playtime">⏱ {formatPlaytime(entry.seconds)}</div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
+  rom: RomStoreEntry,
   onDownload: (rom: RomStoreEntry) => void,
   downloading: boolean,
   downloaded: boolean,
@@ -890,6 +930,9 @@ export default function App() {
     }
   }, []);
 
+  const [bigPictureMode, setBigPictureMode] = useState(false);
+  const [bpSelectedIndex, setBpSelectedIndex] = useState(0);
+  const [bpConsoleFilter, setBpConsoleFilter] = useState<string | null>(null);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -1507,10 +1550,19 @@ export default function App() {
         const input = document.querySelector<HTMLInputElement>(".search-bar input");
         if (input) input.focus();
       }
+      // F11 → toggle Big Picture mode
+      if (e.key === "F11") {
+        e.preventDefault();
+        setBigPictureMode(prev => !prev);
+      }
+      // Escape → exit Big Picture
+      if (e.key === "Escape" && bigPictureMode) {
+        setBigPictureMode(false);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [playtime, roms]);
+  }, [playtime, roms, bigPictureMode]);
 
   // ---- Load B2 config ----
   useEffect(() => {
@@ -2123,6 +2175,12 @@ export default function App() {
   pageRef.current = page;
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
+  const bigPictureModeRef = useRef(bigPictureMode);
+  bigPictureModeRef.current = bigPictureMode;
+  const bpSelectedIndexRef = useRef(bpSelectedIndex);
+  bpSelectedIndexRef.current = bpSelectedIndex;
+  const bpConsoleFilterRef = useRef(bpConsoleFilter);
+  bpConsoleFilterRef.current = bpConsoleFilter;
   const gamepadKeyboardRef = useRef(gamepadKeyboard);
   gamepadKeyboardRef.current = gamepadKeyboard;
   const remapReadyRef = useRef(false);
@@ -2291,6 +2349,35 @@ export default function App() {
         // B = close menu
         if (getAction("back")) {
           setGamepadContextMenu(null);
+        }
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
+      // Big Picture mode navigation
+      if (bigPictureModeRef.current) {
+        if (moveDown || moveUp || moveRight || moveLeft) {
+          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
+          if (items.length > 0) {
+            const cols = Math.max(1, Math.round((items[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (items[0]?.clientWidth ?? 200) + 20)));
+            let idx = bpSelectedIndexRef.current;
+            if (moveRight) idx = Math.min(idx + 1, items.length - 1);
+            if (moveLeft) idx = Math.max(idx - 1, 0);
+            if (moveDown) idx = Math.min(idx + cols, items.length - 1);
+            if (moveUp) idx = Math.max(idx - cols, 0);
+            setBpSelectedIndex(idx);
+            items.forEach(el => el.classList.remove("gamepad-focused"));
+            items[idx]?.classList.add("gamepad-focused");
+            items[idx]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        }
+        if (getAction("confirm")) {
+          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
+          items[bpSelectedIndexRef.current]?.click();
+        }
+        if (getAction("back")) {
+          if (bpConsoleFilterRef.current) { setBpConsoleFilter(null); setBpSelectedIndex(0); }
+          else setBigPictureMode(false);
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
@@ -3435,6 +3522,85 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    if (!appWindow) return;
+    if (bigPictureMode) {
+      appWindow.setFullscreen(true).then(() => setIsFullscreen(true)).catch(() => {});
+      setBpSelectedIndex(0);
+      setBpConsoleFilter(null);
+    } else {
+      appWindow.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  }, [bigPictureMode, appWindow]);
+
+  const bpRoms = bpConsoleFilter ? roms.filter(r => r.console === bpConsoleFilter) : roms;
+  const bpConsoles = [...new Set(roms.map(r => r.console))].sort();
+
+  if (bigPictureMode) {
+    return (
+      <div className="big-picture">
+        <div className="big-picture__header">
+          <div className="big-picture__logo">🎮 EmuWorld</div>
+          <Clock />
+          <button className="big-picture__exit" onClick={() => setBigPictureMode(false)}>
+            <X size={20} /> ESC
+          </button>
+        </div>
+
+        {!bpConsoleFilter ? (
+          <div className="big-picture__consoles">
+            <h2 className="big-picture__section-title">{t("nav.library")}</h2>
+            <div className="big-picture__console-grid">
+              {bpConsoles.map((con, i) => {
+                const count = roms.filter(r => r.console === con).length;
+                return (
+                  <motion.button
+                    key={con}
+                    className={`big-picture__console-card gamepad-nav-item ${bpSelectedIndex === i ? "big-picture__console-card--focused" : ""}`}
+                    onClick={() => { setBpConsoleFilter(con); setBpSelectedIndex(0); }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    <ConsoleLogo name={con} size={48} />
+                    <span className="big-picture__console-name">{con}</span>
+                    <span className="big-picture__console-count">{count} {count === 1 ? "jeu" : "jeux"}</span>
+                  </motion.button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="big-picture__games">
+            <div className="big-picture__breadcrumb">
+              <button className="big-picture__back gamepad-nav-item" onClick={() => { setBpConsoleFilter(null); setBpSelectedIndex(0); }}>
+                ← {t("nav.library")}
+              </button>
+              <span className="big-picture__current-console">
+                <ConsoleLogo name={bpConsoleFilter} size={24} /> {bpConsoleFilter}
+              </span>
+              <span className="big-picture__game-count">{bpRoms.length} {bpRoms.length === 1 ? "jeu" : "jeux"}</span>
+            </div>
+            <div className="big-picture__game-grid">
+              {bpRoms.map((rom, i) => (
+                <BigPictureCard
+                  key={rom.path}
+                  rom={rom}
+                  focused={bpSelectedIndex === i}
+                  entry={playtime.games[`${rom.console}::${rom.name}`]}
+                  onLaunch={() => handleLaunch(rom)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="big-picture__footer">
+          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {t("gamepad.back")} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="titlebar" data-tauri-drag-region onDoubleClick={maximize}>
@@ -3573,6 +3739,14 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><FileText size={16} /></span>
               {t("nav.changelogs")}
+            </button>
+            <button
+              className="sidebar__item sidebar__item--bigpicture"
+              onClick={() => setBigPictureMode(true)}
+              title="Big Picture Mode (F11)"
+            >
+              <span className="sidebar__item-icon"><Maximize2 size={16} /></span>
+              Big Picture
             </button>
           </div>
 

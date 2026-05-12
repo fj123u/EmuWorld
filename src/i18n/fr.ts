@@ -280,6 +280,20 @@ const fr = {
     signedOut: "Déconnecté",
   },
 
+  // Gamepad labels
+  gamepad: {
+    confirm: "Confirmer",
+    back: "Retour",
+  },
+
+  // Big Picture
+  bigPicture: {
+    exit: "Quitter",
+    title: "Mode Big Picture",
+    games: "jeux",
+    game: "jeu",
+  },
+
   // Toasts
   toast: {
     connected: "Connecté avec succès ! 🎉",

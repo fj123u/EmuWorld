@@ -49,7 +49,7 @@
 - [x] **Vue en liste / grille toggle** *(quick win)* — switcher entre la grille de covers actuelle et une vue tableau (nom, console, temps joué, dernier lancement, note)
 - [x] **Tri et filtres avancés** *(moyen)* — trier par : temps joué, dernier lancé, alphabétique, note perso, nb de launches. Filtrer par : non-joués, favoris, complétés
 - [x] **Catégories / Collections custom** *(moyen)* — l'utilisateur crée ses propres playlists de jeux ("RPGs du moment", "Couch co-op", "Backlog", "Terminés")
-- [ ] **Mode Fullscreen / Big Picture** *(gros)* — UI alternative optimisée TV avec grosses covers, navigation 100% manette, pas de sidebar, style Steam Big Picture
+- [x] **Mode Fullscreen / Big Picture** *(gros)* — UI alternative optimisée TV avec grosses covers, navigation 100% manette, pas de sidebar, style Steam Big Picture
 - [x] **Fond d'écran dynamique** *(quick win)* — utiliser la cover du jeu sélectionné en background blur derrière le contenu principal (style PlayStation Store)
 - [x] **Onboarding première utilisation** *(moyen)* — wizard de setup : choisir émulateurs, scanner dossier ROMs, connecter compte, tuto manette. Sinon l'app est intimidante au first launch
 
