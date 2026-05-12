@@ -427,7 +427,7 @@ async fn launch_emulator(
             let is_retroarch = use_retroarch || effective_id.starts_with("retroarch");
 
             if is_retroarch {
-                // RetroArch: write .cht in cheats/<core>/
+                // RetroArch: write .cht and ensure retroarch.cfg enables auto-load
                 let core_folder = ra_core.unwrap_or("").replace("_libretro.dll", "").replace(".dll", "");
                 let cheats_dir = install_dir.join("cheats").join(&core_folder);
                 let _ = fs::create_dir_all(&cheats_dir);
@@ -439,6 +439,39 @@ async fn launch_emulator(
                     content.push_str(&format!("cheat{}_enable = true\n\n", i));
                 }
                 let _ = fs::write(&cht_path, &content);
+
+                // Enable auto-apply in retroarch.cfg
+                let cfg_path = install_dir.join("retroarch.cfg");
+                if cfg_path.exists() {
+                    let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+                    let cheats_dir_str = install_dir.join("cheats").to_string_lossy().replace('\\', "/");
+                    let settings = [
+                        ("apply_cheats_after_load", "true"),
+                        ("apply_cheats_after_toggle", "true"),
+                        ("cheat_database_path", &cheats_dir_str),
+                    ];
+                    for (key, val) in settings {
+                        let pattern = format!("{} = ", key);
+                        if let Some(pos) = cfg.find(&pattern) {
+                            let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
+                            cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
+                        } else {
+                            cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
+                        }
+                    }
+                    let _ = fs::write(&cfg_path, &cfg);
+                }
+
+                // Pass the cheat file explicitly via --appendconfig
+                let override_cfg = install_dir.join("emuworld_cheats.cfg");
+                let override_content = format!(
+                    "cheat_file_load = \"{}\"\napply_cheats_after_load = \"true\"\n",
+                    cht_path.to_string_lossy().replace('\\', "/")
+                );
+                let _ = fs::write(&override_cfg, &override_content);
+                cmd.arg("--appendconfig");
+                cmd.arg(&override_cfg);
+
                 println!("[Launch] RetroArch: wrote {} cheats to {:?}", enabled_cheats.len(), cht_path);
 
             } else if effective_id == "dolphin" {

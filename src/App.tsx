@@ -6467,7 +6467,7 @@ export default function App() {
                       </button>
                     </div>
                     <div className="cheats-panel__list">
-                      {cheatsPanel.onlineResults.slice(0, 20).map(c => (
+                      {cheatsPanel.onlineResults.filter(c => !cheatsPanel.cheats.some(s => s.code === c.code)).slice(0, 20).map(c => (
                         <div key={c.id} className="cheats-panel__item">
                           <div className="cheats-panel__item-info">
                             <span className="cheats-panel__item-name">{c.name}</span>
