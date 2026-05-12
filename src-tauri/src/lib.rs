@@ -3541,8 +3541,9 @@ struct FullExport {
 }
 
 #[tauri::command]
-fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
+async fn take_screenshot(app_handle: tauri::AppHandle, game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
+    use tauri::Manager;
 
     let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
     base.push("EmuWorld");
@@ -3558,6 +3559,12 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     let filepath = base.join(&filename);
     let path_str = filepath.to_string_lossy().to_string();
 
+    // Minimize EmuWorld so the emulator/game is visible for capture
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.minimize();
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
     let ps_script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save(\"{}\"); $g.Dispose(); $bmp.Dispose()",
         path_str.replace('\\', "/")
@@ -3567,6 +3574,11 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
         .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script])
         .output()
         .map_err(|e| format!("Failed to run screenshot: {}", e))?;
+
+    // Restore EmuWorld window
+    if let Some(window) = app_handle.get_webview_window("main") {
+        let _ = window.unminimize();
+    }
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
