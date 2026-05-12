@@ -5285,7 +5285,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 20px;
-  flex: 1;
+  align-content: start;
 }
 
 /* Big Picture Card */
@@ -5310,6 +5310,7 @@ body {
   aspect-ratio: 3/4;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.02);
+  max-height: 260px;
 }
 
 .bp-card__cover img {

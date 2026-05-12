@@ -3523,15 +3523,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!appWindow) return;
     if (bigPictureMode) {
-      appWindow.setFullscreen(true).then(() => setIsFullscreen(true)).catch(() => {});
       setBpSelectedIndex(0);
       setBpConsoleFilter(null);
-    } else {
-      appWindow.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
     }
-  }, [bigPictureMode, appWindow]);
+  }, [bigPictureMode]);
 
   const bpRoms = bpConsoleFilter ? roms.filter(r => r.console === bpConsoleFilter) : roms;
   const bpConsoles = [...new Set(roms.map(r => r.console))].sort();
