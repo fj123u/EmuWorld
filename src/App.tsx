@@ -6467,6 +6467,13 @@ export default function App() {
                             <span className="cheats-panel__item-name">{c.name}</span>
                             <code className="cheats-panel__item-code">{c.code}</code>
                           </div>
+                          <button className="btn btn--primary btn--sm" onClick={async () => {
+                            const updated = await invoke<CheatCodeEntry[]>("import_cheats", { gameName: cheatsPanel.gameName, console: cheatsPanel.console, newCheats: [c] });
+                            setCheatsPanel(prev => prev ? { ...prev, cheats: updated, onlineResults: prev.onlineResults.filter(x => x.id !== c.id) } : null);
+                            showToast(`"${c.name}" ajouté`, "success");
+                          }} title="Ajouter ce code">
+                            <Download size={12} />
+                          </button>
                         </div>
                       ))}
                       {cheatsPanel.onlineResults.length > 20 && (
