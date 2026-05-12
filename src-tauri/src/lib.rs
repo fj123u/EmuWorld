@@ -3762,50 +3762,57 @@ fn delete_cheat(game_name: String, console: String, cheat_id: String) -> Result<
 #[tauri::command]
 async fn search_cheats_online(game_name: String, console: String) -> Result<Vec<CheatCode>, String> {
     let console_folder = match console.to_lowercase().as_str() {
-        "nes" | "nintendo entertainment system" => "Nintendo - Nintendo Entertainment System",
-        "snes" | "super nintendo" => "Nintendo - Super Nintendo Entertainment System",
-        "gb" | "game boy" => "Nintendo - Game Boy",
-        "gbc" | "game boy color" => "Nintendo - Game Boy Color",
-        "gba" | "game boy advance" => "Nintendo - Game Boy Advance",
-        "n64" | "nintendo 64" => "Nintendo - Nintendo 64",
-        "nds" | "nintendo ds" => "Nintendo - Nintendo DS",
-        "genesis" | "mega drive" | "megadrive" => "Sega - Mega Drive - Genesis",
-        "master system" => "Sega - Master System - Mark III",
-        "game gear" => "Sega - Game Gear",
-        "psx" | "ps1" | "playstation" => "Sony - PlayStation",
-        "psp" => "Sony - PlayStation Portable",
-        "pce" | "pc engine" | "turbografx" => "NEC - PC Engine - TurboGrafx 16",
+        "nes" | "nintendo entertainment system" | "famicom" => "Nintendo - Nintendo Entertainment System",
+        "snes" | "super nintendo" | "super famicom" | "super nes" => "Nintendo - Super Nintendo Entertainment System",
+        "gb" | "game boy" | "gameboy" => "Nintendo - Game Boy",
+        "gbc" | "game boy color" | "gameboy color" => "Nintendo - Game Boy Color",
+        "gba" | "game boy advance" | "gameboy advance" => "Nintendo - Game Boy Advance",
+        "n64" | "nintendo 64" | "nintendo64" => "Nintendo - Nintendo 64",
+        "nds" | "nintendo ds" | "ds" => "Nintendo - Nintendo DS",
+        "genesis" | "mega drive" | "megadrive" | "sega genesis" => "Sega - Mega Drive - Genesis",
+        "master system" | "sega master system" | "sms" => "Sega - Master System - Mark III",
+        "game gear" | "gamegear" | "sega game gear" => "Sega - Game Gear",
+        "psx" | "ps1" | "playstation" | "playstation 1" | "ps one" => "Sony - PlayStation",
+        "psp" | "playstation portable" => "Sony - PlayStation Portable",
+        "pce" | "pc engine" | "turbografx" | "turbografx-16" => "NEC - PC Engine - TurboGrafx 16",
+        "gamecube" | "gc" | "nintendo gamecube" => "Nintendo - GameCube",
+        "wii" | "nintendo wii" => "Nintendo - Wii",
+        "dreamcast" | "sega dreamcast" => "Sega - Dreamcast",
+        "saturn" | "sega saturn" => "Sega - Saturn",
         _ => return Ok(vec![]),
     };
 
     let clean = game_name
-        .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '(', ')', '[', ']'], "")
+        .replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '[', ']'], "")
+        .trim().to_string();
+    let clean_no_region = clean
+        .replace("(Europe)", "").replace("(USA)", "").replace("(Japan)", "")
+        .replace("(World)", "").replace("(En)", "").replace("(Fr)", "")
         .trim().to_string();
 
-    let encoded_folder = urlencoding::encode(console_folder);
-    let encoded_name = urlencoding::encode(&clean);
-    let url = format!(
-        "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/{}/{}.cht",
-        encoded_folder, encoded_name
-    );
-
     let client = reqwest::Client::new();
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    if !resp.status().is_success() {
-        let url2 = format!(
+    let encoded_folder = urlencoding::encode(console_folder);
+
+    let candidates = vec![
+        clean.clone(),
+        clean_no_region.clone(),
+    ];
+
+    for name in candidates {
+        let encoded_name = urlencoding::encode(&name);
+        let url = format!(
             "https://raw.githubusercontent.com/libretro/libretro-database/master/cht/{}/{}.cht",
-            encoded_folder,
-            urlencoding::encode(&clean.replace(' ', "%20"))
+            encoded_folder, encoded_name
         );
-        let resp2 = client.get(&url2).send().await.map_err(|e| e.to_string())?;
-        if !resp2.status().is_success() {
-            return Ok(vec![]);
+        let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+        if resp.status().is_success() {
+            let text = resp.text().await.map_err(|e| e.to_string())?;
+            let parsed = parse_cht_file(&text);
+            if !parsed.is_empty() { return Ok(parsed); }
         }
-        let text = resp2.text().await.map_err(|e| e.to_string())?;
-        return Ok(parse_cht_file(&text));
     }
-    let text = resp.text().await.map_err(|e| e.to_string())?;
-    Ok(parse_cht_file(&text))
+
+    Ok(vec![])
 }
 
 fn parse_cht_file(content: &str) -> Vec<CheatCode> {
@@ -3815,24 +3822,17 @@ fn parse_cht_file(content: &str) -> Vec<CheatCode> {
 
     for line in content.lines() {
         let line = line.trim();
-        if line.starts_with("cheat") {
-            if let Some(rest) = line.strip_prefix("cheat") {
-                let rest = rest.trim();
+        if let Some((key, val)) = line.split_once('=') {
+            let key = key.trim();
+            let val = val.trim().trim_matches('"');
+            if let Some(rest) = key.strip_prefix("cheat") {
                 if let Some(idx_str) = rest.strip_suffix("_desc") {
-                    let idx_str = idx_str.trim_start_matches('_');
                     if let Ok(idx) = idx_str.parse::<usize>() {
-                        if let Some(val) = line.split('=').nth(1) {
-                            let val = val.trim().trim_matches('"');
-                            names.insert(idx, val.to_string());
-                        }
+                        names.insert(idx, val.to_string());
                     }
                 } else if let Some(idx_str) = rest.strip_suffix("_code") {
-                    let idx_str = idx_str.trim_start_matches('_');
                     if let Ok(idx) = idx_str.parse::<usize>() {
-                        if let Some(val) = line.split('=').nth(1) {
-                            let val = val.trim().trim_matches('"');
-                            codes.insert(idx, val.to_string());
-                        }
+                        codes.insert(idx, val.to_string());
                     }
                 }
             }
@@ -3842,12 +3842,13 @@ fn parse_cht_file(content: &str) -> Vec<CheatCode> {
     let max_idx = names.keys().chain(codes.keys()).max().copied().unwrap_or(0);
     for i in 0..=max_idx {
         if let Some(code) = codes.get(&i) {
+            if code.is_empty() { continue; }
             let name = names.get(&i).cloned().unwrap_or_else(|| format!("Cheat {}", i + 1));
             cheats.push(CheatCode {
                 id: format!("online_{}", i),
                 name,
                 code: code.clone(),
-                cheat_type: "RetroArch".to_string(),
+                cheat_type: "Game Genie".to_string(),
                 enabled: false,
             });
         }
