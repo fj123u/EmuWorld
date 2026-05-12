@@ -1550,14 +1550,22 @@ export default function App() {
         const input = document.querySelector<HTMLInputElement>(".search-bar input");
         if (input) input.focus();
       }
-      // F11 → toggle Big Picture mode
+      // F11 → toggle Big Picture mode (fullscreen)
       if (e.key === "F11") {
         e.preventDefault();
-        setBigPictureMode(prev => !prev);
+        const win = getCurrentWindow();
+        if (bigPictureMode) {
+          setBigPictureMode(false);
+          win.setFullscreen(false).catch(() => {});
+        } else {
+          setBigPictureMode(true);
+          win.setFullscreen(true).catch(() => {});
+        }
       }
       // Escape → exit Big Picture
       if (e.key === "Escape" && bigPictureMode) {
         setBigPictureMode(false);
+        getCurrentWindow().setFullscreen(false).catch(() => {});
       }
     };
     window.addEventListener("keydown", handler);
@@ -2377,7 +2385,10 @@ export default function App() {
         }
         if (getAction("back")) {
           if (bpConsoleFilterRef.current) { setBpConsoleFilter(null); setBpSelectedIndex(0); }
-          else setBigPictureMode(false);
+          else {
+            setBigPictureMode(false);
+            getCurrentWindow().setFullscreen(false).catch(() => {});
+          }
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
@@ -3513,14 +3524,22 @@ export default function App() {
 
   const toggleFullscreen = async () => {
     if (!appWindow) return;
+    const enteringBP = !bigPictureMode;
+    setBigPictureMode(enteringBP);
     try {
-      const next = !isFullscreen;
-      await appWindow.setFullscreen(next);
-      setIsFullscreen(next);
+      await appWindow.setFullscreen(enteringBP);
+      setIsFullscreen(enteringBP);
     } catch (err) {
       console.error("Fullscreen error:", err);
     }
   };
+
+  const exitBigPicture = useCallback(() => {
+    setBigPictureMode(false);
+    if (appWindow) {
+      appWindow.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  }, [appWindow]);
 
   useEffect(() => {
     if (bigPictureMode) {
@@ -3538,7 +3557,7 @@ export default function App() {
         <div className="big-picture__header">
           <div className="big-picture__logo">🎮 EmuWorld</div>
           <Clock />
-          <button className="big-picture__exit" onClick={() => setBigPictureMode(false)}>
+          <button className="big-picture__exit" onClick={exitBigPicture}>
             <X size={20} /> ESC
           </button>
         </div>
@@ -3735,14 +3754,6 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><FileText size={16} /></span>
               {t("nav.changelogs")}
-            </button>
-            <button
-              className="sidebar__item sidebar__item--bigpicture"
-              onClick={() => setBigPictureMode(true)}
-              title="Big Picture Mode (F11)"
-            >
-              <span className="sidebar__item-icon"><Maximize2 size={16} /></span>
-              Big Picture
             </button>
           </div>
 
