@@ -494,17 +494,119 @@ async fn launch_emulator(
                     let _ = fs::write(&cfg_path, &cfg);
                 }
 
-                // After RetroArch starts, simulate keyboard shortcut to load cheats
-                // RetroArch hotkey: F1 (menu) is default, but we use the cheat toggle key
-                // Instead, use a PowerShell script to simulate the keyboard sequence:
-                // Wait → Press U (cheat_toggle hotkey, toggles cheat on/off)
-                // But first the cheats need to BE loaded, so we use --appendconfig with .cht format
-                let append_cfg = install_dir.join("emuworld_cheats.cfg");
-                let _ = fs::write(&append_cfg, &cht_content);
-                cmd.arg("--appendconfig");
-                cmd.arg(&append_cfg);
+                // Use WRITE_CORE_RAM via UDP to poke cheat values into memory
+                // Decode Game Genie codes to address:value, then write via network cmd
+                fn decode_game_genie_nes(code: &str) -> Option<(u16, u8)> {
+                    let code = code.to_uppercase();
+                    let chars: Vec<char> = code.chars().collect();
+                    if chars.len() != 6 && chars.len() != 8 { return None; }
+                    let hex_map = |c: char| -> Option<u8> {
+                        match c {
+                            'A' => Some(0), 'P' => Some(1), 'Z' => Some(2), 'L' => Some(3),
+                            'G' => Some(4), 'I' => Some(5), 'T' => Some(6), 'Y' => Some(7),
+                            'E' => Some(8), 'O' => Some(9), 'X' => Some(10), 'U' => Some(11),
+                            'K' => Some(12), 'S' => Some(13), 'V' => Some(14), 'N' => Some(15),
+                            _ => None,
+                        }
+                    };
+                    let n: Vec<u8> = chars.iter().filter_map(|&c| hex_map(c)).collect();
+                    if n.len() != chars.len() { return None; }
+                    let address: u16 = 0x8000 +
+                        ((((n[3] as u16) & 7) << 12) |
+                         (((n[5] as u16) & 7) << 8) | ((n[5] as u16 & 8) << 8) |
+                         (((n[4] as u16) & 7) << 4) | ((n[4] as u16 & 8) << 4) |
+                         ((n[2] as u16) & 7) | ((n[2] as u16 & 8)));
+                    let value: u8 =
+                        (((n[1] & 7) << 4) | (n[1] & 8)) |
+                        ((n[0] & 7) | ((if chars.len() == 8 { n[7] } else { n[5] }) & 8));
+                    Some((address, value))
+                }
 
-                println!("[Launch] RetroArch: wrote {} cheats to multiple locations + appendconfig", enabled_cheats.len());
+                // Ensure network_cmd is enabled
+                if cfg_path.exists() {
+                    let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+                    let pattern = "network_cmd_enable = ";
+                    if let Some(pos) = cfg.find(pattern) {
+                        let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
+                        cfg.replace_range(pos..end, "network_cmd_enable = \"true\"");
+                    } else {
+                        cfg.push_str("\nnetwork_cmd_enable = \"true\"\n");
+                    }
+                    let _ = fs::write(&cfg_path, &cfg);
+                }
+
+                // Build list of RAM writes to repeat
+                let cheats_for_ram: Vec<(String, u8)> = enabled_cheats.iter()
+                    .map(|c| (c.code.clone(), cht_handler(&c.cheat_type)))
+                    .collect();
+                std::thread::spawn(move || {
+                    use std::net::UdpSocket;
+                    std::thread::sleep(std::time::Duration::from_secs(4));
+                    let socket = match UdpSocket::bind("127.0.0.1:0") {
+                        Ok(s) => s,
+                        Err(_) => return,
+                    };
+                    let addr = "127.0.0.1:55355";
+
+                    // Collect all address:value pairs to poke
+                    let mut pokes: Vec<(u32, u8)> = Vec::new();
+                    for (code, handler) in &cheats_for_ram {
+                        match *handler {
+                            0 => {
+                                for part in code.split('+') {
+                                    let part = part.trim();
+                                    if let Some((addr_s, val_s)) = part.split_once(':') {
+                                        if let (Ok(a), Ok(v)) = (
+                                            u32::from_str_radix(addr_s.trim_start_matches("0x").trim_start_matches("0X"), 16),
+                                            u8::from_str_radix(val_s.trim_start_matches("0x").trim_start_matches("0X"), 16)
+                                        ) {
+                                            pokes.push((a, v));
+                                        }
+                                    }
+                                }
+                            },
+                            1 => {
+                                if let Some((a, v)) = decode_game_genie_nes(code) {
+                                    pokes.push((a as u32, v));
+                                }
+                            },
+                            2 => {
+                                let code_clean = code.replace(' ', "").replace('-', "");
+                                for part in code_clean.split('+') {
+                                    let part = part.trim();
+                                    if part.len() == 8 {
+                                        if let (Ok(a), Ok(v)) = (
+                                            u16::from_str_radix(&part[2..6], 16),
+                                            u8::from_str_radix(&part[6..8], 16)
+                                        ) {
+                                            pokes.push((a as u32, v));
+                                        }
+                                    }
+                                }
+                            },
+                            _ => {}
+                        }
+                    }
+
+                    if pokes.is_empty() { return; }
+
+                    let msg = format!("SHOW_MSG EmuWorld: {} cheats active!", pokes.len());
+                    let _ = socket.send_to(msg.as_bytes(), addr);
+                    println!("[Launch] Poking {} cheat values continuously via WRITE_CORE_RAM", pokes.len());
+
+                    // Continuously poke values every 100ms until RetroArch closes
+                    loop {
+                        for (a, v) in &pokes {
+                            let cmd_str = format!("WRITE_CORE_RAM {:X} {:02X}", a, v);
+                            if socket.send_to(cmd_str.as_bytes(), addr).is_err() {
+                                return; // RetroArch closed
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                    }
+                });
+
+                println!("[Launch] RetroArch: wrote {} cheats, raw codes will be poked via UDP", enabled_cheats.len());
 
             } else if effective_id == "dolphin" {
                 // Dolphin: write to User/GameSettings/<GameID>.ini
