@@ -3495,6 +3495,12 @@ export default function App() {
         setTimeout(() => setLaunchSplash(null), 2500);
       }
       showToast(`Launching ${rom.name}...`, "success");
+      // Check if there are Game Genie cheats that need manual loading
+      const cheats = await invoke<CheatCodeEntry[]>("get_cheats", { gameName: rom.name, console: rom.console });
+      const enabledGG = cheats.filter(c => c.enabled && c.cheat_type.toLowerCase().includes("game genie"));
+      if (enabledGG.length > 0) {
+        setTimeout(() => showToast("Codes Game Genie : dans RetroArch, F1 → Cheats → Load File pour charger le .cht (1 seule fois)", "info"), 3000);
+      }
       // Announce to Discord — EmuWorld stays the big image so it reads as
       // "Playing <game> via EmuWorld" in the friend list.
       if (rom.name) {
