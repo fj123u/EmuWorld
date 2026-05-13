@@ -427,73 +427,60 @@ async fn launch_emulator(
             let is_retroarch = use_retroarch || effective_id.starts_with("retroarch");
 
             if is_retroarch {
-                // RetroArch: write .cht and configure auto-load
-                let core_folder = ra_core.unwrap_or("").replace("_libretro.dll", "").replace(".dll", "");
-                let cheats_base = install_dir.join("cheats");
-                let cheats_core_dir = cheats_base.join(&core_folder);
-                let _ = fs::create_dir_all(&cheats_core_dir);
-                let _ = fs::create_dir_all(&cheats_base);
-
-                // Determine handler type based on cheat_type
+                // RetroArch: inject cheats directly into retroarch.cfg
+                // This is the only reliable way — RetroArch reads cheat state from its main config.
                 fn cht_handler(cheat_type: &str) -> u8 {
                     match cheat_type.to_lowercase().as_str() {
                         "game genie" => 1,
                         "game shark" | "gameshark" | "action replay" => 2,
-                        _ => 0, // handler 0 = address:value (raw)
+                        _ => 0,
                     }
                 }
 
-                let mut content = format!("cheats = {}\n\n", enabled_cheats.len());
-                for (i, c) in enabled_cheats.iter().enumerate() {
-                    content.push_str(&format!("cheat{}_desc = \"{}\"\n", i, c.name));
-                    content.push_str(&format!("cheat{}_code = \"{}\"\n", i, c.code));
-                    content.push_str(&format!("cheat{}_enable = true\n", i));
-                    content.push_str(&format!("cheat{}_handler = {}\n\n", i, cht_handler(&c.cheat_type)));
-                }
-
-                // Write to both cheats/<core>/<rom>.cht AND cheats/<rom>.cht
-                let cht_path_core = cheats_core_dir.join(format!("{}.cht", rom_stem));
-                let cht_path_root = cheats_base.join(format!("{}.cht", rom_stem));
-                let _ = fs::write(&cht_path_core, &content);
-                let _ = fs::write(&cht_path_root, &content);
-
-                // Ensure retroarch.cfg has the right settings for auto-load
                 let cfg_path = install_dir.join("retroarch.cfg");
                 if cfg_path.exists() {
-                    let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
-                    let cheats_dir_str = cheats_base.to_string_lossy().replace('\\', "/");
-                    let settings: Vec<(&str, &str)> = vec![
-                        ("apply_cheats_after_load", "true"),
-                        ("apply_cheats_after_toggle", "true"),
-                        ("cheat_database_path", &cheats_dir_str),
-                    ];
-                    for (key, val) in &settings {
-                        let pattern = format!("{} = ", key);
-                        if let Some(pos) = cfg.find(&pattern) {
-                            let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
-                            cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
-                        } else {
-                            cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
-                        }
+                    let cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+                    // Remove any previous EmuWorld cheat lines
+                    let mut lines: Vec<&str> = cfg.lines()
+                        .filter(|l| {
+                            let trimmed = l.trim();
+                            !trimmed.starts_with("cheat_num_cheats") &&
+                            !trimmed.starts_with("apply_cheats_after_load") &&
+                            !trimmed.starts_with("apply_cheats_after_toggle") &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_desc")) &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_code")) &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_enable")) &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_handler")) &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_address")) &&
+                            !(trimmed.starts_with("cheat") && trimmed.contains("_memory_search_size"))
+                        })
+                        .collect();
+
+                    // Append cheat settings
+                    lines.push("apply_cheats_after_load = \"true\"");
+                    lines.push("apply_cheats_after_toggle = \"true\"");
+                    let num_line = format!("cheat_num_cheats = \"{}\"", enabled_cheats.len());
+                    lines.push(&num_line);
+
+                    let mut cheat_lines: Vec<String> = Vec::new();
+                    for (i, c) in enabled_cheats.iter().enumerate() {
+                        cheat_lines.push(format!("cheat{}_desc = \"{}\"", i, c.name));
+                        cheat_lines.push(format!("cheat{}_code = \"{}\"", i, c.code));
+                        cheat_lines.push(format!("cheat{}_enable = \"true\"", i));
+                        cheat_lines.push(format!("cheat{}_handler = \"{}\"", i, cht_handler(&c.cheat_type)));
+                        cheat_lines.push(format!("cheat{}_address = \"0\"", i));
+                        cheat_lines.push(format!("cheat{}_memory_search_size = \"0\"", i));
                     }
-                    let _ = fs::write(&cfg_path, &cfg);
+                    let mut final_cfg = lines.join("\n");
+                    final_cfg.push('\n');
+                    for l in &cheat_lines {
+                        final_cfg.push_str(l);
+                        final_cfg.push('\n');
+                    }
+                    let _ = fs::write(&cfg_path, &final_cfg);
                 }
 
-                // Also write an appendconfig that includes the cheats inline
-                let override_cfg = install_dir.join("emuworld_cheats.cfg");
-                let mut override_content = String::from("apply_cheats_after_load = \"true\"\n");
-                override_content.push_str(&format!("cheats = \"{}\"\n", enabled_cheats.len()));
-                for (i, c) in enabled_cheats.iter().enumerate() {
-                    override_content.push_str(&format!("cheat{}_desc = \"{}\"\n", i, c.name));
-                    override_content.push_str(&format!("cheat{}_code = \"{}\"\n", i, c.code));
-                    override_content.push_str(&format!("cheat{}_enable = \"true\"\n", i));
-                    override_content.push_str(&format!("cheat{}_handler = \"{}\"\n", i, cht_handler(&c.cheat_type)));
-                }
-                let _ = fs::write(&override_cfg, &override_content);
-                cmd.arg("--appendconfig");
-                cmd.arg(&override_cfg);
-
-                println!("[Launch] RetroArch: wrote {} cheats to cheats/{}/{}.cht + appendconfig", enabled_cheats.len(), core_folder, rom_stem);
+                println!("[Launch] RetroArch: injected {} cheats into retroarch.cfg", enabled_cheats.len());
 
             } else if effective_id == "dolphin" {
                 // Dolphin: write to User/GameSettings/<GameID>.ini
