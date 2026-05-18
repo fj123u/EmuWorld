@@ -67,6 +67,8 @@ import {
   Compass,
   Star,
   Clock as ClockIcon,
+  Timer,
+  Flag,
 } from "lucide-react";
 
 /* ============================
@@ -198,6 +200,17 @@ interface AchievementRank {
   icon: string;
 }
 
+
+interface SpeedrunSplit {
+  name: string;
+  time_ms: number;
+}
+
+interface SpeedrunRecord {
+  total_ms: number;
+  splits: SpeedrunSplit[];
+  date: string;
+}
 
 interface RomStoreEntry {
   id: string;
@@ -975,6 +988,10 @@ export default function App() {
   const [screenshotLightbox, setScreenshotLightbox] = useState<string | null>(null);
   const currentPlayingGameRef = useRef(currentPlayingGame);
   currentPlayingGameRef.current = currentPlayingGame;
+
+  // ---- Speedrun timer ----
+  const [speedrunTimer, setSpeedrunTimer] = useState<{ gameName: string; console: string; running: boolean; startTime: number; elapsed: number; splits: { name: string; time_ms: number }[]; records: SpeedrunRecord[] } | null>(null);
+  const speedrunIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ---- App update state ----
   // `null` = not checked yet / no update, object = newer version available
@@ -6395,6 +6412,13 @@ export default function App() {
             }}>
               <Camera size={14} /> Screenshots
             </button>
+            <button className="rom-context-menu__btn" onClick={async () => {
+              const records = await invoke<SpeedrunRecord[]>("get_speedruns", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
+              setSpeedrunTimer({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, running: false, startTime: 0, elapsed: 0, splits: [], records });
+              setRomContextMenu(null);
+            }}>
+              <Timer size={14} /> Speedrun Timer
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
@@ -6472,6 +6496,112 @@ export default function App() {
         </div>
       )}
 
+
+      {/* Speedrun Timer Overlay */}
+      {speedrunTimer && (
+        <div className="speedrun-overlay">
+          <div className="speedrun-panel">
+            <div className="speedrun-panel__header">
+              <h3><Timer size={16} /> Speedrun — {speedrunTimer.gameName}</h3>
+              <button className="btn btn--ghost btn--sm" onClick={() => {
+                if (speedrunIntervalRef.current) clearInterval(speedrunIntervalRef.current);
+                setSpeedrunTimer(null);
+              }}><X size={14} /></button>
+            </div>
+
+            <div className="speedrun-panel__timer">
+              {(() => {
+                const ms = speedrunTimer.elapsed;
+                const h = Math.floor(ms / 3600000);
+                const m = Math.floor((ms % 3600000) / 60000);
+                const s = Math.floor((ms % 60000) / 1000);
+                const cs = Math.floor((ms % 1000) / 10);
+                return `${h > 0 ? h + ":" : ""}${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs.toString().padStart(2, "0")}`;
+              })()}
+            </div>
+
+            <div className="speedrun-panel__controls">
+              {!speedrunTimer.running ? (
+                <button className="btn btn--primary btn--sm" onClick={() => {
+                  const now = Date.now();
+                  setSpeedrunTimer(prev => prev ? { ...prev, running: true, startTime: now - prev.elapsed } : null);
+                  speedrunIntervalRef.current = setInterval(() => {
+                    setSpeedrunTimer(prev => prev && prev.running ? { ...prev, elapsed: Date.now() - prev.startTime } : prev);
+                  }, 33);
+                }}>
+                  <Play size={14} /> {speedrunTimer.elapsed > 0 ? "Reprendre" : "Start"}
+                </button>
+              ) : (
+                <button className="btn btn--secondary btn--sm" onClick={() => {
+                  if (speedrunIntervalRef.current) clearInterval(speedrunIntervalRef.current);
+                  setSpeedrunTimer(prev => prev ? { ...prev, running: false } : null);
+                }}>
+                  <Square size={14} /> Pause
+                </button>
+              )}
+              <button className="btn btn--secondary btn--sm" disabled={!speedrunTimer.running && speedrunTimer.elapsed === 0} onClick={() => {
+                setSpeedrunTimer(prev => prev ? { ...prev, splits: [...prev.splits, { name: `Split ${prev.splits.length + 1}`, time_ms: prev.elapsed }] } : null);
+              }}>
+                <Flag size={14} /> Split
+              </button>
+              <button className="btn btn--ghost btn--sm" disabled={speedrunTimer.elapsed === 0} onClick={() => {
+                if (speedrunIntervalRef.current) clearInterval(speedrunIntervalRef.current);
+                setSpeedrunTimer(prev => prev ? { ...prev, running: false, elapsed: 0, startTime: 0, splits: [] } : null);
+              }}>
+                <RefreshCw size={14} /> Reset
+              </button>
+              {speedrunTimer.elapsed > 0 && !speedrunTimer.running && (
+                <button className="btn btn--primary btn--sm" onClick={async () => {
+                  const records = await invoke<SpeedrunRecord[]>("save_speedrun", {
+                    gameName: speedrunTimer.gameName,
+                    console: speedrunTimer.console,
+                    totalMs: speedrunTimer.elapsed,
+                    splits: speedrunTimer.splits,
+                  });
+                  setSpeedrunTimer(prev => prev ? { ...prev, records, elapsed: 0, startTime: 0, splits: [] } : null);
+                  showToast("Run sauvegardé !", "success");
+                }}>
+                  <Download size={14} /> Sauvegarder
+                </button>
+              )}
+            </div>
+
+            {speedrunTimer.splits.length > 0 && (
+              <div className="speedrun-panel__splits">
+                <h4>Splits</h4>
+                {speedrunTimer.splits.map((s, i) => (
+                  <div key={i} className="speedrun-panel__split-item">
+                    <span>{s.name}</span>
+                    <span>{Math.floor(s.time_ms / 60000)}:{Math.floor((s.time_ms % 60000) / 1000).toString().padStart(2, "0")}.{Math.floor((s.time_ms % 1000) / 10).toString().padStart(2, "0")}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {speedrunTimer.records.length > 0 && (
+              <div className="speedrun-panel__records">
+                <h4><Trophy size={14} /> Records personnels</h4>
+                {speedrunTimer.records.slice(0, 5).map((r, i) => (
+                  <div key={i} className="speedrun-panel__record-item">
+                    <span className="speedrun-panel__record-rank">#{i + 1}</span>
+                    <span className="speedrun-panel__record-time">
+                      {Math.floor(r.total_ms / 3600000) > 0 ? Math.floor(r.total_ms / 3600000) + ":" : ""}
+                      {Math.floor((r.total_ms % 3600000) / 60000).toString().padStart(2, "0")}:
+                      {Math.floor((r.total_ms % 60000) / 1000).toString().padStart(2, "0")}.
+                      {Math.floor((r.total_ms % 1000) / 10).toString().padStart(2, "0")}
+                    </span>
+                    <span className="speedrun-panel__record-date">{r.date}</span>
+                    <button className="btn btn--ghost btn--sm" onClick={async () => {
+                      const updated = await invoke<SpeedrunRecord[]>("delete_speedrun", { gameName: speedrunTimer.gameName, console: speedrunTimer.console, index: i });
+                      setSpeedrunTimer(prev => prev ? { ...prev, records: updated } : null);
+                    }}><Trash2 size={10} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Screenshot Lightbox */}
       {screenshotLightbox && (

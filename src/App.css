@@ -5480,6 +5480,117 @@ body {
 }
 
 /* ============================================
+   SPEEDRUN TIMER
+   ============================================ */
+.speedrun-overlay {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  pointer-events: none;
+}
+.speedrun-panel {
+  pointer-events: all;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 20px;
+  min-width: 320px;
+  max-width: 380px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+}
+.speedrun-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.speedrun-panel__header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.speedrun-panel__timer {
+  font-size: 42px;
+  font-weight: 700;
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  color: var(--neon-primary);
+  text-align: center;
+  padding: 12px 0;
+  text-shadow: 0 0 20px rgba(var(--neon-rgb, 139, 92, 246), 0.4);
+}
+.speedrun-panel__controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.speedrun-panel__splits {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.speedrun-panel__splits h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.speedrun-panel__split-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-family: "JetBrains Mono", monospace;
+}
+.speedrun-panel__records {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 12px;
+}
+.speedrun-panel__records h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.speedrun-panel__record-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+.speedrun-panel__record-rank {
+  font-weight: 700;
+  color: var(--neon-primary);
+  min-width: 24px;
+}
+.speedrun-panel__record-time {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--text-primary);
+  flex: 1;
+}
+.speedrun-panel__record-date {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+/* ============================================
    BIG PICTURE MODE
    ============================================ */
 .big-picture {
