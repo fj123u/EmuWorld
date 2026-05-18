@@ -65,6 +65,9 @@ import {
   UserX,
   MessageCircle,
   Send,
+  Compass,
+  Star,
+  Clock as ClockIcon,
 } from "lucide-react";
 
 /* ============================
@@ -349,7 +352,7 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends";
+type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -564,6 +567,20 @@ const RA_SUPPORTED_CONSOLES = new Set([
   "Game Gear", "Saturn", "Dreamcast", "Arcade", "Neo-Geo", "PC Engine",
   "Atari 2600", "WonderSwan",
 ]);
+
+const DiscoverCover = ({ rom }: { rom: RomFile }) => {
+  const [cover, setCover] = useState<string | null>(null);
+  useEffect(() => {
+    invoke<string>("fetch_boxart", { gameName: rom.name, console: rom.console, forceRefresh: false })
+      .then(setCover)
+      .catch(() => {});
+  }, [rom.name, rom.console]);
+  return (
+    <div className="discover-card__cover">
+      {cover ? <img src={cover} alt={rom.name} /> : <Gamepad2 size={24} />}
+    </div>
+  );
+};
 
 const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
   rom: RomFile,
@@ -875,7 +892,7 @@ export default function App() {
 
   const { t, locale, setLocale } = useTranslation();
 
-  const [page, setPage] = useState<Page>("catalog");
+  const [page, setPage] = useState<Page>("discover");
   const [catalog, setCatalog] = useState<EmulatorInfo[]>([]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [roms, setRoms] = useState<RomFile[]>([]);
@@ -2273,7 +2290,7 @@ export default function App() {
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
-    const pages: Page[] = ["catalog", "library", "installed", "store", "controller", "leaderboard", "friends", "stats", "settings", "changelogs"];
+    const pages: Page[] = ["discover", "catalog", "library", "installed", "store", "controller", "leaderboard", "friends", "stats", "settings", "changelogs"];
     let navCooldown = 0;
 
     const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
@@ -3747,6 +3764,13 @@ export default function App() {
           <div className="sidebar__section">
             <div className="sidebar__label">{t("nav.navigation")}</div>
             <button
+              className={`sidebar__item ${page === "discover" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("discover")}
+            >
+              <span className="sidebar__item-icon"><Compass size={16} /></span>
+              Discover
+            </button>
+            <button
               data-tour="emulators"
               className={`sidebar__item ${page === "catalog" && !categoryFilter ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("catalog"); setConsoleFilter(null); setCategoryFilter(null); }}
@@ -4054,6 +4078,7 @@ export default function App() {
               <div className="main-content__header">
                 <div>
                   <h1 className="main-content__title">
+                    {page === "discover" && "Discover"}
                     {page === "catalog" && t("header.emulators")}
                     {page === "library" && t("header.library")}
                     {page === "installed" && t("header.installedEmulators")}
@@ -6006,6 +6031,112 @@ export default function App() {
                   )}
                 </div>
               )}
+
+              {page === "discover" && (() => {
+                const gameEntries = Object.entries(playtime.games).map(([name, entry]) => ({ ...entry, name }));
+                const today = new Date().toISOString().slice(0, 10);
+                const hashCode = today.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+                const allRomsWithData = roms.filter(r => playtime.games[r.name]);
+                const gameOfTheDay = roms.length > 0 ? roms[Math.abs(hashCode) % roms.length] : null;
+                const recentGames = gameEntries
+                  .filter(g => g.last_played)
+                  .sort((a, b) => new Date(b.last_played!).getTime() - new Date(a.last_played!).getTime())
+                  .slice(0, 8);
+                const topGames = gameEntries
+                  .filter(g => g.seconds > 0)
+                  .sort((a, b) => b.seconds - a.seconds)
+                  .slice(0, 5);
+                const unplayed = roms.filter(r => !playtime.games[r.name] || playtime.games[r.name].launches === 0).slice(0, 8);
+                const formatTime = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}` : `${Math.floor(s / 60)}min`;
+
+                return (
+                  <div className="discover-page">
+                    {gameOfTheDay && (
+                      <div className="discover-hero gamepad-nav-item" onClick={() => handleLaunch(gameOfTheDay)}>
+                        <div className="discover-hero__bg" />
+                        <div className="discover-hero__content">
+                          <span className="discover-hero__badge"><Star size={14} /> Jeu du jour</span>
+                          <h2 className="discover-hero__title">{gameOfTheDay.name}</h2>
+                          <p className="discover-hero__console">{gameOfTheDay.console}</p>
+                          {playtime.games[gameOfTheDay.name] && (
+                            <p className="discover-hero__stats">
+                              {formatTime(playtime.games[gameOfTheDay.name].seconds)} joué · {playtime.games[gameOfTheDay.name].launches} lancement{playtime.games[gameOfTheDay.name].launches > 1 ? "s" : ""}
+                            </p>
+                          )}
+                          <button className="btn btn--primary btn--sm discover-hero__play"><Play size={14} /> Jouer</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {recentGames.length > 0 && (
+                      <section className="discover-section">
+                        <h3 className="discover-section__title"><ClockIcon size={16} /> Joués récemment</h3>
+                        <div className="discover-grid">
+                          {recentGames.map(g => {
+                            const rom = roms.find(r => r.name === g.name);
+                            if (!rom) return null;
+                            return (
+                              <div key={g.name} className="discover-card gamepad-nav-item" onClick={() => handleLaunch(rom)}>
+                                <DiscoverCover rom={rom} />
+                                <div className="discover-card__info">
+                                  <span className="discover-card__name">{g.name}</span>
+                                  <span className="discover-card__meta">{g.console} · {formatTime(g.seconds)}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    )}
+
+                    {topGames.length > 0 && (
+                      <section className="discover-section">
+                        <h3 className="discover-section__title"><Trophy size={16} /> Top jeux</h3>
+                        <div className="discover-top-list">
+                          {topGames.map((g, i) => {
+                            const rom = roms.find(r => r.name === g.name);
+                            return (
+                              <div key={g.name} className="discover-top-item gamepad-nav-item" onClick={() => rom && handleLaunch(rom)}>
+                                <span className="discover-top-item__rank">#{i + 1}</span>
+                                <div className="discover-top-item__info">
+                                  <span className="discover-top-item__name">{g.name}</span>
+                                  <span className="discover-top-item__meta">{g.console} · {formatTime(g.seconds)} · {g.launches} lancement{g.launches > 1 ? "s" : ""}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    )}
+
+                    {unplayed.length > 0 && (
+                      <section className="discover-section">
+                        <h3 className="discover-section__title"><Compass size={16} /> À découvrir</h3>
+                        <div className="discover-grid">
+                          {unplayed.map(rom => (
+                            <div key={rom.path} className="discover-card gamepad-nav-item" onClick={() => handleLaunch(rom)}>
+                              <DiscoverCover rom={rom} />
+                              <div className="discover-card__info">
+                                <span className="discover-card__name">{rom.name}</span>
+                                <span className="discover-card__meta">{rom.console}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+
+                    {roms.length === 0 && (
+                      <div className="discover-empty">
+                        <Compass size={48} />
+                        <h3>Aucun jeu dans la bibliothèque</h3>
+                        <p>Ajoute des ROMs depuis le Store ou scanne un dossier pour commencer !</p>
+                        <button className="btn btn--primary" onClick={() => setPage("store")}>Ouvrir le Store</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {page === "changelogs" && (
                 <div className="changelogs">
