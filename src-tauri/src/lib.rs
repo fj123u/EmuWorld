@@ -417,6 +417,18 @@ async fn launch_emulator(
         cmd.arg(&final_path);
     }
 
+    // Force fullscreen launch based on emulator
+    match effective_id.as_str() {
+        "retroarch" => { cmd.arg("--fullscreen"); },
+        "dolphin" => { cmd.arg("-b"); },
+        "cemu" => { cmd.arg("-f"); },
+        "ppsspp" => { cmd.arg("--fullscreen"); },
+        "duckstation" => { cmd.arg("-fullscreen"); },
+        "pcsx2" => { cmd.arg("-fullscreen"); },
+        "mgba" => { cmd.arg("-f"); },
+        "rpcs3" => { cmd.arg("--fullscreen"); },
+        _ => {}
+    }
 
     #[cfg(target_os = "windows")]
     {
