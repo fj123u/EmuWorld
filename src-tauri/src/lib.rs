@@ -3742,83 +3742,6 @@ async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// ===== Speedrun Timer =====
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct SpeedrunSplit {
-    name: String,
-    time_ms: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct SpeedrunRecord {
-    total_ms: u64,
-    splits: Vec<SpeedrunSplit>,
-    date: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
-struct SpeedrunStore {
-    records: std::collections::HashMap<String, Vec<SpeedrunRecord>>,
-}
-
-fn speedrun_path() -> PathBuf {
-    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("EmuWorld");
-    let _ = fs::create_dir_all(&path);
-    path.push("speedruns.json");
-    path
-}
-
-fn load_speedruns() -> SpeedrunStore {
-    let path = speedrun_path();
-    if let Ok(data) = fs::read_to_string(&path) {
-        serde_json::from_str(&data).unwrap_or_default()
-    } else {
-        SpeedrunStore::default()
-    }
-}
-
-fn save_speedruns(store: &SpeedrunStore) -> Result<(), String> {
-    let path = speedrun_path();
-    let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-    fs::write(&path, data).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn get_speedruns(game_name: String, console: String) -> Vec<SpeedrunRecord> {
-    let store = load_speedruns();
-    let key = format!("{}/{}", console, game_name);
-    store.records.get(&key).cloned().unwrap_or_default()
-}
-
-#[tauri::command]
-fn save_speedrun(game_name: String, console: String, total_ms: u64, splits: Vec<SpeedrunSplit>) -> Result<Vec<SpeedrunRecord>, String> {
-    let mut store = load_speedruns();
-    let key = format!("{}/{}", console, game_name);
-    let record = SpeedrunRecord {
-        total_ms,
-        splits,
-        date: chrono::Local::now().format("%Y-%m-%d %H:%M").to_string(),
-    };
-    let entries = store.records.entry(key.clone()).or_default();
-    entries.push(record);
-    entries.sort_by_key(|r| r.total_ms);
-    if entries.len() > 20 { entries.truncate(20); }
-    save_speedruns(&store)?;
-    Ok(store.records.get(&key).cloned().unwrap_or_default())
-}
-
-#[tauri::command]
-fn delete_speedrun(game_name: String, console: String, index: usize) -> Result<Vec<SpeedrunRecord>, String> {
-    let mut store = load_speedruns();
-    let key = format!("{}/{}", console, game_name);
-    if let Some(entries) = store.records.get_mut(&key) {
-        if index < entries.len() { entries.remove(index); }
-    }
-    save_speedruns(&store)?;
-    Ok(store.records.get(&key).cloned().unwrap_or_default())
-}
 
 #[tauri::command]
 fn export_config() -> Result<String, String> {
@@ -3984,9 +3907,6 @@ pub fn run() {
             delete_screenshot,
             clear_achievements,
             overwrite_achievements,
-            get_speedruns,
-            save_speedrun,
-            delete_speedrun,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
