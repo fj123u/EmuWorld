@@ -538,7 +538,19 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                             }).map(|emu| (emu.console.clone(), emu.id.clone()))
                         });
 
-                    let matched = folder_console.or_else(|| match_extension(&ext_str, &catalog));
+                    // For .zip/.7z files, match by folder name alone (most emulators read zipped ROMs)
+                    let folder_archive = if folder_console.is_none() && (ext_str == "zip" || ext_str == "7z") {
+                        e.path().strip_prefix(&dir).ok()
+                            .and_then(|rel| rel.components().next())
+                            .and_then(|c| {
+                                let folder = c.as_os_str().to_string_lossy().to_string();
+                                catalog.iter().find(|emu| {
+                                    emu.console.eq_ignore_ascii_case(&folder)
+                                }).map(|emu| (emu.console.clone(), emu.id.clone()))
+                            })
+                    } else { None };
+
+                    let matched = folder_console.or(folder_archive).or_else(|| match_extension(&ext_str, &catalog));
 
                     if let Some((console, emu_id)) = matched {
                         let name = e.path().file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
