@@ -6094,10 +6094,14 @@ export default function App() {
               )}
 
               {page === "discover" && (() => {
-                const gameEntries = Object.entries(playtime.games).map(([name, entry]) => ({ ...entry, name }));
+                const gameEntries = Object.entries(playtime.games).map(([key, entry]) => {
+                  const sep = key.indexOf("::");
+                  const gameName = sep >= 0 ? key.slice(sep + 2) : key;
+                  const gameConsole = sep >= 0 ? key.slice(0, sep) : entry.console;
+                  return { ...entry, name: gameName, console: gameConsole, _key: key };
+                });
                 const today = new Date().toISOString().slice(0, 10);
                 const hashCode = today.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
-                const allRomsWithData = roms.filter(r => playtime.games[r.name]);
                 const gameOfTheDay = roms.length > 0 ? roms[Math.abs(hashCode) % roms.length] : null;
                 const recentGames = gameEntries
                   .filter(g => g.last_played)
@@ -6107,7 +6111,7 @@ export default function App() {
                   .filter(g => g.seconds > 0)
                   .sort((a, b) => b.seconds - a.seconds)
                   .slice(0, 5);
-                const unplayed = roms.filter(r => !playtime.games[r.name] || playtime.games[r.name].launches === 0).slice(0, 8);
+                const unplayed = roms.filter(r => !playtime.games[`${r.console}::${r.name}`] || playtime.games[`${r.console}::${r.name}`].launches === 0).slice(0, 8);
                 const formatTime = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}` : `${Math.floor(s / 60)}min`;
 
                 return (
@@ -6119,9 +6123,9 @@ export default function App() {
                           <span className="discover-hero__badge"><Star size={14} /> Jeu du jour</span>
                           <h2 className="discover-hero__title">{gameOfTheDay.name}</h2>
                           <p className="discover-hero__console">{gameOfTheDay.console}</p>
-                          {playtime.games[gameOfTheDay.name] && (
+                          {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`] && (
                             <p className="discover-hero__stats">
-                              {formatTime(playtime.games[gameOfTheDay.name].seconds)} joué · {playtime.games[gameOfTheDay.name].launches} lancement{playtime.games[gameOfTheDay.name].launches > 1 ? "s" : ""}
+                              {formatTime(playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].seconds)} joué · {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches} lancement{playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches > 1 ? "s" : ""}
                             </p>
                           )}
                           <button className="btn btn--primary btn--sm discover-hero__play"><Play size={14} /> Jouer</button>
@@ -6134,7 +6138,7 @@ export default function App() {
                         <h3 className="discover-section__title"><ClockIcon size={16} /> Joués récemment</h3>
                         <div className="discover-grid">
                           {recentGames.map(g => {
-                            const rom = roms.find(r => r.name === g.name);
+                            const rom = roms.find(r => r.name === g.name && r.console === g.console);
                             if (!rom) return null;
                             return (
                               <div key={g.name} className="discover-card gamepad-nav-item" onClick={() => handleLaunch(rom)}>
@@ -6155,7 +6159,7 @@ export default function App() {
                         <h3 className="discover-section__title"><Trophy size={16} /> Top jeux</h3>
                         <div className="discover-top-list">
                           {topGames.map((g, i) => {
-                            const rom = roms.find(r => r.name === g.name);
+                            const rom = roms.find(r => r.name === g.name && r.console === g.console);
                             return (
                               <div key={g.name} className="discover-top-item gamepad-nav-item" onClick={() => rom && handleLaunch(rom)}>
                                 <span className="discover-top-item__rank">#{i + 1}</span>
