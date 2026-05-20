@@ -1599,8 +1599,6 @@ export default function App() {
       const win = getCurrentWindow();
       const isVisible = overlayVisibleRef.current;
       if (!isVisible) {
-        await win.unminimize();
-        await win.setFocus();
         setOverlayVisible(true);
         const game = currentPlayingGameRef.current;
         if (game) {
@@ -1610,6 +1608,7 @@ export default function App() {
         }
       } else {
         setOverlayVisible(false);
+        await win.setAlwaysOnTop(false);
         await win.minimize();
       }
     });
@@ -6837,6 +6836,7 @@ export default function App() {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
               setOverlayVisible(false);
+              await win.setAlwaysOnTop(false);
               await win.minimize();
             }}>
               <X size={14} />

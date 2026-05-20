@@ -70,6 +70,12 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                         push_log("INFO", "Overlay: Shift+Tab détecté (hook)");
                         if let Ok(guard) = overlay_app_handle().lock() {
                             if let Some(ref handle) = *guard {
+                                use tauri::Manager;
+                                if let Some(win) = handle.get_webview_window("main") {
+                                    let _ = win.unminimize();
+                                    let _ = win.set_always_on_top(true);
+                                    let _ = win.set_focus();
+                                }
                                 let _ = handle.emit("toggle-overlay", "");
                             }
                         }
