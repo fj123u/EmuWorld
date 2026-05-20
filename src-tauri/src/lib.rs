@@ -44,10 +44,8 @@ fn overlay_app_handle() -> &'static Mutex<Option<tauri::AppHandle>> {
 fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     use winapi::um::winuser::*;
     use winapi::um::libloaderapi::GetModuleHandleW;
-    use winapi::shared::windef::{HHOOK, HWND};
+    use winapi::shared::windef::HHOOK;
     use std::sync::atomic::{AtomicBool, Ordering};
-
-    const HWND_TOPMOST: HWND = -1isize as HWND;
 
     static SHIFT_DOWN: AtomicBool = AtomicBool::new(false);
 
@@ -76,15 +74,7 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                                 if let Some(win) = handle.get_webview_window("main") {
                                     let _ = win.unminimize();
                                     let _ = win.set_always_on_top(true);
-                                    // Show window on top WITHOUT stealing focus from the game
-                                    if let Ok(hwnd) = win.hwnd() {
-                                        SetWindowPos(
-                                            hwnd.0 as _,
-                                            HWND_TOPMOST,
-                                            0, 0, 0, 0,
-                                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
-                                        );
-                                    }
+                                    let _ = win.set_focus();
                                 }
                                 let _ = handle.emit("toggle-overlay", "");
                             }
