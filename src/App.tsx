@@ -1589,29 +1589,28 @@ export default function App() {
   }, [showToast]);
 
   // F1 overlay toggle (global shortcut registered in Rust)
+  const overlayVisibleRef = useRef(overlayVisible);
+  overlayVisibleRef.current = overlayVisible;
   useEffect(() => {
     const unlisten = listen<string>("toggle-overlay", async () => {
       if (!currentPlayingGameRef.current) return;
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const win = getCurrentWindow();
-      setOverlayVisible(prev => {
-        const next = !prev;
-        if (next) {
-          win.setAlwaysOnTop(true);
-          win.unminimize();
-          win.setFocus();
-          const game = currentPlayingGameRef.current;
-          if (game) {
-            invoke<RAGameInfo>("get_ra_game_progress", { gameName: game.name, console: game.console })
-              .then(info => setOverlayRaInfo(info))
-              .catch(() => setOverlayRaInfo(null));
-          }
-        } else {
-          win.setAlwaysOnTop(false);
-          win.minimize();
+      const isVisible = overlayVisibleRef.current;
+      if (!isVisible) {
+        await win.unminimize();
+        await win.setFocus();
+        setOverlayVisible(true);
+        const game = currentPlayingGameRef.current;
+        if (game) {
+          invoke<RAGameInfo>("get_ra_game_progress", { gameName: game.name, console: game.console })
+            .then(info => setOverlayRaInfo(info))
+            .catch(() => setOverlayRaInfo(null));
         }
-        return next;
-      });
+      } else {
+        setOverlayVisible(false);
+        await win.minimize();
+      }
     });
     return () => { unlisten.then(f => f()); };
   }, []);
@@ -6836,9 +6835,8 @@ export default function App() {
             <button className="game-overlay__close" onClick={async () => {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
-              win.setAlwaysOnTop(false);
-              win.minimize();
               setOverlayVisible(false);
+              await win.minimize();
             }}>
               <X size={14} />
             </button>
