@@ -2020,6 +2020,16 @@ export default function App() {
 
   const postActivity = useCallback(async (eventType: string, gameName?: string, consoleName?: string, details?: string) => {
     if (!user) return;
+    if (eventType === "game_started" && gameName) {
+      const { data: existing } = await supabase
+        .from("activity_feed")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("event_type", "game_started")
+        .eq("game_name", gameName)
+        .limit(1);
+      if (existing && existing.length > 0) return;
+    }
     await supabase.from("activity_feed").insert({
       user_id: user.id,
       event_type: eventType,
