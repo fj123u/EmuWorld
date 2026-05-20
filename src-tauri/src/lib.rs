@@ -437,17 +437,38 @@ async fn launch_emulator(
         cmd.arg(&final_path);
     }
 
-    // Force fullscreen launch based on emulator
-    match effective_id.as_str() {
-        "retroarch" => { cmd.arg("--fullscreen"); },
-        "dolphin" => { cmd.arg("-b"); },
-        "cemu" => { cmd.arg("-f"); },
-        "ppsspp" => { cmd.arg("--fullscreen"); },
-        "duckstation" => { cmd.arg("-fullscreen"); },
-        "pcsx2" => { cmd.arg("-fullscreen"); },
-        "mgba" => { cmd.arg("-f"); },
-        "rpcs3" => { cmd.arg("--fullscreen"); },
-        _ => {}
+    // Force borderless windowed fullscreen (allows overlay to appear on top)
+    if effective_id == "retroarch" {
+        let cfg_path = install_dir.join("retroarch.cfg");
+        if cfg_path.exists() {
+            let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+            let settings = [
+                ("video_fullscreen", "true"),
+                ("video_windowed_fullscreen", "true"),
+            ];
+            for (key, val) in settings {
+                let pattern = format!("{} = ", key);
+                if let Some(pos) = cfg.find(&pattern) {
+                    let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
+                    cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
+                } else {
+                    cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
+                }
+            }
+            let _ = fs::write(&cfg_path, &cfg);
+        }
+        cmd.arg("--fullscreen");
+    } else {
+        match effective_id.as_str() {
+            "dolphin" => { cmd.arg("-b"); },
+            "cemu" => { cmd.arg("-f"); },
+            "ppsspp" => { cmd.arg("--fullscreen"); },
+            "duckstation" => { cmd.arg("-fullscreen"); },
+            "pcsx2" => { cmd.arg("-fullscreen"); },
+            "mgba" => { cmd.arg("-f"); },
+            "rpcs3" => { cmd.arg("--fullscreen"); },
+            _ => {}
+        }
     }
 
     #[cfg(target_os = "windows")]

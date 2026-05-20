@@ -6932,7 +6932,9 @@ export default function App() {
                     <div className="game-overlay__chat-messages">
                       {chatMessages.map((m, i) => (
                         <div key={i} className={`game-overlay__chat-msg ${m.sender_id === user?.id ? "game-overlay__chat-msg--mine" : ""}`}>
-                          {m.content}
+                          {m.content.startsWith("[img]") ? (
+                            <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} />
+                          ) : m.content}
                         </div>
                       ))}
                     </div>
