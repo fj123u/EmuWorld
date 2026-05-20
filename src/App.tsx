@@ -945,7 +945,7 @@ function OverlayWindow() {
   const [notesSaved, setNotesSaved] = useState(false);
   const saveNotes = async () => {
     if (currentGame) {
-      await invoke("set_game_notes", { gameName: currentGame.name, console: currentGame.console, notes });
+      await invoke("set_game_notes", { console: currentGame.console, name: currentGame.name, notes });
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 2000);
     }
