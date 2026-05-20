@@ -1588,11 +1588,12 @@ export default function App() {
     return () => { u1.then(f => f()); u2.then(f => f()); };
   }, [showToast]);
 
-  // F1 overlay toggle (global shortcut registered in Rust)
+  // Shift+Tab overlay toggle (global shortcut registered in Rust)
   const overlayVisibleRef = useRef(overlayVisible);
   overlayVisibleRef.current = overlayVisible;
   useEffect(() => {
     const unlisten = listen<string>("toggle-overlay", async () => {
+      console.log("[Overlay] toggle-overlay event received, currentPlayingGame:", currentPlayingGameRef.current);
       if (!currentPlayingGameRef.current) return;
       const { getCurrentWindow } = await import("@tauri-apps/api/window");
       const win = getCurrentWindow();

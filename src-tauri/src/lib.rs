@@ -33,6 +33,83 @@ fn push_log(level: &str, msg: &str) {
     }
 }
 
+// Low-level keyboard hook for overlay shortcut (works in fullscreen)
+static OVERLAY_APP_HANDLE: OnceLock<Mutex<Option<tauri::AppHandle>>> = OnceLock::new();
+
+fn overlay_app_handle() -> &'static Mutex<Option<tauri::AppHandle>> {
+    OVERLAY_APP_HANDLE.get_or_init(|| Mutex::new(None))
+}
+
+#[cfg(target_os = "windows")]
+fn start_keyboard_hook(app_handle: tauri::AppHandle) {
+    use winapi::um::winuser::*;
+    use winapi::um::libloaderapi::GetModuleHandleW;
+    use winapi::shared::windef::HHOOK;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static SHIFT_DOWN: AtomicBool = AtomicBool::new(false);
+
+    *overlay_app_handle().lock().unwrap() = Some(app_handle);
+
+    unsafe extern "system" fn hook_proc(
+        code: i32,
+        w_param: usize,
+        l_param: isize,
+    ) -> isize {
+        if code >= 0 {
+            let kb = &*(l_param as *const KBDLLHOOKSTRUCT);
+            let vk = kb.vkCode as i32;
+
+            match w_param as u32 {
+                WM_KEYDOWN | WM_SYSKEYDOWN => {
+                    if vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT {
+                        SHIFT_DOWN.store(true, Ordering::Relaxed);
+                    }
+                    if vk == VK_TAB && SHIFT_DOWN.load(Ordering::Relaxed) {
+                        println!("[Overlay] LOW-LEVEL HOOK: Shift+Tab detected!");
+                        push_log("INFO", "Overlay: Shift+Tab détecté (hook)");
+                        if let Ok(guard) = overlay_app_handle().lock() {
+                            if let Some(ref handle) = *guard {
+                                let _ = handle.emit("toggle-overlay", "");
+                            }
+                        }
+                    }
+                },
+                WM_KEYUP | WM_SYSKEYUP => {
+                    if vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT {
+                        SHIFT_DOWN.store(false, Ordering::Relaxed);
+                    }
+                },
+                _ => {}
+            }
+        }
+        CallNextHookEx(std::ptr::null_mut(), code, w_param, l_param)
+    }
+
+    unsafe {
+        let hook: HHOOK = SetWindowsHookExW(
+            WH_KEYBOARD_LL,
+            Some(hook_proc),
+            GetModuleHandleW(std::ptr::null()),
+            0,
+        );
+        if hook.is_null() {
+            println!("[Overlay] FAILED to install keyboard hook");
+            return;
+        }
+        println!("[Overlay] Low-level keyboard hook installed successfully");
+        // Message loop required for the hook to work
+        let mut msg: MSG = std::mem::zeroed();
+        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn start_keyboard_hook(_app_handle: tauri::AppHandle) {}
+
 mod emulators;
 mod playtime;
 mod discord_rpc;
@@ -3900,13 +3977,11 @@ pub fn run() {
                     }
                 }).map_err(|e| eprintln!("[global-shortcut] failed: {}", e)).ok();
 
-                // Register Shift+Tab for overlay toggle (like Steam overlay)
+                // Low-level keyboard hook for Shift+Tab overlay (works even in fullscreen)
                 let overlay_handle = app.handle().clone();
-                app.global_shortcut().on_shortcut("shift+tab", move |_app, _shortcut, event| {
-                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = overlay_handle.emit("toggle-overlay", "");
-                    }
-                }).map_err(|e| eprintln!("[global-shortcut] Shift+Tab overlay failed: {}", e)).ok();
+                std::thread::spawn(move || {
+                    start_keyboard_hook(overlay_handle);
+                });
             }
             Ok(())
         })
