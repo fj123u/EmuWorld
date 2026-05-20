@@ -6844,7 +6844,7 @@ export default function App() {
           <div className="game-overlay__panel">
             <div className="game-overlay__header">
               <h3>{currentPlayingGame.name}</h3>
-              <span className="game-overlay__hint">F1 pour fermer</span>
+              <span className="game-overlay__hint">Shift+Tab pour fermer</span>
             </div>
 
             {overlayTab === "achievements" && (

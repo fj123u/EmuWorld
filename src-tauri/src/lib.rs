@@ -3900,13 +3900,13 @@ pub fn run() {
                     }
                 }).map_err(|e| eprintln!("[global-shortcut] failed: {}", e)).ok();
 
-                // Register F1 for overlay toggle (only works when a game is running)
+                // Register Shift+Tab for overlay toggle (like Steam overlay)
                 let overlay_handle = app.handle().clone();
-                app.global_shortcut().on_shortcut("f1", move |_app, _shortcut, event| {
+                app.global_shortcut().on_shortcut("shift+tab", move |_app, _shortcut, event| {
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         let _ = overlay_handle.emit("toggle-overlay", "");
                     }
-                }).map_err(|e| eprintln!("[global-shortcut] F1 overlay failed: {}", e)).ok();
+                }).map_err(|e| eprintln!("[global-shortcut] Shift+Tab overlay failed: {}", e)).ok();
             }
             Ok(())
         })
