@@ -942,10 +942,12 @@ function OverlayWindow() {
     }
   };
 
-  const saveNotes = async (val: string) => {
-    setNotes(val);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const saveNotes = async () => {
     if (currentGame) {
-      await invoke("set_game_notes", { gameName: currentGame.name, console: currentGame.console, notes: val });
+      await invoke("set_game_notes", { gameName: currentGame.name, console: currentGame.console, notes });
+      setNotesSaved(true);
+      setTimeout(() => setNotesSaved(false), 2000);
     }
   };
 
@@ -977,16 +979,23 @@ function OverlayWindow() {
           {tab === "achievements" && (
             <div>
               {raInfo && raInfo.achievements && raInfo.achievements.length > 0 ? (
-                raInfo.achievements.map((a: any, i: number) => (
-                  <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", alignItems: "center" }}>
-                    <img src={`https://media.retroachievements.org/Badge/${a.badge_name}.png`} alt="" style={{ width: 42, height: 42, borderRadius: 8 }} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</div>
-                      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>{a.description}</div>
-                    </div>
-                    {a.date_earned && <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 600, padding: "3px 8px", background: "rgba(74,222,128,0.1)", borderRadius: 6 }}>Débloqué</span>}
+                <>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, padding: "10px 14px", background: "rgba(99,102,241,0.1)", borderRadius: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{raInfo.num_earned || raInfo.achievements.filter((a: any) => a.date_earned).length} / {raInfo.achievements.length} débloqués</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#a78bfa" }}>{raInfo.achievements.filter((a: any) => a.date_earned).reduce((sum: number, a: any) => sum + (a.points || 0), 0)} / {raInfo.achievements.reduce((sum: number, a: any) => sum + (a.points || 0), 0)} pts</span>
                   </div>
-                ))
+                  {raInfo.achievements.map((a: any, i: number) => (
+                    <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", alignItems: "center" }}>
+                      <img src={`https://media.retroachievements.org/Badge/${a.badge_name}.png`} alt="" style={{ width: 42, height: 42, borderRadius: 8, opacity: a.date_earned ? 1 : 0.4 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</div>
+                        <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>{a.description}</div>
+                      </div>
+                      <span style={{ fontSize: 12, opacity: 0.5, marginRight: 8 }}>{a.points} pts</span>
+                      {a.date_earned && <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 600, padding: "3px 8px", background: "rgba(74,222,128,0.1)", borderRadius: 6 }}>Débloqué</span>}
+                    </div>
+                  ))}
+                </>
               ) : (
                 <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>Aucun achievement pour ce jeu</div>
               )}
@@ -1011,7 +1020,7 @@ function OverlayWindow() {
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{f.profile?.username || "Anonyme"}</div>
                         <div style={{ fontSize: 12, opacity: 0.5 }}>{isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}</div>
                       </div>
-                      <button onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" })} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>Chat</button>
+                      <button onClick={() => { setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" }); setTab("chat"); }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>Chat</button>
                     </div>
                   );
                 })
@@ -1055,7 +1064,13 @@ function OverlayWindow() {
             </div>
           )}
           {tab === "notes" && (
-            <textarea value={notes} onChange={e => saveNotes(e.target.value)} placeholder="Notes, codes, astuces, progression..." style={{ width: "100%", height: "100%", minHeight: 250, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 14, color: "#fff", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }} />
+            <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 10 }}>
+              <textarea value={notes} onChange={e => { setNotes(e.target.value); setNotesSaved(false); }} placeholder="Notes, codes, astuces, progression..." style={{ width: "100%", flex: 1, minHeight: 220, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 14, color: "#fff", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }} />
+              <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
+                {notesSaved && <span style={{ fontSize: 12, color: "#4ade80" }}>Sauvegardé !</span>}
+                <button onClick={saveNotes} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Sauvegarder</button>
+              </div>
+            </div>
           )}
         </div>
         <div style={{ padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center", opacity: 0.35, fontSize: 11 }}>
