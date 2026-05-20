@@ -41,42 +41,6 @@ fn overlay_app_handle() -> &'static Mutex<Option<tauri::AppHandle>> {
 }
 
 #[cfg(target_os = "windows")]
-fn restore_emulator_window_behind() {
-    use winapi::um::winuser::*;
-    use winapi::shared::windef::HWND;
-    use winapi::shared::minwindef::{BOOL, LPARAM, TRUE};
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-
-    unsafe extern "system" fn find_emu(hwnd: HWND, l_param: LPARAM) -> BOOL {
-        let mut buf = [0u16; 512];
-        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-        if len > 0 {
-            let title = OsString::from_wide(&buf[..len as usize]).to_string_lossy().to_lowercase();
-            if title.contains("retroarch") || title.contains("dolphin") || title.contains("cemu")
-                || title.contains("rpcs3") || title.contains("ppsspp") || title.contains("duckstation")
-                || title.contains("pcsx2") || title.contains("mgba") || title.contains("ryujinx")
-                || title.contains("citra") {
-                let found = &mut *(l_param as *mut HWND);
-                *found = hwnd;
-                return 0;
-            }
-        }
-        TRUE
-    }
-
-    unsafe {
-        let mut found_hwnd: HWND = std::ptr::null_mut();
-        EnumWindows(Some(find_emu), &mut found_hwnd as *mut HWND as LPARAM);
-        if !found_hwnd.is_null() {
-            // Restore window without giving it focus (SW_SHOWNOACTIVATE)
-            ShowWindow(found_hwnd, SW_SHOWNOACTIVATE);
-            println!("[Overlay] Restored emulator window behind overlay");
-        }
-    }
-}
-
-#[cfg(target_os = "windows")]
 fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     use winapi::um::winuser::*;
     use winapi::um::libloaderapi::GetModuleHandleW;
@@ -107,17 +71,28 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                         if let Ok(guard) = overlay_app_handle().lock() {
                             if let Some(ref handle) = *guard {
                                 use tauri::Manager;
-                                if let Some(win) = handle.get_webview_window("main") {
-                                    let _ = win.unminimize();
-                                    let _ = win.set_always_on_top(true);
-                                    let _ = win.set_focus();
+                                if let Some(overlay_win) = handle.get_webview_window("overlay") {
+                                    let _ = overlay_win.close();
+                                    println!("[Overlay] Closed overlay window");
+                                } else {
+                                    let handle_clone = handle.clone();
+                                    std::thread::spawn(move || {
+                                        use tauri::WebviewWindowBuilder;
+                                        let url = tauri::WebviewUrl::App("index.html?overlay=1".into());
+                                        let builder = WebviewWindowBuilder::new(&handle_clone, "overlay", url)
+                                            .title("EmuWorld Overlay")
+                                            .decorations(false)
+                                            .transparent(true)
+                                            .always_on_top(true)
+                                            .fullscreen(true)
+                                            .skip_taskbar(true)
+                                            .focused(true);
+                                        match builder.build() {
+                                            Ok(_) => println!("[Overlay] Window created"),
+                                            Err(e) => println!("[Overlay] Failed to create window: {}", e),
+                                        }
+                                    });
                                 }
-                                let _ = handle.emit("toggle-overlay", "");
-                                // After a short delay, restore the game window behind us
-                                std::thread::spawn(|| {
-                                    std::thread::sleep(std::time::Duration::from_millis(300));
-                                    restore_emulator_window_behind();
-                                });
                             }
                         }
                     }
@@ -3938,55 +3913,36 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
-#[cfg(target_os = "windows")]
 #[tauri::command]
-fn restore_game_window() -> Result<(), String> {
-    use winapi::um::winuser::*;
-    use winapi::shared::windef::HWND;
-    use winapi::shared::minwindef::{BOOL, LPARAM, TRUE};
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
+fn create_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    use tauri::WebviewWindowBuilder;
 
-    unsafe extern "system" fn enum_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
-        let mut pid: u32 = 0;
-        GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == 0 { return TRUE; }
-
-        let mut buf = [0u16; 512];
-        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
-        if len > 0 {
-            let title = OsString::from_wide(&buf[..len as usize]).to_string_lossy().to_lowercase();
-            if title.contains("retroarch") || title.contains("dolphin") || title.contains("cemu")
-                || title.contains("rpcs3") || title.contains("ppsspp") || title.contains("duckstation")
-                || title.contains("pcsx2") || title.contains("mgba") || title.contains("ryujinx")
-                || title.contains("yuzu") || title.contains("citra") {
-                let found = &mut *(l_param as *mut HWND);
-                *found = hwnd;
-                return 0; // stop enumeration
-            }
-        }
-        TRUE
+    if app_handle.get_webview_window("overlay").is_some() {
+        return Ok(());
     }
 
-    unsafe {
-        let mut found_hwnd: HWND = std::ptr::null_mut();
-        EnumWindows(Some(enum_callback), &mut found_hwnd as *mut HWND as LPARAM);
+    let url = tauri::WebviewUrl::App("index.html?overlay=1".into());
+    let builder = WebviewWindowBuilder::new(&app_handle, "overlay", url)
+        .title("EmuWorld Overlay")
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .fullscreen(true)
+        .skip_taskbar(true)
+        .focused(true);
 
-        if !found_hwnd.is_null() {
-            ShowWindow(found_hwnd, SW_RESTORE);
-            SetForegroundWindow(found_hwnd);
-            push_log("INFO", "Overlay fermé — fenêtre émulateur restaurée");
-            Ok(())
-        } else {
-            push_log("WARN", "Overlay fermé — aucune fenêtre émulateur trouvée");
-            Err("No emulator window found".to_string())
-        }
-    }
+    builder.build().map_err(|e| e.to_string())?;
+    push_log("INFO", "Overlay window created");
+    Ok(())
 }
 
-#[cfg(not(target_os = "windows"))]
 #[tauri::command]
-fn restore_game_window() -> Result<(), String> {
+fn close_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app_handle.get_webview_window("overlay") {
+        win.close().map_err(|e| e.to_string())?;
+    }
     Ok(())
 }
 
@@ -4151,7 +4107,8 @@ pub fn run() {
             discord_rpc::discord_clear,
             get_logs,
             clear_logs,
-            restore_game_window,
+            create_overlay_window,
+            close_overlay_window,
             export_config,
             import_config,
             read_text_file,
