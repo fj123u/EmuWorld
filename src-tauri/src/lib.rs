@@ -44,8 +44,10 @@ fn overlay_app_handle() -> &'static Mutex<Option<tauri::AppHandle>> {
 fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     use winapi::um::winuser::*;
     use winapi::um::libloaderapi::GetModuleHandleW;
-    use winapi::shared::windef::HHOOK;
+    use winapi::shared::windef::{HHOOK, HWND};
     use std::sync::atomic::{AtomicBool, Ordering};
+
+    const HWND_TOPMOST: HWND = -1isize as HWND;
 
     static SHIFT_DOWN: AtomicBool = AtomicBool::new(false);
 
@@ -74,7 +76,15 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                                 if let Some(win) = handle.get_webview_window("main") {
                                     let _ = win.unminimize();
                                     let _ = win.set_always_on_top(true);
-                                    let _ = win.set_focus();
+                                    // Show window on top WITHOUT stealing focus from the game
+                                    if let Ok(hwnd) = win.hwnd() {
+                                        SetWindowPos(
+                                            hwnd.0 as _,
+                                            HWND_TOPMOST,
+                                            0, 0, 0, 0,
+                                            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                                        );
+                                    }
                                 }
                                 let _ = handle.emit("toggle-overlay", "");
                             }
@@ -520,7 +530,8 @@ async fn launch_emulator(
         cmd.arg(&final_path);
     }
 
-    // Force borderless windowed fullscreen (allows overlay to appear on top)
+    // Force borderless windowed fullscreen for RetroArch (no --fullscreen CLI flag,
+    // as that triggers exclusive fullscreen which minimizes on focus loss)
     if effective_id == "retroarch" {
         let cfg_path = install_dir.join("retroarch.cfg");
         if cfg_path.exists() {
@@ -529,6 +540,7 @@ async fn launch_emulator(
                 ("video_fullscreen", "true"),
                 ("video_windowed_fullscreen", "true"),
                 ("pause_nonactive", "false"),
+                ("menu_pause_libretro", "false"),
             ];
             for (key, val) in settings {
                 let pattern = format!("{} = ", key);
@@ -541,7 +553,7 @@ async fn launch_emulator(
             }
             let _ = fs::write(&cfg_path, &cfg);
         }
-        cmd.arg("--fullscreen");
+        // No --fullscreen arg: config handles it via borderless windowed mode
     } else {
         match effective_id.as_str() {
             "dolphin" => { cmd.arg("-b"); },
