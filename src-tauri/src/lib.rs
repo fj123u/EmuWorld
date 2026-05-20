@@ -3728,6 +3728,12 @@ fn set_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>, game
 }
 
 #[tauri::command]
+fn get_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>) -> (Option<String>, Option<String>) {
+    let s = state.lock().unwrap();
+    (s.game_name.clone(), s.console.clone())
+}
+
+#[tauri::command]
 fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
 
@@ -4114,6 +4120,7 @@ pub fn run() {
             read_text_file,
             watch_roms_directory,
             set_current_playing,
+            get_current_playing,
             take_screenshot,
             get_screenshots,
             get_all_screenshots,

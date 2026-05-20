@@ -870,86 +870,195 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
 function OverlayWindow() {
   const [tab, setTab] = useState<"achievements" | "friends" | "chat" | "notes">("achievements");
   const [notes, setNotes] = useState("");
-  const [chatMessages, setChatMessages] = useState<{ from: string; text: string; time: string }[]>([]);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [raInfo, setRaInfo] = useState<any>(null);
   const [friends, setFriends] = useState<any[]>([]);
+  const [presences, setPresences] = useState<any[]>([]);
+  const [currentGame, setCurrentGame] = useState<{ name: string; console: string } | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [chatTarget, setChatTarget] = useState<{ id: string; username: string } | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    invoke<any>("get_ra_game_progress", { gameName: "", console: "" })
-      .then(info => setRaInfo(info))
-      .catch(() => {});
+    (async () => {
+      const [gameName, consoleName] = await invoke<[string | null, string | null]>("get_current_playing");
+      if (gameName && consoleName) {
+        setCurrentGame({ name: gameName, console: consoleName });
+        invoke<any>("get_ra_game_progress", { gameName, console: consoleName })
+          .then(info => setRaInfo(info))
+          .catch(() => {});
+        const playtime = await invoke<any>("get_playtime");
+        const key = `${consoleName}::${gameName}`;
+        if (playtime?.games?.[key]?.notes) setNotes(playtime.games[key].notes);
+      }
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        const { data } = await supabase
+          .from("friendships")
+          .select("*")
+          .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+          .eq("status", "accepted");
+        if (data && data.length > 0) {
+          const friendIds = data.map((f: any) => f.requester_id === user.id ? f.addressee_id : f.requester_id);
+          const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", friendIds);
+          const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+          const enriched = data.map((f: any) => {
+            const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
+            return { ...f, profile: profileMap.get(otherId) || { username: "Anonyme", avatar_url: null }, otherId };
+          });
+          setFriends(enriched);
+          const { data: pres } = await supabase.from("presence").select("*").in("user_id", friendIds);
+          setPresences(pres || []);
+        }
+      }
+    })();
   }, []);
 
-  const closeOverlay = async () => {
-    invoke("close_overlay_window").catch(() => {});
+  useEffect(() => {
+    if (!chatTarget || !userId) return;
+    (async () => {
+      const { data } = await supabase
+        .from("messages")
+        .select("*")
+        .or(`and(sender_id.eq.${userId},receiver_id.eq.${chatTarget.id}),and(sender_id.eq.${chatTarget.id},receiver_id.eq.${userId})`)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      setChatMessages(data || []);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    })();
+  }, [chatTarget, userId]);
+
+  const sendMessage = async () => {
+    if (!userId || !chatTarget || !chatInput.trim()) return;
+    const content = chatInput.trim();
+    setChatInput("");
+    const { data } = await supabase.from("messages").insert({ sender_id: userId, receiver_id: chatTarget.id, content }).select().single();
+    if (data) {
+      setChatMessages(prev => [...prev, data]);
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
   };
 
+  const saveNotes = async (val: string) => {
+    setNotes(val);
+    if (currentGame) {
+      await invoke("set_game_notes", { gameName: currentGame.name, console: currentGame.console, notes: val });
+    }
+  };
+
+  const closeOverlay = () => { invoke("close_overlay_window").catch(() => {}); };
+
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeOverlay();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") closeOverlay(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
   return (
-    <div style={{ width: "100vw", height: "100vh", background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: 700, maxHeight: "80vh", background: "rgba(20,20,30,0.95)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", overflow: "hidden", backdropFilter: "blur(20px)" }}>
-        <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.1)", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", gap: 8 }}>
+    <div style={{ width: "100vw", height: "100vh", background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Inter', 'Segoe UI', sans-serif" }}>
+      <div style={{ width: 720, maxHeight: "85vh", background: "rgba(20,20,30,0.97)", borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 25px 80px rgba(0,0,0,0.6)" }}>
+        <div style={{ display: "flex", alignItems: "center", padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", gap: 6 }}>
             {(["achievements", "friends", "chat", "notes"] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: tab === t ? "rgba(99,102,241,0.8)" : "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400 }}>
+              <button key={t} onClick={() => setTab(t)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: tab === t ? "rgba(99,102,241,0.85)" : "rgba(255,255,255,0.06)", color: tab === t ? "#fff" : "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400, transition: "all 0.15s" }}>
                 {t === "achievements" ? "Achievements" : t === "friends" ? "Amis" : t === "chat" ? "Chat" : "Notes"}
               </button>
             ))}
           </div>
-          <button onClick={closeOverlay} style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: 18 }}>✕</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            {currentGame && <span style={{ fontSize: 12, color: "rgba(255,255,255,0.5)" }}>{currentGame.name}</span>}
+            <button onClick={closeOverlay} style={{ background: "rgba(255,255,255,0.06)", border: "none", color: "#fff", cursor: "pointer", fontSize: 14, width: 28, height: 28, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+          </div>
         </div>
-        <div style={{ flex: 1, padding: 20, overflowY: "auto", color: "#fff", minHeight: 300 }}>
+        <div style={{ flex: 1, padding: 20, overflowY: "auto", color: "#fff", minHeight: 350 }}>
           {tab === "achievements" && (
             <div>
               {raInfo && raInfo.achievements && raInfo.achievements.length > 0 ? (
                 raInfo.achievements.map((a: any, i: number) => (
-                  <div key={i} style={{ display: "flex", gap: 12, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", alignItems: "center" }}>
-                    <img src={`https://media.retroachievements.org/Badge/${a.badge_name}.png`} alt="" style={{ width: 40, height: 40, borderRadius: 6 }} />
-                    <div>
+                  <div key={i} style={{ display: "flex", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)", alignItems: "center" }}>
+                    <img src={`https://media.retroachievements.org/Badge/${a.badge_name}.png`} alt="" style={{ width: 42, height: 42, borderRadius: 8 }} />
+                    <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</div>
-                      <div style={{ fontSize: 12, opacity: 0.7 }}>{a.description}</div>
+                      <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>{a.description}</div>
                     </div>
-                    {a.unlocked && <span style={{ marginLeft: "auto", color: "#4ade80", fontSize: 12 }}>Débloqué</span>}
+                    {a.date_earned && <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 600, padding: "3px 8px", background: "rgba(74,222,128,0.1)", borderRadius: 6 }}>Débloqué</span>}
                   </div>
                 ))
               ) : (
-                <div style={{ opacity: 0.5, textAlign: "center", paddingTop: 40 }}>Aucun achievement pour ce jeu</div>
+                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>Aucun achievement pour ce jeu</div>
               )}
             </div>
           )}
           {tab === "friends" && (
-            <div style={{ opacity: 0.5, textAlign: "center", paddingTop: 40 }}>Amis en ligne — bientôt disponible</div>
+            <div>
+              {friends.length === 0 ? (
+                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>Aucun ami ajouté</div>
+              ) : (
+                friends.map((f: any) => {
+                  const presence = presences.find((p: any) => p.user_id === f.otherId);
+                  const isOnline = presence && presence.status !== "offline" && (Date.now() - new Date(presence.updated_at).getTime()) < 120000;
+                  const isPlaying = presence?.status === "playing";
+                  return (
+                    <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(99,102,241,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 600, position: "relative" }}>
+                        {f.profile?.avatar_url ? <img src={f.profile.avatar_url} alt="" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover" }} /> : (f.profile?.username || "?").slice(0, 2).toUpperCase()}
+                        <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: isPlaying ? "#a78bfa" : isOnline ? "#4ade80" : "#6b7280", border: "2px solid rgba(20,20,30,0.97)" }} />
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{f.profile?.username || "Anonyme"}</div>
+                        <div style={{ fontSize: 12, opacity: 0.5 }}>{isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}</div>
+                      </div>
+                      <button onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" })} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>Chat</button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           )}
           {tab === "chat" && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-              <div style={{ flex: 1, overflowY: "auto", marginBottom: 12 }}>
-                {chatMessages.length === 0 && <div style={{ opacity: 0.5, textAlign: "center", paddingTop: 40 }}>Aucun message</div>}
-                {chatMessages.map((m, i) => (
-                  <div key={i} style={{ marginBottom: 8 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{m.from}: </span>
-                    <span style={{ fontSize: 13 }}>{m.text}</span>
+              {!chatTarget ? (
+                <div>
+                  <div style={{ opacity: 0.5, marginBottom: 12, fontSize: 13 }}>Sélectionne un ami :</div>
+                  {friends.map((f: any) => (
+                    <button key={f.id} onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" })} style={{ display: "block", width: "100%", padding: "10px 14px", marginBottom: 6, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", fontSize: 13, textAlign: "left" }}>
+                      {f.profile?.username || "Anonyme"}
+                    </button>
+                  ))}
+                  {friends.length === 0 && <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 40, fontSize: 14 }}>Aucun ami</div>}
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>{chatTarget.username}</span>
+                    <button onClick={() => setChatTarget(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 12 }}>← Retour</button>
                   </div>
-                ))}
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Message..." style={{ flex: 1, padding: "8px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 13, outline: "none" }} />
-                <button onClick={() => { if (chatInput.trim()) { setChatMessages(p => [...p, { from: "Moi", text: chatInput, time: new Date().toLocaleTimeString() }]); setChatInput(""); } }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.8)", color: "#fff", cursor: "pointer", fontSize: 13 }}>Envoyer</button>
-              </div>
+                  <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, maxHeight: 220 }}>
+                    {chatMessages.map((m: any, i: number) => (
+                      <div key={i} style={{ marginBottom: 6, textAlign: m.sender_id === userId ? "right" : "left" }}>
+                        <span style={{ display: "inline-block", padding: "6px 12px", borderRadius: 12, background: m.sender_id === userId ? "rgba(99,102,241,0.7)" : "rgba(255,255,255,0.08)", fontSize: 13, maxWidth: "70%" }}>
+                          {m.content?.startsWith("[img]") ? <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} /> : m.content}
+                        </span>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendMessage(); }} placeholder="Message..." style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 13, outline: "none" }} />
+                    <button onClick={sendMessage} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Envoyer</button>
+                  </div>
+                </>
+              )}
             </div>
           )}
           {tab === "notes" && (
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notes de jeu..." style={{ width: "100%", height: "100%", minHeight: 200, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 12, color: "#fff", fontSize: 13, resize: "none", outline: "none" }} />
+            <textarea value={notes} onChange={e => saveNotes(e.target.value)} placeholder="Notes, codes, astuces, progression..." style={{ width: "100%", height: "100%", minHeight: 250, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 14, color: "#fff", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }} />
           )}
         </div>
-        <div style={{ padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.1)", textAlign: "center", opacity: 0.4, fontSize: 11 }}>
+        <div style={{ padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center", opacity: 0.35, fontSize: 11 }}>
           Shift+Tab ou Échap pour fermer
         </div>
       </div>
