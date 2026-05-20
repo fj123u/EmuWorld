@@ -1067,6 +1067,11 @@ export default function App() {
   // ---- Logs state ----
   const [appLogs, setAppLogs] = useState<string[]>([]);
 
+  // ---- Overlay state ----
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [overlayTab, setOverlayTab] = useState<"achievements" | "friends" | "chat" | "notes">("achievements");
+  const [overlayRaInfo, setOverlayRaInfo] = useState<RAGameInfo | null>(null);
+
   // ---- Chat state ----
   interface ChatMessage {
     id: string;
@@ -1582,6 +1587,34 @@ export default function App() {
     });
     return () => { u1.then(f => f()); u2.then(f => f()); };
   }, [showToast]);
+
+  // F1 overlay toggle (global shortcut registered in Rust)
+  useEffect(() => {
+    const unlisten = listen<string>("toggle-overlay", async () => {
+      if (!currentPlayingGameRef.current) return;
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
+      const win = getCurrentWindow();
+      setOverlayVisible(prev => {
+        const next = !prev;
+        if (next) {
+          win.setAlwaysOnTop(true);
+          win.unminimize();
+          win.setFocus();
+          const game = currentPlayingGameRef.current;
+          if (game) {
+            invoke<RAGameInfo>("get_ra_game_progress", { gameName: game.name, console: game.console })
+              .then(info => setOverlayRaInfo(info))
+              .catch(() => setOverlayRaInfo(null));
+          }
+        } else {
+          win.setAlwaysOnTop(false);
+          win.minimize();
+        }
+        return next;
+      });
+    });
+    return () => { unlisten.then(f => f()); };
+  }, []);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -6781,6 +6814,164 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ===== GAME OVERLAY (F1) ===== */}
+      {overlayVisible && currentPlayingGame && (
+        <div className="game-overlay">
+          <div className="game-overlay__sidebar">
+            <div className="game-overlay__tabs">
+              <button className={`game-overlay__tab ${overlayTab === "achievements" ? "game-overlay__tab--active" : ""}`} onClick={() => setOverlayTab("achievements")}>
+                <Trophy size={16} />
+              </button>
+              <button className={`game-overlay__tab ${overlayTab === "friends" ? "game-overlay__tab--active" : ""}`} onClick={() => setOverlayTab("friends")}>
+                <Users size={16} />
+              </button>
+              <button className={`game-overlay__tab ${overlayTab === "chat" ? "game-overlay__tab--active" : ""}`} onClick={() => setOverlayTab("chat")}>
+                <MessageCircle size={16} />
+              </button>
+              <button className={`game-overlay__tab ${overlayTab === "notes" ? "game-overlay__tab--active" : ""}`} onClick={() => setOverlayTab("notes")}>
+                <FileText size={16} />
+              </button>
+            </div>
+            <button className="game-overlay__close" onClick={async () => {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              const win = getCurrentWindow();
+              win.setAlwaysOnTop(false);
+              win.minimize();
+              setOverlayVisible(false);
+            }}>
+              <X size={14} />
+            </button>
+          </div>
+          <div className="game-overlay__panel">
+            <div className="game-overlay__header">
+              <h3>{currentPlayingGame.name}</h3>
+              <span className="game-overlay__hint">F1 pour fermer</span>
+            </div>
+
+            {overlayTab === "achievements" && (
+              <div className="game-overlay__content">
+                <h4>RetroAchievements</h4>
+                {!overlayRaInfo || overlayRaInfo.achievements.length === 0 ? (
+                  <p className="game-overlay__empty">Aucun achievement pour ce jeu.</p>
+                ) : (
+                  <div className="game-overlay__achievements-list">
+                    {overlayRaInfo.achievements.map((a) => (
+                      <div key={a.id} className={`game-overlay__achievement ${a.date_earned ? "game-overlay__achievement--earned" : ""}`}>
+                        {a.badge_name && <img src={`https://media.retroachievements.org/Badge/${a.badge_name}.png`} alt="" className="game-overlay__achievement-badge" />}
+                        <div className="game-overlay__achievement-info">
+                          <span className="game-overlay__achievement-title">{a.title}</span>
+                          <span className="game-overlay__achievement-desc">{a.description}</span>
+                        </div>
+                        {a.date_earned && <CheckCircle size={12} className="game-overlay__achievement-check" />}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {overlayTab === "friends" && (
+              <div className="game-overlay__content">
+                <h4>Amis en ligne</h4>
+                {friends.length === 0 ? <p className="game-overlay__empty">Aucun ami ajouté.</p> : (
+                  <div className="game-overlay__friends-list">
+                    {friends.map(f => {
+                      const otherId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
+                      const presence = friendPresences.find(p => p.user_id === otherId);
+                      const isOnline = presence && presence.status !== "offline" && (Date.now() - new Date(presence.updated_at).getTime()) < 120000;
+                      const isPlaying = presence?.status === "playing";
+                      if (!isOnline) return null;
+                      return (
+                        <div key={f.id} className="game-overlay__friend">
+                          <div className="game-overlay__friend-avatar">
+                            {f.profile?.avatar_url ? <img src={f.profile.avatar_url} alt="" /> : <div className="friend-card__avatar-placeholder" style={{ width: 28, height: 28, fontSize: 10 }}>{(f.profile?.username || "?").slice(0, 2).toUpperCase()}</div>}
+                            <span className={`friend-card__status ${isPlaying ? "friend-card__status--playing" : "friend-card__status--online"}`} />
+                          </div>
+                          <div className="game-overlay__friend-info">
+                            <span className="game-overlay__friend-name">{f.profile?.username || "Anonyme"}</span>
+                            <span className="game-overlay__friend-activity">{isPlaying ? `Joue à ${presence.current_game}` : "En ligne"}</span>
+                          </div>
+                          <button className="btn btn--ghost btn--sm" onClick={() => openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null)}>
+                            <MessageCircle size={12} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {friends.every(f => {
+                      const otherId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
+                      const presence = friendPresences.find(p => p.user_id === otherId);
+                      return !presence || presence.status === "offline" || (Date.now() - new Date(presence.updated_at).getTime()) >= 120000;
+                    }) && <p className="game-overlay__empty">Aucun ami en ligne.</p>}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {overlayTab === "chat" && (
+              <div className="game-overlay__content">
+                <h4>Chat</h4>
+                {!chatOpen ? (
+                  <div className="game-overlay__chat-select">
+                    <p className="game-overlay__empty">Sélectionne un ami pour chatter :</p>
+                    {friends.map(f => {
+                      const otherId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
+                      return (
+                        <button key={f.id} className="game-overlay__chat-friend-btn" onClick={() => openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null)}>
+                          {f.profile?.username || "Anonyme"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="game-overlay__chat-active">
+                    <div className="game-overlay__chat-header">
+                      <span>{chatOpen.username}</span>
+                      <button className="btn btn--ghost btn--sm" onClick={() => setChatOpen(null)}><X size={12} /></button>
+                    </div>
+                    <div className="game-overlay__chat-messages">
+                      {chatMessages.map((m, i) => (
+                        <div key={i} className={`game-overlay__chat-msg ${m.sender_id === user?.id ? "game-overlay__chat-msg--mine" : ""}`}>
+                          {m.content}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="game-overlay__chat-input">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
+                        placeholder="Message..."
+                      />
+                      <button className="btn btn--primary btn--sm" onClick={sendMessage}><Send size={12} /></button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {overlayTab === "notes" && (
+              <div className="game-overlay__content">
+                <h4>Notes — {currentPlayingGame.name}</h4>
+                <textarea
+                  className="game-overlay__notes-textarea"
+                  value={playtime.games[`${currentPlayingGame.console}::${currentPlayingGame.name}`]?.notes || ""}
+                  onChange={async (e) => {
+                    const val = e.target.value;
+                    await invoke("set_game_notes", { gameName: currentPlayingGame.name, console: currentPlayingGame.console, notes: val });
+                    setPlaytime(prev => {
+                      const key = `${currentPlayingGame.console}::${currentPlayingGame.name}`;
+                      return { ...prev, games: { ...prev.games, [key]: { ...prev.games[key], notes: val } } };
+                    });
+                  }}
+                  placeholder="Notes, codes, astuces, progression..."
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="toasts">
         <AnimatePresence>

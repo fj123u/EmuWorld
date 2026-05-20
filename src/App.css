@@ -5330,6 +5330,314 @@ body {
   background: rgba(245, 158, 11, 0.08);
 }
 
+/* ============================================
+   GAME OVERLAY (F1)
+   ============================================ */
+.game-overlay {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  z-index: 99999;
+  display: flex;
+  background: rgba(15, 15, 20, 0.95);
+  backdrop-filter: blur(20px);
+  border-left: 1px solid rgba(99, 102, 241, 0.3);
+  box-shadow: -8px 0 40px rgba(0, 0, 0, 0.6);
+  animation: overlay-slide-in 0.2s ease-out;
+}
+@keyframes overlay-slide-in {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.game-overlay__sidebar {
+  width: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0;
+  gap: 4px;
+  border-right: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.3);
+}
+.game-overlay__tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+.game-overlay__tab {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.game-overlay__tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+.game-overlay__tab--active {
+  background: rgba(99, 102, 241, 0.2);
+  color: var(--accent);
+}
+.game-overlay__close {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.game-overlay__close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+.game-overlay__panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.game-overlay__header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.game-overlay__header h3 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.game-overlay__hint {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.game-overlay__content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+.game-overlay__content h4 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.game-overlay__empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px 0;
+}
+/* Achievements */
+.game-overlay__achievements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.game-overlay__achievement {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+}
+.game-overlay__achievement--earned {
+  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(34, 197, 94, 0.06);
+}
+.game-overlay__achievement-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+}
+.game-overlay__achievement-info {
+  flex: 1;
+  min-width: 0;
+}
+.game-overlay__achievement-title {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-overlay__achievement-desc {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-overlay__achievement-check {
+  color: #22c55e;
+  flex-shrink: 0;
+}
+/* Friends */
+.game-overlay__friends-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.game-overlay__friend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.game-overlay__friend-avatar {
+  position: relative;
+}
+.game-overlay__friend-avatar img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.game-overlay__friend-info {
+  flex: 1;
+  min-width: 0;
+}
+.game-overlay__friend-name {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.game-overlay__friend-activity {
+  display: block;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+/* Chat */
+.game-overlay__chat-select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.game-overlay__chat-friend-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.game-overlay__chat-friend-btn:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+.game-overlay__chat-active {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.game-overlay__chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.game-overlay__chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+.game-overlay__chat-msg {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  max-width: 85%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+  align-self: flex-start;
+}
+.game-overlay__chat-msg--mine {
+  background: rgba(99, 102, 241, 0.25);
+  align-self: flex-end;
+}
+.game-overlay__chat-input {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
+.game-overlay__chat-input input {
+  flex: 1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  outline: none;
+}
+.game-overlay__chat-input input:focus {
+  border-color: var(--accent);
+}
+/* Notes */
+.game-overlay__notes-textarea {
+  width: 100%;
+  height: calc(100% - 40px);
+  min-height: 200px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+}
+.game-overlay__notes-textarea:focus {
+  border-color: var(--accent);
+}
+
 .screenshot-lightbox__close {
   position: absolute;
   top: 16px;
