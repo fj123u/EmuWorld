@@ -41,6 +41,42 @@ fn overlay_app_handle() -> &'static Mutex<Option<tauri::AppHandle>> {
 }
 
 #[cfg(target_os = "windows")]
+fn restore_emulator_window_behind() {
+    use winapi::um::winuser::*;
+    use winapi::shared::windef::HWND;
+    use winapi::shared::minwindef::{BOOL, LPARAM, TRUE};
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    unsafe extern "system" fn find_emu(hwnd: HWND, l_param: LPARAM) -> BOOL {
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = OsString::from_wide(&buf[..len as usize]).to_string_lossy().to_lowercase();
+            if title.contains("retroarch") || title.contains("dolphin") || title.contains("cemu")
+                || title.contains("rpcs3") || title.contains("ppsspp") || title.contains("duckstation")
+                || title.contains("pcsx2") || title.contains("mgba") || title.contains("ryujinx")
+                || title.contains("citra") {
+                let found = &mut *(l_param as *mut HWND);
+                *found = hwnd;
+                return 0;
+            }
+        }
+        TRUE
+    }
+
+    unsafe {
+        let mut found_hwnd: HWND = std::ptr::null_mut();
+        EnumWindows(Some(find_emu), &mut found_hwnd as *mut HWND as LPARAM);
+        if !found_hwnd.is_null() {
+            // Restore window without giving it focus (SW_SHOWNOACTIVATE)
+            ShowWindow(found_hwnd, SW_SHOWNOACTIVATE);
+            println!("[Overlay] Restored emulator window behind overlay");
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     use winapi::um::winuser::*;
     use winapi::um::libloaderapi::GetModuleHandleW;
@@ -77,6 +113,11 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                                     let _ = win.set_focus();
                                 }
                                 let _ = handle.emit("toggle-overlay", "");
+                                // After a short delay, restore the game window behind us
+                                std::thread::spawn(|| {
+                                    std::thread::sleep(std::time::Duration::from_millis(300));
+                                    restore_emulator_window_behind();
+                                });
                             }
                         }
                     }
