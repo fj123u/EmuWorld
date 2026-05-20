@@ -41,4 +41,4 @@ gilrs = "0.11"
 tauri-plugin-notification = "2"
 notify = { version = "7", features = ["macos_kqueue"] }
 tauri-plugin-global-shortcut = "2"
-winapi = { version = "0.3", features = ["winuser", "libloaderapi"] }
+winapi = { version = "0.3", features = ["winuser", "libloaderapi", "minwindef"] }

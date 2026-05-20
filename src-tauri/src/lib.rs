@@ -528,6 +528,7 @@ async fn launch_emulator(
             let settings = [
                 ("video_fullscreen", "true"),
                 ("video_windowed_fullscreen", "true"),
+                ("pause_nonactive", "false"),
             ];
             for (key, val) in settings {
                 let pattern = format!("{} = ", key);
@@ -3894,6 +3895,58 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
+#[cfg(target_os = "windows")]
+#[tauri::command]
+fn restore_game_window() -> Result<(), String> {
+    use winapi::um::winuser::*;
+    use winapi::shared::windef::HWND;
+    use winapi::shared::minwindef::{BOOL, LPARAM, TRUE};
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+
+    unsafe extern "system" fn enum_callback(hwnd: HWND, l_param: LPARAM) -> BOOL {
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 { return TRUE; }
+
+        let mut buf = [0u16; 512];
+        let len = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+        if len > 0 {
+            let title = OsString::from_wide(&buf[..len as usize]).to_string_lossy().to_lowercase();
+            if title.contains("retroarch") || title.contains("dolphin") || title.contains("cemu")
+                || title.contains("rpcs3") || title.contains("ppsspp") || title.contains("duckstation")
+                || title.contains("pcsx2") || title.contains("mgba") || title.contains("ryujinx")
+                || title.contains("yuzu") || title.contains("citra") {
+                let found = &mut *(l_param as *mut HWND);
+                *found = hwnd;
+                return 0; // stop enumeration
+            }
+        }
+        TRUE
+    }
+
+    unsafe {
+        let mut found_hwnd: HWND = std::ptr::null_mut();
+        EnumWindows(Some(enum_callback), &mut found_hwnd as *mut HWND as LPARAM);
+
+        if !found_hwnd.is_null() {
+            ShowWindow(found_hwnd, SW_RESTORE);
+            SetForegroundWindow(found_hwnd);
+            push_log("INFO", "Overlay fermé — fenêtre émulateur restaurée");
+            Ok(())
+        } else {
+            push_log("WARN", "Overlay fermé — aucune fenêtre émulateur trouvée");
+            Err("No emulator window found".to_string())
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+#[tauri::command]
+fn restore_game_window() -> Result<(), String> {
+    Ok(())
+}
+
 #[tauri::command]
 fn export_config() -> Result<String, String> {
     let export = FullExport {
@@ -4055,6 +4108,7 @@ pub fn run() {
             discord_rpc::discord_clear,
             get_logs,
             clear_logs,
+            restore_game_window,
             export_config,
             import_config,
             read_text_file,

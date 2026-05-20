@@ -1610,6 +1610,7 @@ export default function App() {
         setOverlayVisible(false);
         await win.setAlwaysOnTop(false);
         await win.minimize();
+        invoke("restore_game_window").catch(() => {});
       }
     });
     return () => { unlisten.then(f => f()); };
@@ -6838,6 +6839,7 @@ export default function App() {
               setOverlayVisible(false);
               await win.setAlwaysOnTop(false);
               await win.minimize();
+              invoke("restore_game_window").catch(() => {});
             }}>
               <X size={14} />
             </button>
