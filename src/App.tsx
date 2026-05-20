@@ -1331,6 +1331,15 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "1.9.0", date: "2026-05-21", changes: [
+      "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
+      "🏆 Achievements dans l'overlay: voir sa progression RetroAchievements avec points par succès et total",
+      "👥 Amis dans l'overlay: voir qui est en ligne et à quoi ils jouent",
+      "💬 Chat dans l'overlay: envoyer des messages à un ami sans quitter le jeu",
+      "📝 Notes dans l'overlay: écrire des notes/codes avec sauvegarde persistante",
+      "🔔 Activity feed dédupliqué: un jeu n'apparaît qu'une fois dans le fil (premier lancement uniquement)",
+      "🪝 Low-level keyboard hook: Shift+Tab détecté même en plein écran via Windows hook",
+    ] },
     { version: "1.8.0", date: "2026-05-11", changes: [
       "📦 Import/Export config: sauvegarder toute sa config + playtime en JSON pour restaurer sur un autre PC",
       "🔔 Notifications Windows natives: toast quand un achievement est débloqué, un download terminé, ou une session finie",

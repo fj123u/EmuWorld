@@ -58,16 +58,12 @@
 - [x] **Statistiques détaillées** *(moyen)* — page stats perso : graphe d'heures jouées par semaine (sparkline), top 5 jeux, top 3 consoles, streak actuel (jours consécutifs), heatmap style GitHub des sessions
 - [ ] **Wrap annuel / mensuel** *(gros)* — "EmuWorld Wrapped" à la Spotify : tes stats du mois en slides animées (jeu le + joué, console préférée, temps total, achievement débloqués)
 - [ ] **Partage de profil** *(moyen)* — URL publique `emuworld.app/u/username` avec stats, bibliothèque, achievements, top jeux (la web-panel actuelle enrichie)
-- [ ] **Activity feed** *(gros)* — fil d'activité entre amis : "Théo a joué 3h à Zelda", "Max a débloqué un achievement", "Léo a ajouté 12 jeux à sa bibliothèque"
+- [x] **Activity feed** *(gros)* — fil d'activité entre amis : "Théo a joué 3h à Zelda", "Max a débloqué un achievement", "Léo a ajouté 12 jeux à sa bibliothèque"
 - [ ] **Comparer avec un ami** *(moyen)* — vue side-by-side des stats entre toi et un pote (qui joue plus à quoi, qui a plus d'achievements, etc.)
 
 ### 🖥️ Mode Intégré (Killer Feature)
 
-- [ ] **Game View embarquée** *(très gros)* — l'émulateur s'affiche directement dans EmuWorld comme un panel central, avec des onglets latéraux rétractables (achievements, chat, notes, timer, guide). Navigation style Twitch/YouTube. Deux approches techniques possibles :
-  - **Option A — Win32 `SetParent`** : reparenter le HWND de l'émulateur dans un conteneur Tauri. Plus intégré (1 seule fenêtre), mais certains émus gèrent mal.
-  - **Option B — Overlay transparent** : fenêtre EmuWorld always-on-top semi-transparente par-dessus l'émulateur, panels rétractables sur les côtés. Plus compatible, 2 fenêtres.
-  - Panels possibles : RetroAchievements live, chat amis, notes/codes, speedrun timer, guides, screenshots
-  - Toggle avec un raccourci (ex: F1 ou bouton manette) pour montrer/cacher les panels
+- [x] **Game View embarquée** *(très gros)* — overlay Steam-style : fenêtre transparente always-on-top séparée, Shift+Tab pour toggle. Panels : RetroAchievements (avec points), chat amis, notes persistantes. Fenêtre overlay dédiée créée au runtime via Rust, ne touche pas la fenêtre du jeu.
 
 ### 🎮 Gameplay & Émulation
 
@@ -75,7 +71,6 @@
 - [x] **Notes par jeu** *(quick win)* — champ texte libre sur chaque fiche jeu pour noter des codes, astuces, où on en est, etc.
 - [x] **Rating / Note perso** *(quick win)* — étoiles ou note /10 sur chaque jeu, visible dans la bibliothèque et utilisable comme filtre/tri
 - [x] **Détection auto des ROMs** *(moyen)* — watcher sur le dossier ROMs qui détecte les nouveaux fichiers et propose automatiquement de les ajouter à la bibliothèque sans rescan manuel
-- [ ] **Cheat codes database** *(moyen)* — intégrer une base de cheats (Action Replay, GameShark) par jeu, activables en un clic avant le lancement
 - [ ] **Speed run timer** *(gros)* — chrono intégré avec splits, comparable avec tes propres records et éventuellement ceux des amis (comme livesplit)
 
 ### 🔧 Technique & QoL
@@ -83,7 +78,7 @@
 - [x] **Import/Export de config** *(quick win)* — exporter toute sa config EmuWorld (émulateurs, paths, préférences) en JSON pour la restaurer sur un autre PC
 - [x] **Raccourcis clavier globaux** *(quick win)* — hotkeys pour lancer le dernier jeu joué, ouvrir EmuWorld, kill l'émulateur en cours, etc. même quand l'app est minimisée
 - [x] **Multi-langue** *(moyen)* — i18n avec au minimum FR/EN, fichier JSON de traductions, détection locale système
-- [ ] **Logs & diagnostic** *(quick win)* — page dans settings qui affiche les derniers logs (lancement ému, fetch cover, erreurs) pour debug sans console
+- [x] **Logs & diagnostic** *(quick win)* — page dans settings qui affiche les derniers logs (lancement ému, fetch cover, erreurs) pour debug sans console
 - [ ] **Portable mode** *(moyen)* — détection d'un fichier `portable.txt` à côté de l'exe → stocke tout dans le même dossier (USB friendly)
 - [ ] **Bandwidth limiter** *(quick win)* — réglage vitesse max de download dans le store (pour pas saturer la connexion)
 - [x] **Notifications système** *(quick win)* — notification Windows native quand un download est terminé, quand un ami se connecte, quand un achievement est débloqué
