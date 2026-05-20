@@ -1064,6 +1064,9 @@ export default function App() {
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [activityFeed, setActivityFeed] = useState<{ id: string; user_id: string; event_type: string; game_name: string | null; console: string | null; details: string | null; created_at: string; username?: string; avatar_url?: string | null }[]>([]);
 
+  // ---- Logs state ----
+  const [appLogs, setAppLogs] = useState<string[]>([]);
+
   // ---- Chat state ----
   interface ChatMessage {
     id: string;
@@ -5361,6 +5364,40 @@ export default function App() {
                       ) : null}
                     </div>
                   )}
+
+                  <div className="settings__group">
+                    <div className="settings__group-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span><FileText size={16} /> Logs & Diagnostic</span>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button className="btn btn--ghost btn--sm" onClick={async () => {
+                          const logs = await invoke<string[]>("get_logs");
+                          setAppLogs(logs);
+                        }}>
+                          <RefreshCw size={12} /> Rafraîchir
+                        </button>
+                        <button className="btn btn--ghost btn--sm" onClick={async () => {
+                          await invoke("clear_logs");
+                          setAppLogs([]);
+                          showToast("Logs effacés", "success");
+                        }}>
+                          <Trash2 size={12} /> Effacer
+                        </button>
+                      </div>
+                    </div>
+                    <div className="logs-container">
+                      {appLogs.length === 0 ? (
+                        <p className="settings__field-desc">Aucun log récent. Les logs apparaissent quand tu lances un jeu, installes un émulateur, ou effectues des actions.</p>
+                      ) : (
+                        <div className="logs-list">
+                          {appLogs.map((log, i) => (
+                            <div key={i} className={`logs-entry ${log.startsWith("[ERROR]") ? "logs-entry--error" : log.startsWith("[WARN]") ? "logs-entry--warn" : ""}`}>
+                              {log}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 

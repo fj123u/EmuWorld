@@ -5298,6 +5298,38 @@ body {
   box-shadow: 0 0 40px rgba(0, 0, 0, 0.8);
 }
 
+/* Logs */
+.logs-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+}
+.logs-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.logs-entry {
+  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-size: 0.72rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.logs-entry--error {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+.logs-entry--warn {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
 .screenshot-lightbox__close {
   position: absolute;
   top: 16px;

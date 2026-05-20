@@ -16,6 +16,23 @@ struct CurrentPlayingState {
     console: Option<String>,
 }
 
+use std::sync::OnceLock;
+
+static APP_LOGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+
+fn app_logs() -> &'static Mutex<Vec<String>> {
+    APP_LOGS.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn push_log(level: &str, msg: &str) {
+    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+    let entry = format!("[{}] {} — {}", level, timestamp, msg);
+    if let Ok(mut logs) = app_logs().lock() {
+        logs.push(entry);
+        if logs.len() > 500 { logs.drain(0..100); }
+    }
+}
+
 mod emulators;
 mod playtime;
 mod discord_rpc;
@@ -136,6 +153,7 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         .find(|e| e.id == emulator_id)
         .ok_or_else(|| format!("Emulator '{}' not found in catalog", emulator_id))?
         .clone();
+    push_log("INFO", &format!("Installation de {} ({})...", emu.name, emu.id));
 
     let config = get_config();
     let install_dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
@@ -251,6 +269,7 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         "progress": 100
     }));
 
+    push_log("INFO", &format!("{} installé avec succès", emu.name));
     Ok(format!("{} installed successfully!", emu.name))
 }
 
@@ -383,6 +402,7 @@ async fn launch_emulator(
     if let Some(rom) = rom_path.clone() {
         let final_path = rom.replace(r"\\?\", "").replace("/", "\\");
         println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
+        push_log("INFO", &format!("Lancement: {} via {}", final_path.split('\\').last().unwrap_or(&final_path), effective_id));
 
         // Handle RetroArch cores — either from RA redirect or from retroarch-* emulators
         if use_retroarch {
@@ -440,11 +460,13 @@ async fn launch_emulator(
         Ok(c) => c,
         Err(e) => {
             println!("[Launch] ERROR spawning process: {}", e);
+            push_log("ERROR", &format!("Échec lancement émulateur: {}", e));
             return Err(format!("Could not start emulator: {}", e));
         }
     };
 
     println!("[Launch] Success!");
+    push_log("INFO", &format!("Émulateur {} démarré avec succès", emu.name));
     let launched_name = emu.name.clone();
 
     // Track playtime only when we have a ROM context (launching the bare emulator doesn't count as a game session).
@@ -572,6 +594,7 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
             }
         }
     }
+    push_log("INFO", &format!("Scan ROMs terminé: {} jeux trouvés dans {}", roms.len(), directory));
     roms
 }
 
@@ -1246,6 +1269,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
 
     write_to_boxart_log("Result: FAILED - All sources exhausted");
     log_event("DONE", "NONE FOUND", None);
+    push_log("WARN", &format!("Cover introuvable pour '{}' ({})", game_name, console));
     Err("No boxart found".to_string())
 }
 
@@ -3015,6 +3039,7 @@ async fn download_vimm_rom(
     game_name: String,
     console: String,
 ) -> Result<String, String> {
+    push_log("INFO", &format!("Téléchargement: {} ({})", game_name, console));
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let dest_dir = roms_dir.join(&console);
@@ -3756,6 +3781,16 @@ async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
 
 
 #[tauri::command]
+fn get_logs() -> Vec<String> {
+    app_logs().lock().map(|l| l.clone()).unwrap_or_default()
+}
+
+#[tauri::command]
+fn clear_logs() {
+    if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
+}
+
+#[tauri::command]
 fn export_config() -> Result<String, String> {
     let export = FullExport {
         config: get_config(),
@@ -3908,6 +3943,8 @@ pub fn run() {
             discord_rpc::discord_set_idle,
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,
+            get_logs,
+            clear_logs,
             export_config,
             import_config,
             read_text_file,
