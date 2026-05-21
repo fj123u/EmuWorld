@@ -39,7 +39,7 @@
 ## 💡 Idées en vrac (à rajouter au fil de l'eau)
 
 - [x] Session recap toast à la fermeture de l'émulateur ("Session de 2h34 · +3 launches · total 47h")
-- [ ] Discover page avec jeu du jour, top friends, covers en parallax
+- [x] Discover page avec jeu du jour, suggestion classique du jour, top friends, covers en parallax
 - [ ] Mode "Versus" / challenge 7 jours entre amis
 
 ### 🎨 UI / UX
@@ -59,7 +59,7 @@
 - [ ] **Wrap annuel / mensuel** *(gros)* — "EmuWorld Wrapped" à la Spotify : tes stats du mois en slides animées (jeu le + joué, console préférée, temps total, achievement débloqués)
 - [ ] **Partage de profil** *(moyen)* — URL publique `emuworld.app/u/username` avec stats, bibliothèque, achievements, top jeux (la web-panel actuelle enrichie)
 - [x] **Activity feed** *(gros)* — fil d'activité entre amis : "Théo a joué 3h à Zelda", "Max a débloqué un achievement", "Léo a ajouté 12 jeux à sa bibliothèque"
-- [ ] **Comparer avec un ami** *(moyen)* — vue side-by-side des stats entre toi et un pote (qui joue plus à quoi, qui a plus d'achievements, etc.)
+- [x] **Comparer avec un ami** *(moyen)* — vue side-by-side des stats entre toi et un pote (qui joue plus à quoi, qui a plus d'achievements, etc.)
 
 ### 🖥️ Mode Intégré (Killer Feature)
 

@@ -67,6 +67,7 @@ import {
   Compass,
   Star,
   Clock as ClockIcon,
+  BarChart2,
 } from "lucide-react";
 
 /* ============================
@@ -1280,6 +1281,11 @@ export default function App() {
     topConsoles: { name: string; seconds: number }[];
     achievements: number;
   } | null>(null);
+  const [compareData, setCompareData] = useState<{
+    friend: { username: string; avatar_url: string | null; totalSeconds: number; totalLaunches: number; gamesPlayed: number; achievements: number; topGames: { name: string; console: string; seconds: number }[]; topConsoles: { name: string; seconds: number }[] };
+    me: { username: string; avatar_url: string | null; totalSeconds: number; totalLaunches: number; gamesPlayed: number; achievements: number; topGames: { name: string; console: string; seconds: number }[]; topConsoles: { name: string; seconds: number }[] };
+    commonGames: { name: string; console: string; mySeconds: number; friendSeconds: number }[];
+  } | null>(null);
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [activityFeed, setActivityFeed] = useState<{ id: string; user_id: string; event_type: string; game_name: string | null; console: string | null; details: string | null; created_at: string; username?: string; avatar_url?: string | null }[]>([]);
 
@@ -1333,10 +1339,12 @@ export default function App() {
   const [changelogs] = useState<ChangelogEntry[]>([
     { version: "1.9.0", date: "2026-05-21", changes: [
       "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
-      "🏆 Achievements dans l'overlay: voir sa progression RetroAchievements avec points par succès et total",
+      "🏆 Achievements dans l'overlay: progression RetroAchievements avec points par succès et total",
       "👥 Amis dans l'overlay: voir qui est en ligne et à quoi ils jouent",
       "💬 Chat dans l'overlay: envoyer des messages à un ami sans quitter le jeu",
-      "📝 Notes dans l'overlay: écrire des notes/codes avec sauvegarde persistante",
+      "📝 Notes dans l'overlay: écrire des notes/codes avec bouton Sauvegarder persistant",
+      "📊 Comparer avec un ami: vue side-by-side (temps, jeux, achievements, jeux en commun)",
+      "🎲 Suggestion du jour: un jeu classique recommandé chaque jour sur la page Discover",
       "🔔 Activity feed dédupliqué: un jeu n'apparaît qu'une fois dans le fil (premier lancement uniquement)",
       "🪝 Low-level keyboard hook: Shift+Tab détecté même en plein écran via Windows hook",
     ] },
@@ -2157,6 +2165,56 @@ export default function App() {
       console.error("[FriendProfile]", err);
     }
   }, []);
+
+  const compareWithFriend = useCallback(async (friendId: string, friendUsername: string, friendAvatarUrl: string | null) => {
+    if (!user) return;
+    try {
+      const { data: friendGames } = await supabase
+        .from("playtime_games")
+        .select("name, console, seconds, launches")
+        .eq("user_id", friendId);
+      const { count: friendAchievements } = await supabase
+        .from("user_achievements")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", friendId);
+
+      const fGames = friendGames || [];
+      const fTotal = fGames.reduce((s, g) => s + (g.seconds || 0), 0);
+      const fLaunches = fGames.reduce((s, g) => s + (g.launches || 0), 0);
+      const fPlayed = fGames.filter(g => g.seconds > 0).length;
+      const fTopGames = [...fGames].sort((a, b) => (b.seconds || 0) - (a.seconds || 0)).slice(0, 5).map(g => ({ name: g.name, console: g.console, seconds: g.seconds || 0 }));
+      const fConsoleMap: Record<string, number> = {};
+      fGames.forEach(g => { fConsoleMap[g.console] = (fConsoleMap[g.console] || 0) + (g.seconds || 0); });
+      const fTopConsoles = Object.entries(fConsoleMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, seconds]) => ({ name, seconds }));
+
+      const myGames = Object.entries(playtime.games).map(([key, entry]) => {
+        const sep = key.indexOf("::");
+        return { name: sep >= 0 ? key.slice(sep + 2) : key, console: sep >= 0 ? key.slice(0, sep) : entry.console, seconds: entry.seconds, launches: entry.launches };
+      });
+      const myTotal = myGames.reduce((s, g) => s + g.seconds, 0);
+      const myLaunches = myGames.reduce((s, g) => s + g.launches, 0);
+      const myPlayed = myGames.filter(g => g.seconds > 0).length;
+      const myTopGames = [...myGames].sort((a, b) => b.seconds - a.seconds).slice(0, 5).map(g => ({ name: g.name, console: g.console, seconds: g.seconds }));
+      const myConsoleMap: Record<string, number> = {};
+      myGames.forEach(g => { myConsoleMap[g.console] = (myConsoleMap[g.console] || 0) + g.seconds; });
+      const myTopConsoles = Object.entries(myConsoleMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([name, seconds]) => ({ name, seconds }));
+
+      const fGameMap = new Map(fGames.map(g => [`${g.console}::${g.name}`, g.seconds || 0]));
+      const commonGames = myGames
+        .filter(g => fGameMap.has(`${g.console}::${g.name}`) && (g.seconds > 0 || (fGameMap.get(`${g.console}::${g.name}`) || 0) > 0))
+        .map(g => ({ name: g.name, console: g.console, mySeconds: g.seconds, friendSeconds: fGameMap.get(`${g.console}::${g.name}`) || 0 }))
+        .sort((a, b) => (b.mySeconds + b.friendSeconds) - (a.mySeconds + a.friendSeconds))
+        .slice(0, 10);
+
+      setCompareData({
+        friend: { username: friendUsername, avatar_url: friendAvatarUrl, totalSeconds: fTotal, totalLaunches: fLaunches, gamesPlayed: fPlayed, achievements: friendAchievements || 0, topGames: fTopGames, topConsoles: fTopConsoles },
+        me: { username: profile?.username || "Moi", avatar_url: profile?.avatar_url || null, totalSeconds: myTotal, totalLaunches: myLaunches, gamesPlayed: myPlayed, achievements: 0, topGames: myTopGames, topConsoles: myTopConsoles },
+        commonGames,
+      });
+    } catch (err) {
+      console.error("[Compare]", err);
+    }
+  }, [user, playtime, profile]);
 
   // ---- Chat handlers ----
   const loadChatMessages = useCallback(async (friendId: string) => {
@@ -5846,6 +5904,9 @@ export default function App() {
                                 {unreadCounts[otherId] > 0 && (
                                   <span className="friend-card__unread">{unreadCounts[otherId]}</span>
                                 )}
+                                <button className="btn btn--ghost btn--sm" title="Comparer" onClick={(e) => { e.stopPropagation(); compareWithFriend(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
+                                  <BarChart2 size={12} />
+                                </button>
                                 <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
                                   <MessageCircle size={12} />
                                 </button>
@@ -6034,6 +6095,70 @@ export default function App() {
                                 </span>
                               </div>
                             ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {compareData && (
+                    <div className="friend-profile-overlay" onClick={() => setCompareData(null)}>
+                      <div className="friend-profile-modal" style={{ maxWidth: 700, width: "90%" }} onClick={(e) => e.stopPropagation()}>
+                        <button className="friend-profile-modal__close" onClick={() => setCompareData(null)}>
+                          <X size={16} />
+                        </button>
+                        <h2 style={{ textAlign: "center", marginBottom: 20, fontSize: 18 }}><BarChart2 size={18} style={{ verticalAlign: "middle" }} /> Comparaison</h2>
+
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 16, alignItems: "center", marginBottom: 24 }}>
+                          <div style={{ textAlign: "center" }}>
+                            <div className="friend-card__avatar" style={{ margin: "0 auto 8px", transform: "scale(1.2)" }}>
+                              {compareData.me.avatar_url ? <img src={compareData.me.avatar_url} alt="" /> : <div className="friend-card__avatar-placeholder">{(compareData.me.username).slice(0, 2).toUpperCase()}</div>}
+                            </div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{compareData.me.username}</div>
+                          </div>
+                          <div style={{ fontSize: 20, fontWeight: 700, opacity: 0.3 }}>VS</div>
+                          <div style={{ textAlign: "center" }}>
+                            <div className="friend-card__avatar" style={{ margin: "0 auto 8px", transform: "scale(1.2)" }}>
+                              {compareData.friend.avatar_url ? <img src={compareData.friend.avatar_url} alt="" /> : <div className="friend-card__avatar-placeholder">{(compareData.friend.username).slice(0, 2).toUpperCase()}</div>}
+                            </div>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{compareData.friend.username}</div>
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const fmtT = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s}s`;
+                          const rows: { label: string; myVal: string; friendVal: string; myWins: boolean }[] = [
+                            { label: "Temps total", myVal: fmtT(compareData.me.totalSeconds), friendVal: fmtT(compareData.friend.totalSeconds), myWins: compareData.me.totalSeconds > compareData.friend.totalSeconds },
+                            { label: "Lancements", myVal: String(compareData.me.totalLaunches), friendVal: String(compareData.friend.totalLaunches), myWins: compareData.me.totalLaunches > compareData.friend.totalLaunches },
+                            { label: "Jeux joués", myVal: String(compareData.me.gamesPlayed), friendVal: String(compareData.friend.gamesPlayed), myWins: compareData.me.gamesPlayed > compareData.friend.gamesPlayed },
+                            { label: "Achievements", myVal: String(compareData.me.achievements), friendVal: String(compareData.friend.achievements), myWins: compareData.me.achievements > compareData.friend.achievements },
+                          ];
+                          return (
+                            <div style={{ marginBottom: 20 }}>
+                              {rows.map(r => (
+                                <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", alignItems: "center" }}>
+                                  <span style={{ textAlign: "right", fontWeight: r.myWins ? 700 : 400, color: r.myWins ? "#4ade80" : "inherit" }}>{r.myVal}</span>
+                                  <span style={{ fontSize: 11, opacity: 0.5, textAlign: "center", minWidth: 80 }}>{r.label}</span>
+                                  <span style={{ textAlign: "left", fontWeight: !r.myWins && r.myVal !== r.friendVal ? 700 : 400, color: !r.myWins && r.myVal !== r.friendVal ? "#4ade80" : "inherit" }}>{r.friendVal}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
+
+                        {compareData.commonGames.length > 0 && (
+                          <div>
+                            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, opacity: 0.8 }}>Jeux en commun</h3>
+                            {compareData.commonGames.map(g => {
+                              const fmtT = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s}s`;
+                              return (
+                                <div key={`${g.console}::${g.name}`} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center", fontSize: 13 }}>
+                                  <span style={{ textAlign: "right", color: g.mySeconds >= g.friendSeconds ? "#4ade80" : "inherit" }}>{fmtT(g.mySeconds)}</span>
+                                  <span style={{ textAlign: "center", opacity: 0.7, fontSize: 12 }}>{g.name}</span>
+                                  <span style={{ textAlign: "left", color: g.friendSeconds > g.mySeconds ? "#4ade80" : "inherit" }}>{fmtT(g.friendSeconds)}</span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -6379,6 +6504,31 @@ export default function App() {
                 });
                 const today = new Date().toISOString().slice(0, 10);
                 const hashCode = today.split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
+
+                const classicGames = [
+                  { name: "Super Mario World", console: "SNES" }, { name: "The Legend of Zelda: A Link to the Past", console: "SNES" },
+                  { name: "Chrono Trigger", console: "SNES" }, { name: "Super Metroid", console: "SNES" },
+                  { name: "Final Fantasy VI", console: "SNES" }, { name: "Donkey Kong Country 2", console: "SNES" },
+                  { name: "Super Mario 64", console: "Nintendo 64" }, { name: "Ocarina of Time", console: "Nintendo 64" },
+                  { name: "Banjo-Kazooie", console: "Nintendo 64" }, { name: "GoldenEye 007", console: "Nintendo 64" },
+                  { name: "Paper Mario", console: "Nintendo 64" }, { name: "Majora's Mask", console: "Nintendo 64" },
+                  { name: "Pokémon Emerald", console: "Game Boy Advance" }, { name: "Metroid Fusion", console: "Game Boy Advance" },
+                  { name: "Fire Emblem", console: "Game Boy Advance" }, { name: "Golden Sun", console: "Game Boy Advance" },
+                  { name: "Castlevania: Aria of Sorrow", console: "Game Boy Advance" },
+                  { name: "Pokémon HeartGold", console: "Nintendo DS" }, { name: "Mario Kart DS", console: "Nintendo DS" },
+                  { name: "Phoenix Wright: Ace Attorney", console: "Nintendo DS" }, { name: "Advance Wars: Dual Strike", console: "Nintendo DS" },
+                  { name: "Resident Evil 4", console: "GameCube / Wii" }, { name: "Metroid Prime", console: "GameCube / Wii" },
+                  { name: "Wind Waker", console: "GameCube / Wii" }, { name: "Super Smash Bros. Melee", console: "GameCube / Wii" },
+                  { name: "Crash Bandicoot 3: Warped", console: "PlayStation" }, { name: "Metal Gear Solid", console: "PlayStation" },
+                  { name: "Final Fantasy VII", console: "PlayStation" }, { name: "Castlevania: Symphony of the Night", console: "PlayStation" },
+                  { name: "Shadow of the Colossus", console: "PlayStation 2" }, { name: "Persona 4", console: "PlayStation 2" },
+                  { name: "Kingdom Hearts II", console: "PlayStation 2" }, { name: "God of War II", console: "PlayStation 2" },
+                  { name: "Sonic Adventure 2", console: "Dreamcast" }, { name: "Jet Set Radio", console: "Dreamcast" },
+                  { name: "Mega Man X", console: "SNES" }, { name: "Super Mario Bros. 3", console: "NES" },
+                  { name: "Contra", console: "NES" }, { name: "Castlevania III", console: "NES" },
+                ];
+                const suggestion = classicGames[Math.abs(hashCode) % classicGames.length];
+                const suggestionInLibrary = roms.find(r => r.name.toLowerCase().includes(suggestion.name.toLowerCase().slice(0, 10)));
                 const gameOfTheDay = roms.length > 0 ? roms[Math.abs(hashCode) % roms.length] : null;
                 const recentGames = gameEntries
                   .filter(g => g.last_played)
@@ -6409,6 +6559,22 @@ export default function App() {
                         </div>
                       </div>
                     )}
+
+                    <section className="discover-section">
+                      <h3 className="discover-section__title"><Compass size={16} /> Suggestion du jour</h3>
+                      <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 12, padding: "16px 20px", border: "1px solid rgba(99,102,241,0.15)", display: "flex", alignItems: "center", gap: 16 }}>
+                        <div style={{ fontSize: 36 }}>🎲</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 16 }}>{suggestion.name}</div>
+                          <div style={{ fontSize: 13, opacity: 0.6, marginTop: 2 }}>{suggestion.console}</div>
+                        </div>
+                        {suggestionInLibrary ? (
+                          <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(suggestionInLibrary)}><Play size={14} /> Jouer</button>
+                        ) : (
+                          <button className="btn btn--ghost btn--sm" onClick={() => setPage("store")}>Trouver dans le Store</button>
+                        )}
+                      </div>
+                    </section>
 
                     {recentGames.length > 0 && (
                       <section className="discover-section">
