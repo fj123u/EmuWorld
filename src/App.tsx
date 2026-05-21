@@ -7348,17 +7348,30 @@ export default function App() {
                     </button>
                   </div>
                   {profile?.public_profile && profile.username && (
-                    <button
-                      className="btn btn--ghost btn--sm public-profile-toggle__view"
-                      onClick={async () => {
-                        // Hash route (#/u/...) — alwaysdata only serves index.html,
-                        // so path-based /u/<pseudo> returns a 404.
-                        const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
-                        await openUrl(url).catch(() => window.open(url, "_blank"));
-                      }}
-                    >
-                      <ExternalLink size={12} /> View on web
-                    </button>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 8 }}>
+                      <button
+                        className="btn btn--ghost btn--sm public-profile-toggle__view"
+                        onClick={async () => {
+                          const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
+                          await openUrl(url).catch(() => window.open(url, "_blank"));
+                        }}
+                      >
+                        <ExternalLink size={12} /> Voir le profil
+                      </button>
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        onClick={async () => {
+                          const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
+                          await navigator.clipboard.writeText(url);
+                          showToast("Lien copié !", "success");
+                        }}
+                      >
+                        <Copy size={12} /> Copier le lien
+                      </button>
+                      <span style={{ fontSize: 11, opacity: 0.4, fontFamily: "monospace" }}>
+                        emuworld.alwaysdata.net/#/u/{profile.username}
+                      </span>
+                    </div>
                   )}
                 </div>
 
