@@ -582,6 +582,20 @@ const DiscoverCover = ({ rom }: { rom: RomFile }) => {
   );
 };
 
+const SuggestionCover = ({ gameName, console: consoleName }: { gameName: string; console: string }) => {
+  const [cover, setCover] = useState<string | null>(null);
+  useEffect(() => {
+    invoke<string>("fetch_boxart", { gameName, console: consoleName, forceRefresh: false })
+      .then(setCover)
+      .catch(() => {});
+  }, [gameName, consoleName]);
+  return (
+    <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+      {cover ? <img src={cover} alt={gameName} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Gamepad2 size={22} style={{ opacity: 0.4 }} />}
+    </div>
+  );
+};
+
 const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
@@ -2208,13 +2222,13 @@ export default function App() {
 
       setCompareData({
         friend: { username: friendUsername, avatar_url: friendAvatarUrl, totalSeconds: fTotal, totalLaunches: fLaunches, gamesPlayed: fPlayed, achievements: friendAchievements || 0, topGames: fTopGames, topConsoles: fTopConsoles },
-        me: { username: profile?.username || "Moi", avatar_url: profile?.avatar_url || null, totalSeconds: myTotal, totalLaunches: myLaunches, gamesPlayed: myPlayed, achievements: 0, topGames: myTopGames, topConsoles: myTopConsoles },
+        me: { username: profile?.username || "Moi", avatar_url: profile?.avatar_url || null, totalSeconds: myTotal, totalLaunches: myLaunches, gamesPlayed: myPlayed, achievements: achievements.filter(a => a.unlocked).length, topGames: myTopGames, topConsoles: myTopConsoles },
         commonGames,
       });
     } catch (err) {
       console.error("[Compare]", err);
     }
-  }, [user, playtime, profile]);
+  }, [user, playtime, profile, achievements]);
 
   // ---- Chat handlers ----
   const loadChatMessages = useCallback(async (friendId: string) => {
@@ -6563,7 +6577,7 @@ export default function App() {
                     <section className="discover-section">
                       <h3 className="discover-section__title"><Compass size={16} /> Suggestion du jour</h3>
                       <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 12, padding: "16px 20px", border: "1px solid rgba(99,102,241,0.15)", display: "flex", alignItems: "center", gap: 16 }}>
-                        <div style={{ fontSize: 36 }}>🎲</div>
+                        <SuggestionCover gameName={suggestion.name} console={suggestion.console} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>{suggestion.name}</div>
                           <div style={{ fontSize: 13, opacity: 0.6, marginTop: 2 }}>{suggestion.console}</div>
@@ -6571,7 +6585,7 @@ export default function App() {
                         {suggestionInLibrary ? (
                           <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(suggestionInLibrary)}><Play size={14} /> Jouer</button>
                         ) : (
-                          <button className="btn btn--ghost btn--sm" onClick={() => setPage("store")}>Trouver dans le Store</button>
+                          <button className="btn btn--ghost btn--sm" onClick={() => { setStoreSearch(suggestion.name); setPage("store"); }}>Trouver dans le Store</button>
                         )}
                       </div>
                     </section>
