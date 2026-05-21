@@ -6585,7 +6585,7 @@ export default function App() {
                         {suggestionInLibrary ? (
                           <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(suggestionInLibrary)}><Play size={14} /> Jouer</button>
                         ) : (
-                          <button className="btn btn--ghost btn--sm" onClick={() => { setStoreSearch(suggestion.name); setPage("store"); }}>Trouver dans le Store</button>
+                          <button className="btn btn--ghost btn--sm" onClick={() => { setStoreSearch(suggestion.name); setDebouncedStoreSearch(suggestion.name); setPage("store"); }}>Trouver dans le Store</button>
                         )}
                       </div>
                     </section>
