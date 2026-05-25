@@ -72,8 +72,7 @@ struct B2FileInfo {
 }
 
 fn config_path() -> PathBuf {
-    let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("EmuWorld").join("b2_config.json")
+    crate::emuworld_base_dir().join("b2_config.json")
 }
 
 pub fn load_config() -> B2Config {
@@ -359,10 +358,7 @@ pub fn scan_saves(emulators_dir: &str) -> Vec<SaveEntry> {
     }
 
     // Also scan the ROMs directory for saves that live next to ROM files
-    let config_path = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("EmuWorld")
-        .join("config.json");
+    let config_path = crate::emuworld_base_dir().join("config.json");
     if let Ok(config_data) = fs::read_to_string(&config_path) {
         if let Ok(config) = serde_json::from_str::<serde_json::Value>(&config_data) {
             if let Some(roms_dir) = config.get("roms_directory").and_then(|v| v.as_str()) {
@@ -411,10 +407,7 @@ pub fn create_backup_zip(emulators_dir: &str) -> Result<PathBuf, String> {
     }
 
     let base = PathBuf::from(emulators_dir);
-    let backup_dir = dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("EmuWorld")
-        .join("backups");
+    let backup_dir = crate::emuworld_base_dir().join("backups");
     fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");

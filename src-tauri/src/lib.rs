@@ -10,6 +10,26 @@ use urlencoding;
 use base64::Engine;
 use std::io::Write;
 
+/// Returns the base data directory for EmuWorld.
+/// In portable mode (portable.txt next to exe), uses the exe's directory.
+/// Otherwise uses %LOCALAPPDATA%/EmuWorld.
+pub fn emuworld_base_dir() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            if dir.join("portable.txt").exists() {
+                let base = dir.join("EmuWorld_Data");
+                let _ = fs::create_dir_all(&base);
+                return base;
+            }
+        }
+    }
+    let base = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("EmuWorld");
+    let _ = fs::create_dir_all(&base);
+    base
+}
+
 #[derive(Default)]
 struct CurrentPlayingState {
     game_name: Option<String>,
@@ -141,9 +161,7 @@ mod retroachievements;
 mod cloud_backup;
 
 fn write_to_boxart_log(message: &str) {
-    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("EmuWorld");
-    let _ = std::fs::create_dir_all(&path);
+    let mut path = emuworld_base_dir();
     path.push("boxart_fetch.log");
     
     if let Ok(mut file) = std::fs::OpenOptions::new()
@@ -167,9 +185,7 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        let base = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("EmuWorld");
+        let base = emuworld_base_dir();
         Self {
             roms_directory: base.join("ROMs").to_string_lossy().to_string(),
             emulators_directory: base.join("Emulators").to_string_lossy().to_string(),
@@ -179,10 +195,17 @@ impl Default for AppConfig {
 }
 
 fn config_path() -> PathBuf {
-    dirs::data_local_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("EmuWorld")
-        .join("config.json")
+    emuworld_base_dir().join("config.json")
+}
+
+#[tauri::command]
+fn is_portable_mode() -> bool {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            return dir.join("portable.txt").exists();
+        }
+    }
+    false
 }
 
 #[tauri::command]
@@ -3544,7 +3567,7 @@ async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
     let data = cloud_backup::b2_download_file(&api_url, &token, &file_id).await?;
 
     // Write to temp file and restore
-    let tmp_dir = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from(".")).join("EmuWorld").join("backups");
+    let tmp_dir = emuworld_base_dir().join("backups");
     fs::create_dir_all(&tmp_dir).map_err(|e| e.to_string())?;
     let tmp_path = tmp_dir.join("restore_tmp.zip");
     fs::write(&tmp_path, &data).map_err(|e| e.to_string())?;
@@ -3737,8 +3760,7 @@ fn get_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>) -> (
 fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
 
-    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.push("EmuWorld");
+    let mut base = emuworld_base_dir();
     base.push("screenshots");
     let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
     let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
@@ -3778,8 +3800,7 @@ struct AllScreenshotsGroup {
 
 #[tauri::command]
 fn get_all_screenshots() -> Vec<AllScreenshotsGroup> {
-    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.push("EmuWorld");
+    let mut base = emuworld_base_dir();
     base.push("screenshots");
     let mut results: Vec<AllScreenshotsGroup> = Vec::new();
     if !base.exists() { return results; }
@@ -3824,8 +3845,7 @@ struct ScreenshotEntry {
 
 #[tauri::command]
 fn get_screenshots(game_name: String, console: String) -> Vec<ScreenshotEntry> {
-    let mut base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.push("EmuWorld");
+    let mut base = emuworld_base_dir();
     base.push("screenshots");
     let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
     let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
@@ -4051,6 +4071,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
+            is_portable_mode,
             save_config,
             get_emulator_catalog,
             get_installed_emulators,

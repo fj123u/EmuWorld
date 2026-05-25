@@ -41,9 +41,7 @@ pub struct PlaytimeStore {
 }
 
 fn store_path() -> PathBuf {
-    let mut path = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    path.push("EmuWorld");
-    let _ = std::fs::create_dir_all(&path);
+    let mut path = crate::emuworld_base_dir();
     path.push("playtime.json");
     path
 }
