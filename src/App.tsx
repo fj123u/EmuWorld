@@ -3317,6 +3317,50 @@ export default function App() {
     setRecsModal({ rom, recs: scored });
   }, []);
 
+  const [reviewsModal, setReviewsModal] = useState<{ rom: RomFile; reviews: any[]; loading: boolean } | null>(null);
+  const [reviewDraft, setReviewDraft] = useState<{ rating: number; comment: string }>({ rating: 0, comment: "" });
+
+  const handleOpenReviews = useCallback(async (rom: RomFile) => {
+    setReviewsModal({ rom, reviews: [], loading: true });
+    setReviewDraft({ rating: 0, comment: "" });
+    const { data } = await supabase
+      .from("game_reviews")
+      .select("*, profiles(username, avatar_url)")
+      .eq("game_name", rom.name)
+      .eq("game_console", rom.console)
+      .order("created_at", { ascending: false });
+    setReviewsModal({ rom, reviews: data || [], loading: false });
+    if (user?.id && data) {
+      const mine = data.find((r: any) => r.user_id === user.id);
+      if (mine) setReviewDraft({ rating: mine.rating, comment: mine.comment || "" });
+    }
+  }, [user]);
+
+  const handleSubmitReview = useCallback(async () => {
+    if (!reviewsModal || !user?.id || reviewDraft.rating === 0) return;
+    const { rom } = reviewsModal;
+    const { error } = await supabase.from("game_reviews").upsert({
+      user_id: user.id,
+      game_name: rom.name,
+      game_console: rom.console,
+      rating: reviewDraft.rating,
+      comment: reviewDraft.comment.trim() || null,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: "user_id,game_name,game_console" });
+    if (error) { showToast("Erreur: " + error.message, "error"); return; }
+    showToast("Avis publié !", "success");
+    handleOpenReviews(rom);
+  }, [reviewsModal, user, reviewDraft, showToast, handleOpenReviews]);
+
+  const handleDeleteReview = useCallback(async () => {
+    if (!reviewsModal || !user?.id) return;
+    const { rom } = reviewsModal;
+    await supabase.from("game_reviews").delete().eq("user_id", user.id).eq("game_name", rom.name).eq("game_console", rom.console);
+    setReviewDraft({ rating: 0, comment: "" });
+    showToast("Avis supprimé", "success");
+    handleOpenReviews(rom);
+  }, [reviewsModal, user, showToast, handleOpenReviews]);
+
   const handleSaveNotes = useCallback(async () => {
     if (!notesModal) return;
     try {
@@ -6843,6 +6887,12 @@ export default function App() {
                   ))}
                   <button
                     className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); handleOpenReviews(rom); }}
+                  >
+                    <MessageCircle size={14} /> Avis communauté
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleShowRecommendations(rom); }}
                   >
                     <Sparkles size={14} /> Jeux similaires
@@ -7268,6 +7318,73 @@ export default function App() {
                       >
                         <Search size={12} /> Trouver
                       </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {reviewsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="notes-modal-overlay"
+            onClick={() => setReviewsModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="reviews-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="reviews-modal__header">
+                <MessageCircle size={16} />
+                <span>Avis — {reviewsModal.rom.name}</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => setReviewsModal(null)}><X size={14} /></button>
+              </div>
+              {user && (
+                <div className="reviews-modal__form">
+                  <div className="reviews-modal__stars">
+                    {[1, 2, 3, 4, 5].map(s => (
+                      <button key={s} className={`reviews-modal__star ${reviewDraft.rating >= s ? "reviews-modal__star--filled" : ""}`} onClick={() => setReviewDraft(d => ({ ...d, rating: d.rating === s ? 0 : s }))}>★</button>
+                    ))}
+                  </div>
+                  <textarea
+                    className="reviews-modal__textarea"
+                    value={reviewDraft.comment}
+                    onChange={(e) => setReviewDraft(d => ({ ...d, comment: e.target.value }))}
+                    placeholder="Ton avis sur ce jeu (optionnel)..."
+                    rows={2}
+                  />
+                  <div className="reviews-modal__form-actions">
+                    <button className="btn btn--primary btn--sm" disabled={reviewDraft.rating === 0} onClick={handleSubmitReview}>
+                      <Send size={12} /> Publier
+                    </button>
+                    {reviewsModal.reviews.some((r: any) => r.user_id === user.id) && (
+                      <button className="btn btn--ghost btn--sm" onClick={handleDeleteReview}><Trash2 size={12} /> Supprimer mon avis</button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!user && <p className="reviews-modal__login-hint">Connecte-toi pour laisser un avis.</p>}
+              <div className="reviews-modal__list">
+                {reviewsModal.loading ? (
+                  <p className="reviews-modal__empty">Chargement...</p>
+                ) : reviewsModal.reviews.length === 0 ? (
+                  <p className="reviews-modal__empty">Aucun avis pour ce jeu. Sois le premier !</p>
+                ) : (
+                  reviewsModal.reviews.map((r: any) => (
+                    <div key={r.id} className="reviews-modal__review">
+                      <div className="reviews-modal__review-header">
+                        {r.profiles?.avatar_url && <img src={r.profiles.avatar_url} className="reviews-modal__avatar" alt="" />}
+                        <span className="reviews-modal__username">{r.profiles?.username || "Anonyme"}</span>
+                        <span className="reviews-modal__review-stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
+                        <span className="reviews-modal__date">{new Date(r.created_at).toLocaleDateString("fr-FR")}</span>
+                      </div>
+                      {r.comment && <p className="reviews-modal__comment">{r.comment}</p>}
                     </div>
                   ))
                 )}
