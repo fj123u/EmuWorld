@@ -3976,19 +3976,53 @@ async fn start_oauth_server(app_handle: tauri::AppHandle) -> Result<u16, String>
                         let path = path_line.split_whitespace().nth(1).unwrap_or("/");
 
                         if path.starts_with("/callback") {
-                            // Send HTML that reads the hash fragment and posts it back
-                            let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title></head><body>
+                            // Check if tokens are already in query string (PKCE flow)
+                            let query_in_path = if let Some(q) = path.find('?') {
+                                Some(path[q+1..].to_string())
+                            } else {
+                                None
+                            };
+
+                            if let Some(query) = query_in_path {
+                                // Tokens came in query string — emit directly
+                                let callback_url = format!("emuworld://auth-callback?{}", query);
+                                let _ = handle.emit("oauth-callback", callback_url);
+                                push_log("INFO", "OAuth tokens received via query string");
+                                let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title>
+<style>body{background:#1a1a2e;display:grid;place-items:center;min-height:100vh;margin:0;font-family:-apple-system,sans-serif}
+.card{background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:16px;padding:40px;text-align:center;max-width:380px}
+h2{color:#4ade80;margin:0 0 8px}p{color:#94a3b8;font-size:14px;margin:0}</style></head>
+<body><div class="card"><h2>✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p></div>
+<script>setTimeout(()=>window.close(),1500)</script></body></html>"#;
+                                let response = format!(
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                    html.len(), html
+                                );
+                                let _ = stream.write_all(response.as_bytes());
+                                let _ = stream.flush();
+                                break; // Done
+                            }
+
+                            // No query — tokens may be in hash fragment (implicit flow)
+                            let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title>
+<style>body{background:#1a1a2e;display:grid;place-items:center;min-height:100vh;margin:0;font-family:-apple-system,sans-serif}
+.card{background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:16px;padding:40px;text-align:center;max-width:380px}
+h2{color:#4ade80;margin:0 0 8px}p{color:#94a3b8;font-size:14px;margin:0}
+.waiting h2{color:#a78bfa}.waiting p{color:#64748b}</style></head>
+<body><div class="card waiting" id="card"><h2>⏳ Connexion en cours...</h2><p>Transfert vers EmuWorld...</p></div>
 <script>
-// The tokens are in the hash fragment (not sent to server)
-// Post them back to our local server
 const hash = window.location.hash.substring(1);
-if (hash) {
-    fetch('/token?' + hash).then(() => {
-        document.body.innerHTML = '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#4ade80">✅ Connecté ! Tu peux fermer cet onglet.</h2>';
-        setTimeout(() => window.close(), 1000);
+const search = window.location.search.substring(1);
+const params = hash || search;
+if (params) {
+    fetch('/token?' + params).then(() => {
+        document.getElementById('card').innerHTML = '<h2 style="color:#4ade80">✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p>';
+        document.getElementById('card').className = 'card';
+        setTimeout(() => window.close(), 1500);
     });
 } else {
-    document.body.innerHTML = '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#ef4444">❌ Pas de token reçu</h2>';
+    document.getElementById('card').innerHTML = '<h2 style="color:#4ade80">✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p>';
+    document.getElementById('card').className = 'card';
 }
 </script></body></html>"#;
                             let response = format!(
