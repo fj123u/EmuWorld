@@ -3527,34 +3527,59 @@ async fn fetch_game_guide_data(game_name: String, console: String) -> Result<Gam
         .map_err(|e| e.to_string())?;
 
     // 1. Wikipedia summary
-    let clean = game_name
-        .replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-' && c != '\'', "")
-        .trim().to_string();
+    let clean = {
+        let mut s = game_name.clone();
+        // Remove file extension
+        if let Some(idx) = s.rfind('.') {
+            let ext = &s[idx..];
+            if ext.len() <= 5 { s = s[..idx].to_string(); }
+        }
+        // Remove bracketed/parenthesized tags: (Europe), [v1.0], [!], (USA), etc.
+        let re_brackets = regex::Regex::new(r"\s*[\[\(][^\]\)]*[\]\)]").unwrap();
+        s = re_brackets.replace_all(&s, "").to_string();
+        // Remove scene tags: .PROPER, .REPACK, v1.0
+        let re_scene = regex::Regex::new(r"(?i)\.(proper|repack|v\d+[\.\d]*)").unwrap();
+        s = re_scene.replace_all(&s, "").to_string();
+        // Remove leading/trailing non-alphanumeric
+        s.trim_matches(|c: char| !c.is_alphanumeric()).trim().to_string()
+    };
     let wiki_url = format!(
         "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
         urlencoding::encode(&clean.replace(' ', "_"))
     );
-    let summary = match client.get(&wiki_url).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            if let Ok(json) = resp.json::<serde_json::Value>().await {
-                let extract = json["extract"].as_str().unwrap_or("").to_string();
-                if extract.len() > 50 && (
-                    extract.to_lowercase().contains("video game") ||
-                    extract.to_lowercase().contains("game") ||
-                    extract.to_lowercase().contains("developed") ||
-                    extract.to_lowercase().contains("published") ||
-                    extract.to_lowercase().contains("console") ||
-                    extract.to_lowercase().contains("nintendo") ||
-                    extract.to_lowercase().contains("playstation") ||
-                    extract.to_lowercase().contains("sega")
-                ) {
-                    Some(extract)
-                } else {
-                    None
+    // Also try with "(video_game)" suffix if first attempt fails
+    let wiki_url_vg = format!(
+        "https://en.wikipedia.org/api/rest_v1/page/summary/{}_(video_game)",
+        urlencoding::encode(&clean.replace(' ', "_"))
+    );
+    let try_wiki = |url: &str| {
+        let c = client.clone();
+        let u = url.to_string();
+        async move {
+            match c.get(&u).send().await {
+                Ok(resp) if resp.status().is_success() => {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        let extract = json["extract"].as_str().unwrap_or("").to_string();
+                        let lower = extract.to_lowercase();
+                        if extract.len() > 50 && (
+                            lower.contains("video game") || lower.contains("game") ||
+                            lower.contains("developed") || lower.contains("published") ||
+                            lower.contains("console") || lower.contains("nintendo") ||
+                            lower.contains("playstation") || lower.contains("sega") ||
+                            lower.contains("capcom") || lower.contains("square") ||
+                            lower.contains("player") || lower.contains("release")
+                        ) {
+                            Some(extract)
+                        } else { None }
+                    } else { None }
                 }
-            } else { None }
+                _ => None,
+            }
         }
-        _ => None,
+    };
+    let summary = match try_wiki(&wiki_url).await {
+        Some(s) => Some(s),
+        None => try_wiki(&wiki_url_vg).await,
     };
 
     // 2. RetroAchievements

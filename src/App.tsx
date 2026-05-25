@@ -682,6 +682,17 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
         </button>
       )}
 
+      {/* More options (three dots) */}
+      {onContextMenu && (
+        <button
+          className="game-card__more"
+          onClick={(e) => { e.stopPropagation(); onContextMenu(rom, e.clientX, e.clientY); }}
+          title="Plus d'options"
+        >
+          ⋯
+        </button>
+      )}
+
       {/* Delete Button */}
       <button
         className="game-card__delete"

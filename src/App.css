@@ -504,6 +504,31 @@ body {
   opacity: 1;
 }
 
+.game-card__more {
+  position: absolute;
+  top: 8px;
+  right: 40px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(30, 30, 40, 0.85);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s ease;
+  z-index: 20;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.game-card:hover .game-card__more { opacity: 1; }
+.game-card__more:hover { background: rgba(139, 92, 246, 0.8); transform: scale(1.1); }
+
 .game-card__delete {
   position: absolute;
   top: 8px;
