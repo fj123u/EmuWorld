@@ -3473,14 +3473,19 @@ export default function App() {
   const loadChallenges = useCallback(async () => {
     const active = getActiveWeeklyChallenges();
     setChallenges(active);
-    if (user?.id) {
-      const ids = active.map(c => c.challenge_id);
-      const { data: parts } = await supabase
-        .from("challenge_participants")
-        .select("*")
-        .eq("user_id", user.id)
-        .in("challenge_id", ids);
-      setChallengeParticipants(parts || []);
+    const ids = active.map(c => c.challenge_id);
+    const { data: parts } = await supabase
+      .from("challenge_participants")
+      .select("*")
+      .in("challenge_id", ids)
+      .order("progress", { ascending: false });
+    if (parts && parts.length > 0) {
+      const uids = [...new Set(parts.map((p: any) => p.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", uids);
+      const pMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      setChallengeParticipants(parts.map((p: any) => ({ ...p, profile: pMap.get(p.user_id) || null })));
+    } else {
+      setChallengeParticipants([]);
     }
   }, [user]);
 
@@ -6620,9 +6625,18 @@ export default function App() {
                       </div>
                     ) : (
                       challenges.map((ch: any) => {
-                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.challenge_id);
+                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.challenge_id && p.user_id === user?.id);
+                        const allParts = challengeParticipants
+                          .filter((p: any) => p.challenge_id === ch.challenge_id)
+                          .sort((a: any, b: any) => b.progress - a.progress);
                         const progress = myPart ? Math.min(100, Math.round((myPart.progress / ch.goal_value) * 100)) : 0;
                         const daysLeft = Math.max(0, Math.ceil((ch.end.getTime() - Date.now()) / 86400000));
+                        const fmtProgress = (p: number, goalType: string, goalValue: number) => {
+                          if (goalType === "launches") return `${p}/${goalValue} sessions`;
+                          const pMin = Math.floor(p / 60);
+                          const gMin = Math.floor(goalValue / 60);
+                          return pMin >= 60 ? `${Math.floor(pMin / 60)}h${String(pMin % 60).padStart(2, "0")}/${Math.floor(gMin / 60)}h${String(gMin % 60).padStart(2, "0")}` : `${pMin}/${gMin} min`;
+                        };
                         return (
                           <div key={ch.challenge_id} className="challenge-card">
                             <div className="challenge-card__badge">{ch.badge_icon}</div>
@@ -6631,6 +6645,7 @@ export default function App() {
                               <p className="challenge-card__desc">{ch.description}</p>
                               <div className="challenge-card__meta">
                                 <span><Calendar size={12} /> {daysLeft}j restants</span>
+                                <span><Users size={12} /> {allParts.length} participants</span>
                               </div>
                               {myPart ? (
                                 <div className="challenge-card__progress">
@@ -6638,13 +6653,27 @@ export default function App() {
                                     <div className="challenge-card__progress-fill" style={{ width: `${progress}%` }} />
                                   </div>
                                   <span className="challenge-card__progress-text">
-                                    {myPart.completed ? "✓ Terminé !" : `${progress}%`}
+                                    {myPart.completed ? "✓ Terminé !" : `${progress}% — ${fmtProgress(myPart.progress, ch.goal_type, ch.goal_value)}`}
                                   </span>
                                 </div>
                               ) : (
                                 <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.challenge_id)}>
                                   <Flame size={12} /> Participer
                                 </button>
+                              )}
+                              {allParts.length > 0 && (
+                                <div className="challenge-card__leaderboard">
+                                  <div className="challenge-card__leaderboard-title"><Trophy size={12} /> Classement</div>
+                                  {allParts.slice(0, 10).map((p: any, i: number) => (
+                                    <div key={p.id} className={`challenge-card__rank ${p.user_id === user?.id ? "challenge-card__rank--me" : ""}`}>
+                                      <span className="challenge-card__rank-pos">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                                      {p.profile?.avatar_url && <img src={p.profile.avatar_url} className="challenge-card__rank-avatar" alt="" />}
+                                      <span className="challenge-card__rank-name">{p.profile?.username || "???"}</span>
+                                      <span className="challenge-card__rank-progress">{fmtProgress(p.progress, ch.goal_type, ch.goal_value)}</span>
+                                      {p.completed && <span className="challenge-card__rank-done">✓</span>}
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
                           </div>

@@ -4196,6 +4196,23 @@ body {
   transition: width 0.3s;
 }
 .challenge-card__progress-text { font-size: 0.75rem; font-weight: 600; white-space: nowrap; }
+.challenge-card__leaderboard { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.challenge-card__leaderboard-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.75rem; font-weight: 700; margin-bottom: 8px; color: var(--text-secondary);
+}
+.challenge-card__rank {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 8px; border-radius: 6px; font-size: 0.78rem;
+  transition: background 0.15s;
+}
+.challenge-card__rank:nth-child(even) { background: rgba(255,255,255,0.02); }
+.challenge-card__rank--me { background: rgba(139,92,246,0.1) !important; border: 1px solid rgba(139,92,246,0.3); }
+.challenge-card__rank-pos { width: 24px; text-align: center; font-weight: 700; }
+.challenge-card__rank-avatar { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.challenge-card__rank-name { flex: 1; font-weight: 500; }
+.challenge-card__rank-progress { font-size: 0.72rem; color: var(--text-secondary); }
+.challenge-card__rank-done { color: #22c55e; font-weight: 700; }
 
 /* Wrap Page */
 .wrap-page { padding: 4px 0; }
