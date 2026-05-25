@@ -1351,7 +1351,7 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
-    { version: "2.0.0", date: "2026-05-21", changes: [
+    { version: "1.0.0", date: "2026-05-21", changes: [
       "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
       "🏆 Achievements dans l'overlay: progression RetroAchievements avec points par succès et total",
       "👥 Amis dans l'overlay + comparer avec un ami (temps, jeux, achievements, jeux en commun)",
