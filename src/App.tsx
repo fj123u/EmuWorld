@@ -1351,16 +1351,17 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
-    { version: "1.9.0", date: "2026-05-21", changes: [
+    { version: "2.0.0", date: "2026-05-21", changes: [
       "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
       "🏆 Achievements dans l'overlay: progression RetroAchievements avec points par succès et total",
-      "👥 Amis dans l'overlay: voir qui est en ligne et à quoi ils jouent",
+      "👥 Amis dans l'overlay + comparer avec un ami (temps, jeux, achievements, jeux en commun)",
       "💬 Chat dans l'overlay: envoyer des messages à un ami sans quitter le jeu",
-      "📝 Notes dans l'overlay: écrire des notes/codes avec bouton Sauvegarder persistant",
-      "📊 Comparer avec un ami: vue side-by-side (temps, jeux, achievements, jeux en commun)",
+      "📝 Notes dans l'overlay avec bouton Sauvegarder persistant",
       "🎲 Suggestion du jour: un jeu classique recommandé chaque jour sur la page Discover",
-      "🔔 Activity feed dédupliqué: un jeu n'apparaît qu'une fois dans le fil (premier lancement uniquement)",
-      "🪝 Low-level keyboard hook: Shift+Tab détecté même en plein écran via Windows hook",
+      "🔗 Partage de profil: bouton copier le lien du profil public",
+      "💾 Mode portable: créer un portable.txt à côté de l'exe pour tout stocker localement (USB friendly)",
+      "🔐 OAuth amélioré: serveur HTTP local remplace le deep-link (connexion Google/Discord fonctionne partout)",
+      "🔔 Activity feed: un jeu n'apparaît qu'une fois dans le fil (premier lancement uniquement)",
     ] },
     { version: "1.8.0", date: "2026-05-11", changes: [
       "📦 Import/Export config: sauvegarder toute sa config + playtime en JSON pour restaurer sur un autre PC",
