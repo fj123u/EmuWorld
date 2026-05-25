@@ -3323,15 +3323,22 @@ export default function App() {
   const handleOpenReviews = useCallback(async (rom: RomFile) => {
     setReviewsModal({ rom, reviews: [], loading: true });
     setReviewDraft({ rating: 0, comment: "" });
-    const { data } = await supabase
+    const { data: reviews } = await supabase
       .from("game_reviews")
-      .select("*, profiles(username, avatar_url)")
+      .select("*")
       .eq("game_name", rom.name)
       .eq("game_console", rom.console)
       .order("created_at", { ascending: false });
-    setReviewsModal({ rom, reviews: data || [], loading: false });
-    if (user?.id && data) {
-      const mine = data.find((r: any) => r.user_id === user.id);
+    let enriched = reviews || [];
+    if (enriched.length > 0) {
+      const uids = [...new Set(enriched.map((r: any) => r.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", uids);
+      const pMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      enriched = enriched.map((r: any) => ({ ...r, profiles: pMap.get(r.user_id) || null }));
+    }
+    setReviewsModal({ rom, reviews: enriched, loading: false });
+    if (user?.id && enriched.length > 0) {
+      const mine = enriched.find((r: any) => r.user_id === user.id);
       if (mine) setReviewDraft({ rating: mine.rating, comment: mine.comment || "" });
     }
   }, [user]);

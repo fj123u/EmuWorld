@@ -1,7 +1,7 @@
 -- Reviews / community comments table
 CREATE TABLE IF NOT EXISTS game_reviews (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   game_name text NOT NULL,
   game_console text NOT NULL,
   rating smallint CHECK (rating >= 1 AND rating <= 5) NOT NULL,
