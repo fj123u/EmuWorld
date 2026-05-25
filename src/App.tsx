@@ -3158,6 +3158,11 @@ export default function App() {
                 newProgress += sessionSecs;
               } else if (chal.goal_type === "launches") {
                 newProgress += 1;
+              } else if (chal.goal_type === "game_playtime" && chal.game_keywords) {
+                const nameL = gameName.toLowerCase();
+                if (chal.game_keywords.some(kw => nameL.includes(kw))) {
+                  newProgress += sessionSecs;
+                }
               }
               if (newProgress !== part.progress) {
                 const completed = newProgress >= chal.goal_value;
@@ -3405,19 +3410,27 @@ export default function App() {
   }, [reviewsModal, user, showToast, handleOpenReviews]);
 
   // --- Challenges (auto-rotating pool, no manual DB inserts needed) ---
-  const CHALLENGE_POOL = [
-    { id: "marathon_mario", title: "Marathon Mario", description: "Joue 2 heures à n'importe quel jeu cette semaine", goal_type: "any_playtime", goal_value: 7200, badge_icon: "🍄" },
-    { id: "decouvreur", title: "Découvreur", description: "Lance 5 jeux différents cette semaine", goal_type: "launches", goal_value: 5, badge_icon: "🔍" },
-    { id: "endurance", title: "Endurance", description: "Accumule 5 heures de jeu total cette semaine", goal_type: "any_playtime", goal_value: 18000, badge_icon: "⏱️" },
-    { id: "retro_hunter", title: "Rétro Hunter", description: "Joue 1 heure cette semaine", goal_type: "any_playtime", goal_value: 3600, badge_icon: "👾" },
-    { id: "sprint", title: "Sprint", description: "Lance 10 sessions de jeu cette semaine", goal_type: "launches", goal_value: 10, badge_icon: "⚡" },
-    { id: "dedication", title: "Dédication", description: "Joue 30 minutes chaque jour pendant 3 jours", goal_type: "any_playtime", goal_value: 5400, badge_icon: "🔥" },
-    { id: "collector", title: "Collectionneur", description: "Lance 8 jeux différents cette semaine", goal_type: "launches", goal_value: 8, badge_icon: "📚" },
+  const CHALLENGE_POOL: { id: string; title: string; description: string; goal_type: "any_playtime" | "launches" | "game_playtime"; goal_value: number; badge_icon: string; game_keywords?: string[] }[] = [
+    // Game-specific challenges
+    { id: "zelda_3h", title: "Héros d'Hyrule", description: "Joue 3 heures à un jeu Zelda cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "🗡️", game_keywords: ["zelda", "link"] },
+    { id: "mario_2h", title: "Marathon Mario", description: "Joue 2 heures à un jeu Mario cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🍄", game_keywords: ["mario", "luigi"] },
+    { id: "pokemon_4h", title: "Maître Pokémon", description: "Joue 4 heures à un jeu Pokémon cette semaine", goal_type: "game_playtime", goal_value: 14400, badge_icon: "⚡", game_keywords: ["pokemon", "pokémon"] },
+    { id: "sonic_1h", title: "Gotta Go Fast", description: "Joue 1 heure à un jeu Sonic cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🔵", game_keywords: ["sonic"] },
+    { id: "ff_3h", title: "Guerrier de la Lumière", description: "Joue 3 heures à un Final Fantasy cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "⚔️", game_keywords: ["final fantasy", "ff"] },
+    { id: "smash_2h", title: "Smash Time", description: "Joue 2 heures à Super Smash Bros cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "👊", game_keywords: ["smash"] },
+    { id: "metroid_2h", title: "Chasseuse de Primes", description: "Joue 2 heures à un Metroid cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🚀", game_keywords: ["metroid"] },
+    { id: "resident_evil_2h", title: "Survivant", description: "Joue 2 heures à un Resident Evil cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🧟", game_keywords: ["resident evil", "biohazard"] },
+    { id: "kirby_1h", title: "Rêve Étoilé", description: "Joue 1 heure à un jeu Kirby cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "⭐", game_keywords: ["kirby"] },
+    { id: "kart_2h", title: "Pole Position", description: "Joue 2 heures à Mario Kart cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🏎️", game_keywords: ["kart", "mario kart"] },
+    { id: "dk_1h", title: "Roi de la Jungle", description: "Joue 1 heure à un Donkey Kong cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🦍", game_keywords: ["donkey kong", "dk"] },
+    { id: "castlevania_2h", title: "Vampire Slayer", description: "Joue 2 heures à un Castlevania cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🧛", game_keywords: ["castlevania"] },
+    { id: "megaman_1h", title: "Blue Bomber", description: "Joue 1 heure à un Mega Man cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🤖", game_keywords: ["mega man", "megaman"] },
+    { id: "gta_3h", title: "Crime City", description: "Joue 3 heures à un GTA cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "🔫", game_keywords: ["gta", "grand theft auto"] },
+    // Endurance challenges
     { id: "no_life", title: "No Life", description: "Accumule 10 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 36000, badge_icon: "🌙" },
-    { id: "casual", title: "Casual Gamer", description: "Joue au moins 20 minutes cette semaine", goal_type: "any_playtime", goal_value: 1200, badge_icon: "☕" },
-    { id: "variety", title: "Variété", description: "Lance 3 jeux de consoles différentes", goal_type: "launches", goal_value: 3, badge_icon: "🎲" },
-    { id: "veteran", title: "Vétéran", description: "Accumule 8 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 28800, badge_icon: "🎖️" },
-    { id: "warmup", title: "Échauffement", description: "Lance 2 jeux cette semaine", goal_type: "launches", goal_value: 2, badge_icon: "🏃" },
+    { id: "veteran", title: "Vétéran", description: "Accumule 5 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 18000, badge_icon: "🎖️" },
+    { id: "sprint_5", title: "Cinq d'un Coup", description: "Lance 5 jeux différents cette semaine", goal_type: "launches", goal_value: 5, badge_icon: "🎲" },
+    { id: "sprint_10", title: "Hyper Actif", description: "Lance 10 sessions de jeu cette semaine", goal_type: "launches", goal_value: 10, badge_icon: "🔥" },
   ];
 
   const getWeekNumber = () => {
