@@ -4053,6 +4053,47 @@ body {
   margin-top: 12px;
 }
 
+/* Recs Modal */
+.recs-modal {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 480px;
+  max-width: 90vw;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.recs-modal__header {
+  display: flex; align-items: center; gap: 8px;
+  font-weight: 700; font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+.recs-modal__header .btn { margin-left: auto; }
+.recs-modal__list { display: flex; flex-direction: column; gap: 10px; }
+.recs-modal__empty { color: var(--text-secondary); font-size: 0.82rem; text-align: center; padding: 20px 0; }
+.recs-modal__item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+.recs-modal__item:hover { background: rgba(255, 255, 255, 0.06); }
+.recs-modal__item-info { flex: 1; min-width: 0; }
+.recs-modal__item-name { display: block; font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recs-modal__item-console { display: block; font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; }
+.recs-modal__item-tags { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.recs-modal__tag {
+  font-size: 0.65rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(var(--accent-rgb, 139, 92, 246), 0.15);
+  color: var(--accent);
+}
+
 /* RA Overlay */
 .ra-overlay {
   position: fixed;

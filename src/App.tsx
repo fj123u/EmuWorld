@@ -68,6 +68,7 @@ import {
   Star,
   Clock as ClockIcon,
   BarChart2,
+  Sparkles,
 } from "lucide-react";
 
 /* ============================
@@ -3198,11 +3199,123 @@ export default function App() {
   }, [loadPlaytime, showToast, scheduleCloudSync]);
 
   const [notesModal, setNotesModal] = useState<{ rom: RomFile; text: string } | null>(null);
+  const [recsModal, setRecsModal] = useState<{ rom: RomFile; recs: { name: string; console: string; tags: string[] }[] } | null>(null);
 
   const handleOpenNotes = useCallback((rom: RomFile) => {
     const entry = playtime.games[`${rom.console}::${rom.name}`];
     setNotesModal({ rom, text: entry?.notes ?? "" });
   }, [playtime]);
+
+  const GAME_RECS_DB: { name: string; console: string; tags: string[] }[] = [
+    // Platformers
+    { name: "Super Mario World", console: "SNES", tags: ["platformer", "mario", "nintendo"] },
+    { name: "Super Mario Bros. 3", console: "NES", tags: ["platformer", "mario", "nintendo"] },
+    { name: "Super Mario 64", console: "Nintendo 64", tags: ["platformer", "mario", "3d", "nintendo"] },
+    { name: "Donkey Kong Country 2", console: "SNES", tags: ["platformer", "donkey kong", "nintendo"] },
+    { name: "Crash Bandicoot 3: Warped", console: "PlayStation", tags: ["platformer", "3d", "sony"] },
+    { name: "Rayman 2", console: "Nintendo 64", tags: ["platformer", "3d"] },
+    { name: "Kirby Super Star", console: "SNES", tags: ["platformer", "kirby", "nintendo"] },
+    { name: "Mega Man X", console: "SNES", tags: ["platformer", "action", "mega man"] },
+    { name: "Sonic the Hedgehog 2", console: "Mega Drive", tags: ["platformer", "sonic", "sega"] },
+    { name: "Sonic Adventure 2", console: "Dreamcast", tags: ["platformer", "sonic", "3d", "sega"] },
+    { name: "Celeste", console: "Nintendo Switch", tags: ["platformer", "indie", "precision"] },
+    { name: "Hollow Knight", console: "Nintendo Switch", tags: ["platformer", "metroidvania", "indie"] },
+    // RPGs
+    { name: "Chrono Trigger", console: "SNES", tags: ["rpg", "jrpg", "squaresoft"] },
+    { name: "Final Fantasy VI", console: "SNES", tags: ["rpg", "jrpg", "final fantasy"] },
+    { name: "Final Fantasy VII", console: "PlayStation", tags: ["rpg", "jrpg", "final fantasy", "3d"] },
+    { name: "Pokémon Emerald", console: "Game Boy Advance", tags: ["rpg", "pokemon", "nintendo"] },
+    { name: "Pokémon HeartGold", console: "Nintendo DS", tags: ["rpg", "pokemon", "nintendo"] },
+    { name: "Golden Sun", console: "Game Boy Advance", tags: ["rpg", "jrpg", "nintendo"] },
+    { name: "Fire Emblem", console: "Game Boy Advance", tags: ["rpg", "strategy", "tactical", "nintendo"] },
+    { name: "Persona 4", console: "PlayStation 2", tags: ["rpg", "jrpg", "persona", "social"] },
+    { name: "Kingdom Hearts II", console: "PlayStation 2", tags: ["rpg", "action", "disney", "square"] },
+    { name: "Paper Mario", console: "Nintendo 64", tags: ["rpg", "mario", "nintendo"] },
+    { name: "Earthbound", console: "SNES", tags: ["rpg", "jrpg", "quirky", "nintendo"] },
+    { name: "Xenoblade Chronicles", console: "Nintendo Switch", tags: ["rpg", "jrpg", "open world"] },
+    // Action/Adventure
+    { name: "The Legend of Zelda: A Link to the Past", console: "SNES", tags: ["action", "adventure", "zelda", "nintendo"] },
+    { name: "Ocarina of Time", console: "Nintendo 64", tags: ["action", "adventure", "zelda", "3d", "nintendo"] },
+    { name: "Majora's Mask", console: "Nintendo 64", tags: ["action", "adventure", "zelda", "3d", "nintendo"] },
+    { name: "Wind Waker", console: "GameCube / Wii", tags: ["action", "adventure", "zelda", "3d", "nintendo"] },
+    { name: "Metroid Prime", console: "GameCube / Wii", tags: ["action", "adventure", "fps", "metroid", "nintendo"] },
+    { name: "Super Metroid", console: "SNES", tags: ["action", "metroidvania", "metroid", "nintendo"] },
+    { name: "Metroid Fusion", console: "Game Boy Advance", tags: ["action", "metroidvania", "metroid", "nintendo"] },
+    { name: "Castlevania: Symphony of the Night", console: "PlayStation", tags: ["action", "metroidvania", "castlevania"] },
+    { name: "Castlevania: Aria of Sorrow", console: "Game Boy Advance", tags: ["action", "metroidvania", "castlevania"] },
+    { name: "Metal Gear Solid", console: "PlayStation", tags: ["action", "stealth", "story"] },
+    { name: "Shadow of the Colossus", console: "PlayStation 2", tags: ["action", "adventure", "boss", "artistic"] },
+    { name: "God of War II", console: "PlayStation 2", tags: ["action", "adventure", "hack and slash"] },
+    { name: "Resident Evil 4", console: "GameCube / Wii", tags: ["action", "horror", "survival"] },
+    { name: "Breath of the Wild", console: "Nintendo Switch", tags: ["action", "adventure", "zelda", "open world"] },
+    // Racing
+    { name: "Mario Kart DS", console: "Nintendo DS", tags: ["racing", "mario", "kart", "nintendo"] },
+    { name: "Mario Kart 64", console: "Nintendo 64", tags: ["racing", "mario", "kart", "nintendo"] },
+    { name: "F-Zero GX", console: "GameCube / Wii", tags: ["racing", "futuristic", "fast"] },
+    { name: "Burnout 3: Takedown", console: "PlayStation 2", tags: ["racing", "arcade", "crash"] },
+    { name: "Gran Turismo 4", console: "PlayStation 2", tags: ["racing", "simulation"] },
+    // Fighting
+    { name: "Super Smash Bros. Melee", console: "GameCube / Wii", tags: ["fighting", "smash", "party", "nintendo"] },
+    { name: "Street Fighter III: 3rd Strike", console: "Dreamcast", tags: ["fighting", "street fighter", "2d"] },
+    { name: "Tekken 3", console: "PlayStation", tags: ["fighting", "3d", "tekken"] },
+    { name: "Soul Calibur", console: "Dreamcast", tags: ["fighting", "3d", "weapons"] },
+    // Puzzle
+    { name: "Tetris DS", console: "Nintendo DS", tags: ["puzzle", "tetris"] },
+    { name: "Professor Layton", console: "Nintendo DS", tags: ["puzzle", "story", "adventure"] },
+    { name: "Phoenix Wright: Ace Attorney", console: "Nintendo DS", tags: ["puzzle", "visual novel", "story", "court"] },
+    // Others
+    { name: "Advance Wars: Dual Strike", console: "Nintendo DS", tags: ["strategy", "tactical", "nintendo"] },
+    { name: "Animal Crossing", console: "GameCube / Wii", tags: ["simulation", "life", "relaxing", "nintendo"] },
+    { name: "Harvest Moon: Friends of Mineral Town", console: "Game Boy Advance", tags: ["simulation", "farming", "life"] },
+    { name: "Banjo-Kazooie", console: "Nintendo 64", tags: ["platformer", "3d", "collectathon", "rare"] },
+    { name: "GoldenEye 007", console: "Nintendo 64", tags: ["fps", "action", "shooter", "rare"] },
+    { name: "Jet Set Radio", console: "Dreamcast", tags: ["action", "skating", "stylish", "sega"] },
+  ];
+
+  const handleShowRecommendations = useCallback((rom: RomFile) => {
+    const name = rom.name.toLowerCase();
+    const tags: string[] = [];
+    // Derive tags from game name
+    if (/mario|luigi/.test(name)) tags.push("mario", "platformer", "nintendo");
+    if (/zelda|link/.test(name)) tags.push("zelda", "action", "adventure", "nintendo");
+    if (/pokemon|pok[eé]mon/.test(name)) tags.push("pokemon", "rpg", "nintendo");
+    if (/metroid/.test(name)) tags.push("metroid", "metroidvania", "action");
+    if (/sonic/.test(name)) tags.push("sonic", "platformer", "sega");
+    if (/final fantasy|ff\d/.test(name)) tags.push("final fantasy", "rpg", "jrpg");
+    if (/castlevania/.test(name)) tags.push("castlevania", "metroidvania", "action");
+    if (/kirby/.test(name)) tags.push("kirby", "platformer", "nintendo");
+    if (/donkey kong|dk/.test(name)) tags.push("donkey kong", "platformer", "nintendo");
+    if (/fire emblem/.test(name)) tags.push("fire emblem", "strategy", "rpg", "tactical");
+    if (/persona/.test(name)) tags.push("persona", "rpg", "jrpg", "social");
+    if (/kingdom hearts/.test(name)) tags.push("rpg", "action", "disney");
+    if (/resident evil/.test(name)) tags.push("horror", "action", "survival");
+    if (/mega man|megaman/.test(name)) tags.push("mega man", "platformer", "action");
+    if (/smash/.test(name)) tags.push("fighting", "smash", "party");
+    if (/kart|racing|gran turismo|need for speed/.test(name)) tags.push("racing");
+    if (/street fighter|tekken|mortal kombat|soul calibur/.test(name)) tags.push("fighting");
+    if (/tetris|puyo|puzzle/.test(name)) tags.push("puzzle");
+    if (/rpg|quest|dragon/.test(name)) tags.push("rpg");
+    // Fallback: match by console
+    if (tags.length === 0) tags.push(rom.console.toLowerCase());
+
+    // Score each game in DB
+    const scored = GAME_RECS_DB
+      .filter(g => g.name.toLowerCase() !== name.replace(/\[.*?\]|\(.*?\)/g, "").trim().toLowerCase())
+      .map(g => {
+        let score = 0;
+        for (const t of tags) {
+          if (g.tags.includes(t)) score += 2;
+        }
+        // Bonus for same console family
+        if (g.console === rom.console) score += 1;
+        return { ...g, score };
+      })
+      .filter(g => g.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6);
+
+    setRecsModal({ rom, recs: scored });
+  }, []);
 
   const handleSaveNotes = useCallback(async () => {
     if (!notesModal) return;
@@ -6729,6 +6842,12 @@ export default function App() {
                     </button>
                   ))}
                   <button
+                    className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); handleShowRecommendations(rom); }}
+                  >
+                    <Sparkles size={14} /> Jeux similaires
+                  </button>
+                  <button
                     className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
                     onClick={() => { setGamepadContextMenu(null); handleDeleteRom(rom); }}
                   >
@@ -7106,6 +7225,52 @@ export default function App() {
               <div className="notes-modal__actions">
                 <button className="btn btn--ghost btn--sm" onClick={() => setNotesModal(null)}>Annuler</button>
                 <button className="btn btn--primary btn--sm" onClick={handleSaveNotes}><Check size={14} /> Sauvegarder</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {recsModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="notes-modal-overlay"
+            onClick={() => setRecsModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="recs-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="recs-modal__header">
+                <Sparkles size={16} />
+                <span>Si t'as aimé {recsModal.rom.name}...</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => setRecsModal(null)}><X size={14} /></button>
+              </div>
+              <div className="recs-modal__list">
+                {recsModal.recs.length === 0 ? (
+                  <p className="recs-modal__empty">Pas de recommandations trouvées pour ce jeu.</p>
+                ) : (
+                  recsModal.recs.map((rec) => (
+                    <div key={rec.name} className="recs-modal__item">
+                      <div className="recs-modal__item-info">
+                        <span className="recs-modal__item-name">{rec.name}</span>
+                        <span className="recs-modal__item-console">{rec.console}</span>
+                        <div className="recs-modal__item-tags">
+                          {rec.tags.slice(0, 3).map(t => <span key={t} className="recs-modal__tag">{t}</span>)}
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn--primary btn--sm"
+                        onClick={() => { setRecsModal(null); setStoreMode("vimm"); setVimmSearch(rec.name); setPage("store"); }}
+                      >
+                        <Search size={12} /> Trouver
+                      </button>
+                    </div>
+                  ))
+                )}
               </div>
             </motion.div>
           </motion.div>
