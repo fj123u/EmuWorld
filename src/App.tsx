@@ -7102,6 +7102,13 @@ export default function App() {
               <Camera size={14} /> Screenshots
             </button>
             <div className="rom-context-menu__sep" />
+            <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenReviews(romContextMenu.rom); }}>
+              <MessageCircle size={14} /> Avis communauté
+            </button>
+            <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleShowRecommendations(romContextMenu.rom); }}>
+              <Sparkles size={14} /> Jeux similaires
+            </button>
+            <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
             </button>
