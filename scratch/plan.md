@@ -29,7 +29,7 @@
 - [x] **Covers qui restent manquantes** sur certains jeux (lesquels déjà ? faudrait lister les noms) et bugs sur covers wii u
 - [x] **OAuth Google / Discord** — `register_all()` au boot, page bounce sur alwaysdata pour que l'onglet se ferme proprement, playtime réinitialisé au switch de compte, et fix du listener `game-closed` qui tournait dans le vide.
 - [x] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
-- [ ] **Chargement Infini** page de connexion — page bounce `/auth-callback.html` affiche un message "tu peux fermer cette fenêtre".
+- [x] **Chargement Infini** page de connexion — résolu : serveur HTTP local remplace le deep-link, plus besoin de la page bounce.
 - [x] **Probleme lancement Cemu** lors du lancement d'une rom, cemu se lance bien masi pas la rom → fix: ajout flag `-g`
 - [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
 - [x] **Probleme covers sites web**
