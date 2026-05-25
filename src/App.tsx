@@ -3427,11 +3427,19 @@ export default function App() {
     return Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
   };
 
+  const seededRandom = (seed: number) => {
+    let s = seed;
+    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xFFFFFFFF; };
+  };
+
   const getActiveWeeklyChallenges = () => {
-    const week = getWeekNumber();
-    const c1 = CHALLENGE_POOL[week % CHALLENGE_POOL.length];
-    const c2 = CHALLENGE_POOL[(week + 5) % CHALLENGE_POOL.length];
     const now = new Date();
+    const week = getWeekNumber();
+    const seed = now.getFullYear() * 1000 + week;
+    const rng = seededRandom(seed);
+    const shuffled = [...CHALLENGE_POOL].sort(() => rng() - 0.5);
+    const c1 = shuffled[0];
+    const c2 = shuffled[1];
     const dayOfWeek = now.getDay() || 7;
     const monday = new Date(now);
     monday.setDate(now.getDate() - dayOfWeek + 1);
