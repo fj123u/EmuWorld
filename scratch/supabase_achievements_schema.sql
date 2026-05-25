@@ -23,12 +23,13 @@ CREATE POLICY "Users can update their own" ON user_achievements
 
 -- View: achievement_rarity
 -- Computes for each achievement_id: total unlocks, percentage of all users
-CREATE OR REPLACE VIEW achievement_rarity AS
+CREATE OR REPLACE VIEW achievement_rarity
+WITH (security_invoker = true) AS
 SELECT
   achievement_id,
   COUNT(DISTINCT user_id) AS unlock_count,
   ROUND(
-    COUNT(DISTINCT user_id)::numeric / GREATEST((SELECT COUNT(*) FROM auth.users), 1) * 100,
+    COUNT(DISTINCT user_id)::numeric / GREATEST((SELECT COUNT(*) FROM profiles), 1) * 100,
     1
   ) AS unlock_percent
 FROM user_achievements
