@@ -72,6 +72,8 @@ import {
   Flame,
   Gift,
   Calendar,
+  BookOpen,
+  ThumbsUp,
 } from "lucide-react";
 
 /* ============================
@@ -3501,6 +3503,76 @@ export default function App() {
     showToast("Tu participes au challenge !", "success");
     loadChallenges();
   }, [user, showToast, loadChallenges]);
+
+  // --- Guides ---
+  const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean } | null>(null);
+  const [guideDraft, setGuideDraft] = useState<{ title: string; content: string }>({ title: "", content: "" });
+  const [guideVotes, setGuideVotes] = useState<string[]>([]);
+
+  const handleOpenGuide = useCallback(async (rom: RomFile) => {
+    setGuideModal({ rom, guides: [], loading: true, tab: "presentation", writing: false });
+    setGuideDraft({ title: "", content: "" });
+    const { data: guides } = await supabase
+      .from("game_guides")
+      .select("*")
+      .eq("game_name", rom.name)
+      .eq("game_console", rom.console)
+      .order("upvotes", { ascending: false });
+    let enriched = guides || [];
+    if (enriched.length > 0) {
+      const uids = [...new Set(enriched.map((g: any) => g.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", uids);
+      const pMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      enriched = enriched.map((g: any) => ({ ...g, profile: pMap.get(g.user_id) || null }));
+    }
+    if (user?.id) {
+      const guideIds = enriched.map((g: any) => g.id);
+      if (guideIds.length > 0) {
+        const { data: votes } = await supabase.from("guide_votes").select("guide_id").eq("user_id", user.id).in("guide_id", guideIds);
+        setGuideVotes((votes || []).map((v: any) => v.guide_id));
+      } else {
+        setGuideVotes([]);
+      }
+    }
+    setGuideModal({ rom, guides: enriched, loading: false, tab: "presentation", writing: false });
+  }, [user]);
+
+  const handleSubmitGuide = useCallback(async () => {
+    if (!guideModal || !user?.id || !guideDraft.title.trim() || !guideDraft.content.trim()) return;
+    const { rom, tab } = guideModal;
+    const { error } = await supabase.from("game_guides").insert({
+      user_id: user.id,
+      game_name: rom.name,
+      game_console: rom.console,
+      section: tab,
+      title: guideDraft.title.trim(),
+      content: guideDraft.content.trim(),
+    });
+    if (error) { showToast("Erreur: " + error.message, "error"); return; }
+    showToast("Guide publié !", "success");
+    setGuideDraft({ title: "", content: "" });
+    handleOpenGuide(rom);
+  }, [guideModal, user, guideDraft, showToast, handleOpenGuide]);
+
+  const handleVoteGuide = useCallback(async (guideId: string) => {
+    if (!user?.id) return;
+    const hasVoted = guideVotes.includes(guideId);
+    if (hasVoted) {
+      await supabase.from("guide_votes").delete().eq("user_id", user.id).eq("guide_id", guideId);
+      await supabase.from("game_guides").update({ upvotes: Math.max(0, (guideModal?.guides.find(g => g.id === guideId)?.upvotes || 1) - 1) }).eq("id", guideId);
+    } else {
+      await supabase.from("guide_votes").insert({ user_id: user.id, guide_id: guideId });
+      await supabase.from("game_guides").update({ upvotes: (guideModal?.guides.find(g => g.id === guideId)?.upvotes || 0) + 1 }).eq("id", guideId);
+    }
+    if (guideModal) handleOpenGuide(guideModal.rom);
+  }, [user, guideVotes, guideModal, handleOpenGuide]);
+
+  const handleDeleteGuide = useCallback(async (guideId: string) => {
+    if (!user?.id) return;
+    await supabase.from("game_guides").delete().eq("id", guideId).eq("user_id", user.id);
+    showToast("Guide supprimé", "success");
+    if (guideModal) handleOpenGuide(guideModal.rom);
+  }, [user, guideModal, showToast, handleOpenGuide]);
 
   const handleSaveNotes = useCallback(async () => {
     if (!notesModal) return;
@@ -7403,6 +7475,9 @@ export default function App() {
               <Camera size={14} /> Screenshots
             </button>
             <div className="rom-context-menu__sep" />
+            <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenGuide(romContextMenu.rom); }}>
+              <BookOpen size={14} /> Guide
+            </button>
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenReviews(romContextMenu.rom); }}>
               <MessageCircle size={14} /> Avis communauté
             </button>
@@ -7695,6 +7770,106 @@ export default function App() {
                       {r.comment && <p className="reviews-modal__comment">{r.comment}</p>}
                     </div>
                   ))
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+        {guideModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="notes-modal-overlay"
+            onClick={() => setGuideModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="guide-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="guide-modal__header">
+                <BookOpen size={16} />
+                <span>Guide — {guideModal.rom.name}</span>
+                <button className="btn btn--ghost btn--sm" onClick={() => setGuideModal(null)}><X size={14} /></button>
+              </div>
+              <div className="guide-modal__tabs">
+                {(["presentation", "tips", "achievements", "secrets"] as const).map(tab => (
+                  <button
+                    key={tab}
+                    className={`guide-modal__tab ${guideModal.tab === tab ? "guide-modal__tab--active" : ""}`}
+                    onClick={() => setGuideModal({ ...guideModal, tab, writing: false })}
+                  >
+                    {tab === "presentation" ? "📖 Présentation" : tab === "tips" ? "💡 Conseils" : tab === "achievements" ? "🏆 Succès" : "🔑 Secrets"}
+                  </button>
+                ))}
+              </div>
+              <div className="guide-modal__content">
+                {guideModal.loading ? (
+                  <p className="guide-modal__empty">Chargement...</p>
+                ) : (() => {
+                  const filtered = guideModal.guides.filter((g: any) => g.section === guideModal.tab);
+                  return filtered.length === 0 && !guideModal.writing ? (
+                    <div className="guide-modal__empty">
+                      <p>Aucun guide dans cette section.</p>
+                      {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> Écrire le premier</button>}
+                    </div>
+                  ) : (
+                    <>
+                      {filtered.map((g: any) => (
+                        <div key={g.id} className="guide-modal__entry">
+                          <div className="guide-modal__entry-header">
+                            {g.profile?.avatar_url && <img src={g.profile.avatar_url} className="guide-modal__avatar" alt="" />}
+                            <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
+                            <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString("fr-FR")}</span>
+                            <button
+                              className={`guide-modal__vote-btn ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
+                              onClick={() => handleVoteGuide(g.id)}
+                              title="Utile"
+                            >
+                              <ThumbsUp size={12} /> {g.upvotes}
+                            </button>
+                            {g.user_id === user?.id && (
+                              <button className="btn btn--ghost btn--sm" onClick={() => handleDeleteGuide(g.id)} title="Supprimer"><Trash2 size={12} /></button>
+                            )}
+                          </div>
+                          <h4 className="guide-modal__entry-title">{g.title}</h4>
+                          <div className="guide-modal__entry-content">{g.content}</div>
+                        </div>
+                      ))}
+                      {!guideModal.writing && user && (
+                        <button className="btn btn--ghost btn--sm" style={{ marginTop: 12 }} onClick={() => setGuideModal({ ...guideModal, writing: true })}>
+                          + Ajouter un guide
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
+                {guideModal.writing && user && (
+                  <div className="guide-modal__write">
+                    <input
+                      className="guide-modal__write-title"
+                      value={guideDraft.title}
+                      onChange={(e) => setGuideDraft(d => ({ ...d, title: e.target.value }))}
+                      placeholder="Titre du guide..."
+                      autoFocus
+                    />
+                    <textarea
+                      className="guide-modal__write-content"
+                      value={guideDraft.content}
+                      onChange={(e) => setGuideDraft(d => ({ ...d, content: e.target.value }))}
+                      placeholder="Écris ton guide ici... (astuces, stratégies, walkthroughs...)"
+                      rows={6}
+                    />
+                    <div className="guide-modal__write-actions">
+                      <button className="btn btn--ghost btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: false })}>Annuler</button>
+                      <button className="btn btn--primary btn--sm" disabled={!guideDraft.title.trim() || !guideDraft.content.trim()} onClick={handleSubmitGuide}>
+                        <Send size={12} /> Publier
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </motion.div>
