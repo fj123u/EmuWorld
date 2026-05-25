@@ -3142,41 +3142,32 @@ export default function App() {
 
           // Update challenge progress
           if (user?.id) {
-            const today = new Date().toISOString().split("T")[0];
-            const { data: activeChals } = await supabase
-              .from("weekly_challenges")
+            const activeChals = getActiveWeeklyChallenges();
+            const chalIds = activeChals.map(c => c.challenge_id);
+            const { data: myParts } = await supabase
+              .from("challenge_participants")
               .select("*")
-              .lte("start_date", today)
-              .gte("end_date", today);
-            if (activeChals && activeChals.length > 0) {
-              const chalIds = activeChals.map((c: any) => c.id);
-              const { data: myParts } = await supabase
-                .from("challenge_participants")
-                .select("*")
-                .eq("user_id", user.id)
-                .in("challenge_id", chalIds);
-              for (const part of (myParts || [])) {
-                if (part.completed) continue;
-                const chal = activeChals.find((c: any) => c.id === part.challenge_id);
-                if (!chal) continue;
-                let newProgress = part.progress;
-                if (chal.goal_type === "any_playtime") {
-                  newProgress += sessionSecs;
-                } else if (chal.goal_type === "launches") {
-                  newProgress += 1;
-                } else if (chal.goal_type === "playtime" && chal.game_name && gameName.toLowerCase().includes(chal.game_name.toLowerCase())) {
-                  newProgress += sessionSecs;
-                }
-                if (newProgress !== part.progress) {
-                  const completed = newProgress >= chal.goal_value;
-                  await supabase.from("challenge_participants").update({
-                    progress: newProgress,
-                    completed,
-                    completed_at: completed ? new Date().toISOString() : null,
-                  }).eq("id", part.id);
-                  if (completed) {
-                    showToast(`Challenge "${chal.title}" terminé ! ${chal.badge_icon}`, "success");
-                  }
+              .eq("user_id", user.id)
+              .in("challenge_id", chalIds);
+            for (const part of (myParts || [])) {
+              if (part.completed) continue;
+              const chal = activeChals.find(c => c.challenge_id === part.challenge_id);
+              if (!chal) continue;
+              let newProgress = part.progress;
+              if (chal.goal_type === "any_playtime") {
+                newProgress += sessionSecs;
+              } else if (chal.goal_type === "launches") {
+                newProgress += 1;
+              }
+              if (newProgress !== part.progress) {
+                const completed = newProgress >= chal.goal_value;
+                await supabase.from("challenge_participants").update({
+                  progress: newProgress,
+                  completed,
+                  completed_at: completed ? new Date().toISOString() : null,
+                }).eq("id", part.id);
+                if (completed) {
+                  showToast(`Challenge "${chal.title}" terminé ! ${chal.badge_icon}`, "success");
                 }
               }
             }
@@ -3413,28 +3404,64 @@ export default function App() {
     handleOpenReviews(rom);
   }, [reviewsModal, user, showToast, handleOpenReviews]);
 
-  // --- Challenges ---
+  // --- Challenges (auto-rotating pool, no manual DB inserts needed) ---
+  const CHALLENGE_POOL = [
+    { id: "marathon_mario", title: "Marathon Mario", description: "Joue 2 heures à n'importe quel jeu cette semaine", goal_type: "any_playtime", goal_value: 7200, badge_icon: "🍄" },
+    { id: "decouvreur", title: "Découvreur", description: "Lance 5 jeux différents cette semaine", goal_type: "launches", goal_value: 5, badge_icon: "🔍" },
+    { id: "endurance", title: "Endurance", description: "Accumule 5 heures de jeu total cette semaine", goal_type: "any_playtime", goal_value: 18000, badge_icon: "⏱️" },
+    { id: "retro_hunter", title: "Rétro Hunter", description: "Joue 1 heure cette semaine", goal_type: "any_playtime", goal_value: 3600, badge_icon: "👾" },
+    { id: "sprint", title: "Sprint", description: "Lance 10 sessions de jeu cette semaine", goal_type: "launches", goal_value: 10, badge_icon: "⚡" },
+    { id: "dedication", title: "Dédication", description: "Joue 30 minutes chaque jour pendant 3 jours", goal_type: "any_playtime", goal_value: 5400, badge_icon: "🔥" },
+    { id: "collector", title: "Collectionneur", description: "Lance 8 jeux différents cette semaine", goal_type: "launches", goal_value: 8, badge_icon: "📚" },
+    { id: "no_life", title: "No Life", description: "Accumule 10 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 36000, badge_icon: "🌙" },
+    { id: "casual", title: "Casual Gamer", description: "Joue au moins 20 minutes cette semaine", goal_type: "any_playtime", goal_value: 1200, badge_icon: "☕" },
+    { id: "variety", title: "Variété", description: "Lance 3 jeux de consoles différentes", goal_type: "launches", goal_value: 3, badge_icon: "🎲" },
+    { id: "veteran", title: "Vétéran", description: "Accumule 8 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 28800, badge_icon: "🎖️" },
+    { id: "warmup", title: "Échauffement", description: "Lance 2 jeux cette semaine", goal_type: "launches", goal_value: 2, badge_icon: "🏃" },
+  ];
+
+  const getWeekNumber = () => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 1);
+    const diff = now.getTime() - start.getTime();
+    return Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
+  };
+
+  const getActiveWeeklyChallenges = () => {
+    const week = getWeekNumber();
+    const c1 = CHALLENGE_POOL[week % CHALLENGE_POOL.length];
+    const c2 = CHALLENGE_POOL[(week + 5) % CHALLENGE_POOL.length];
+    const now = new Date();
+    const dayOfWeek = now.getDay() || 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - dayOfWeek + 1);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    const weekId = `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
+    return [
+      { ...c1, challenge_id: `${weekId}_${c1.id}`, start: monday, end: sunday },
+      { ...c2, challenge_id: `${weekId}_${c2.id}`, start: monday, end: sunday },
+    ];
+  };
+
   const [challenges, setChallenges] = useState<any[]>([]);
   const [challengeParticipants, setChallengeParticipants] = useState<any[]>([]);
 
   const loadChallenges = useCallback(async () => {
-    const today = new Date().toISOString().split("T")[0];
-    const { data: chals } = await supabase
-      .from("weekly_challenges")
-      .select("*")
-      .lte("start_date", today)
-      .gte("end_date", today)
-      .order("start_date", { ascending: false });
-    setChallenges(chals || []);
-    if (chals && chals.length > 0) {
-      const ids = chals.map((c: any) => c.id);
+    const active = getActiveWeeklyChallenges();
+    setChallenges(active);
+    if (user?.id) {
+      const ids = active.map(c => c.challenge_id);
       const { data: parts } = await supabase
         .from("challenge_participants")
         .select("*")
+        .eq("user_id", user.id)
         .in("challenge_id", ids);
       setChallengeParticipants(parts || []);
     }
-  }, []);
+  }, [user]);
 
   const handleJoinChallenge = useCallback(async (challengeId: string) => {
     if (!user?.id) { showToast("Connecte-toi pour participer", "error"); return; }
@@ -6572,21 +6599,17 @@ export default function App() {
                       </div>
                     ) : (
                       challenges.map((ch: any) => {
-                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.id && p.user_id === user?.id);
-                        const allParts = challengeParticipants.filter((p: any) => p.challenge_id === ch.id);
-                        const completedCount = allParts.filter((p: any) => p.completed).length;
+                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.challenge_id);
                         const progress = myPart ? Math.min(100, Math.round((myPart.progress / ch.goal_value) * 100)) : 0;
-                        const daysLeft = Math.max(0, Math.ceil((new Date(ch.end_date).getTime() - Date.now()) / 86400000));
+                        const daysLeft = Math.max(0, Math.ceil((ch.end.getTime() - Date.now()) / 86400000));
                         return (
-                          <div key={ch.id} className="challenge-card">
+                          <div key={ch.challenge_id} className="challenge-card">
                             <div className="challenge-card__badge">{ch.badge_icon}</div>
                             <div className="challenge-card__info">
                               <h3 className="challenge-card__title">{ch.title}</h3>
                               <p className="challenge-card__desc">{ch.description}</p>
                               <div className="challenge-card__meta">
                                 <span><Calendar size={12} /> {daysLeft}j restants</span>
-                                <span><Users size={12} /> {allParts.length} participants</span>
-                                <span><Trophy size={12} /> {completedCount} terminés</span>
                               </div>
                               {myPart ? (
                                 <div className="challenge-card__progress">
@@ -6598,7 +6621,7 @@ export default function App() {
                                   </span>
                                 </div>
                               ) : (
-                                <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.id)}>
+                                <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.challenge_id)}>
                                   <Flame size={12} /> Participer
                                 </button>
                               )}
