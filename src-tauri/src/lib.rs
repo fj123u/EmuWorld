@@ -3939,6 +3939,89 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
+static OAUTH_PORT: OnceLock<Mutex<u16>> = OnceLock::new();
+
+fn oauth_port() -> &'static Mutex<u16> {
+    OAUTH_PORT.get_or_init(|| Mutex::new(0))
+}
+
+#[tauri::command]
+async fn start_oauth_server(app_handle: tauri::AppHandle) -> Result<u16, String> {
+    use std::net::TcpListener;
+    use tauri::Emitter;
+
+    // Bind to a random available port
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    *oauth_port().lock().unwrap() = port;
+    push_log("INFO", &format!("OAuth HTTP server started on port {}", port));
+
+    // Spawn a thread that accepts one connection, reads the request, extracts tokens, emits event
+    let handle = app_handle.clone();
+    std::thread::spawn(move || {
+        // Accept connections for up to 120s
+        listener.set_nonblocking(false).ok();
+        let _ = listener.set_ttl(120);
+
+        loop {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    use std::io::{Read, Write as IoWrite};
+                    let mut buf = [0u8; 4096];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    let request = String::from_utf8_lossy(&buf[..n]).to_string();
+
+                    // Parse the GET request path
+                    if let Some(path_line) = request.lines().next() {
+                        let path = path_line.split_whitespace().nth(1).unwrap_or("/");
+
+                        if path.starts_with("/callback") {
+                            // Send HTML that reads the hash fragment and posts it back
+                            let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title></head><body>
+<script>
+// The tokens are in the hash fragment (not sent to server)
+// Post them back to our local server
+const hash = window.location.hash.substring(1);
+if (hash) {
+    fetch('/token?' + hash).then(() => {
+        document.body.innerHTML = '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#4ade80">✅ Connecté ! Tu peux fermer cet onglet.</h2>';
+        setTimeout(() => window.close(), 1000);
+    });
+} else {
+    document.body.innerHTML = '<h2 style="font-family:sans-serif;text-align:center;margin-top:60px;color:#ef4444">❌ Pas de token reçu</h2>';
+}
+</script></body></html>"#;
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+                                html.len(), html
+                            );
+                            let _ = stream.write_all(response.as_bytes());
+                            let _ = stream.flush();
+                        } else if path.starts_with("/token?") {
+                            // Extract tokens from query string
+                            let query = &path[7..]; // skip "/token?"
+                            let callback_url = format!("emuworld://auth-callback#{}", query);
+                            let _ = handle.emit("oauth-callback", callback_url);
+                            push_log("INFO", "OAuth tokens received via HTTP server");
+
+                            let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK";
+                            let _ = stream.write_all(response.as_bytes());
+                            let _ = stream.flush();
+                            break; // Done, stop server
+                        } else {
+                            let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
+                            let _ = stream.write_all(response.as_bytes());
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    Ok(port)
+}
+
 #[tauri::command]
 fn create_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
@@ -4134,6 +4217,7 @@ pub fn run() {
             discord_rpc::discord_clear,
             get_logs,
             clear_logs,
+            start_oauth_server,
             create_overlay_window,
             close_overlay_window,
             export_config,

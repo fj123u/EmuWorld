@@ -1687,19 +1687,19 @@ export default function App() {
     }
   };
 
-  // Social login
+  // Social login — uses a local HTTP server to receive the OAuth callback
   const handleSocialLogin = async (provider: Provider) => {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      // Redirect through a lightweight web page that forwards the tokens
-      // back to the desktop app via the emuworld:// scheme. Going straight
-      // to emuworld:// leaves the browser tab stuck on an unreachable URL,
-      // so the bounce page shows a "you can close this tab" UI instead.
+      // Start a local HTTP server to receive the callback tokens
+      const port = await invoke<number>("start_oauth_server");
+      const redirectUrl = `http://localhost:${port}/callback`;
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: 'https://emuworld.alwaysdata.net/auth-callback.html',
+          redirectTo: redirectUrl,
           skipBrowserRedirect: true,
         },
       });
