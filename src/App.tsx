@@ -69,6 +69,9 @@ import {
   Clock as ClockIcon,
   BarChart2,
   Sparkles,
+  Flame,
+  Gift,
+  Calendar,
 } from "lucide-react";
 
 /* ============================
@@ -353,7 +356,7 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends";
+type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends" | "challenges" | "wrap";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -2629,7 +2632,7 @@ export default function App() {
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
-    const pages: Page[] = ["discover", "catalog", "library", "installed", "store", "controller", "leaderboard", "friends", "stats", "settings", "changelogs"];
+    const pages: Page[] = ["discover", "catalog", "library", "installed", "store", "controller", "leaderboard", "challenges", "friends", "stats", "wrap", "settings", "changelogs"];
     let navCooldown = 0;
 
     const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
@@ -3367,6 +3370,42 @@ export default function App() {
     showToast("Avis supprimé", "success");
     handleOpenReviews(rom);
   }, [reviewsModal, user, showToast, handleOpenReviews]);
+
+  // --- Challenges ---
+  const [challenges, setChallenges] = useState<any[]>([]);
+  const [challengeParticipants, setChallengeParticipants] = useState<any[]>([]);
+
+  const loadChallenges = useCallback(async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const { data: chals } = await supabase
+      .from("weekly_challenges")
+      .select("*")
+      .lte("start_date", today)
+      .gte("end_date", today)
+      .order("start_date", { ascending: false });
+    setChallenges(chals || []);
+    if (chals && chals.length > 0) {
+      const ids = chals.map((c: any) => c.id);
+      const { data: parts } = await supabase
+        .from("challenge_participants")
+        .select("*")
+        .in("challenge_id", ids);
+      setChallengeParticipants(parts || []);
+    }
+  }, []);
+
+  const handleJoinChallenge = useCallback(async (challengeId: string) => {
+    if (!user?.id) { showToast("Connecte-toi pour participer", "error"); return; }
+    const { error } = await supabase.from("challenge_participants").upsert({
+      user_id: user.id,
+      challenge_id: challengeId,
+      progress: 0,
+      completed: false,
+    }, { onConflict: "user_id,challenge_id" });
+    if (error) { showToast("Erreur: " + error.message, "error"); return; }
+    showToast("Tu participes au challenge !", "success");
+    loadChallenges();
+  }, [user, showToast, loadChallenges]);
 
   const handleSaveNotes = useCallback(async () => {
     if (!notesModal) return;
@@ -4321,6 +4360,13 @@ export default function App() {
               {t("nav.leaderboard")}
             </button>
             <button
+              className={`sidebar__item ${page === "challenges" ? "sidebar__item--active" : ""}`}
+              onClick={() => { setPage("challenges"); loadChallenges(); }}
+            >
+              <span className="sidebar__item-icon"><Flame size={16} /></span>
+              Challenges
+            </button>
+            <button
               data-tour="friends"
               className={`sidebar__item ${page === "friends" ? "sidebar__item--active" : ""}`}
               onClick={() => { setPage("friends"); loadFriends(); }}
@@ -4339,6 +4385,13 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><Activity size={16} /></span>
               {t("nav.stats")}
+            </button>
+            <button
+              className={`sidebar__item ${page === "wrap" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("wrap")}
+            >
+              <span className="sidebar__item-icon"><Gift size={16} /></span>
+              Wrap mensuel
             </button>
             <button
               className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
@@ -4587,6 +4640,8 @@ export default function App() {
                     {page === "leaderboard" && t("header.leaderboard")}
                     {page === "friends" && t("header.friends")}
                     {page === "stats" && t("header.stats")}
+                    {page === "challenges" && "Challenges"}
+                    {page === "wrap" && "Wrap Mensuel"}
                     {page === "backup" && t("header.backup")}
                     {page === "controller" && t("header.controller")}
                   </h1>
@@ -4620,6 +4675,8 @@ export default function App() {
                     {page === "leaderboard" && t("subtitle.leaderboard")}
                     {page === "friends" && `${friends.length} ${t("nav.friends").toLowerCase()}`}
                     {page === "stats" && t("subtitle.stats")}
+                    {page === "challenges" && `${challenges.length} challenges actifs`}
+                    {page === "wrap" && "Tes stats du mois en un coup d'œil"}
                     {page === "backup" && t("subtitle.backup")}
                     {page === "controller" && (gamepadActive ? t("subtitle.controllerConnected") : t("subtitle.controllerNone"))}
                   </p>
@@ -6458,6 +6515,128 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+                  </div>
+                );
+              })()}
+
+              {page === "challenges" && (
+                <div className="challenges-page">
+                  <div className="challenges-page__active">
+                    {challenges.length === 0 ? (
+                      <div className="challenges-page__empty">
+                        <Flame size={48} style={{ opacity: 0.3 }} />
+                        <p>Aucun challenge actif cette semaine.</p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Reviens bientôt !</p>
+                      </div>
+                    ) : (
+                      challenges.map((ch: any) => {
+                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.id && p.user_id === user?.id);
+                        const allParts = challengeParticipants.filter((p: any) => p.challenge_id === ch.id);
+                        const completedCount = allParts.filter((p: any) => p.completed).length;
+                        const progress = myPart ? Math.min(100, Math.round((myPart.progress / ch.goal_value) * 100)) : 0;
+                        const daysLeft = Math.max(0, Math.ceil((new Date(ch.end_date).getTime() - Date.now()) / 86400000));
+                        return (
+                          <div key={ch.id} className="challenge-card">
+                            <div className="challenge-card__badge">{ch.badge_icon}</div>
+                            <div className="challenge-card__info">
+                              <h3 className="challenge-card__title">{ch.title}</h3>
+                              <p className="challenge-card__desc">{ch.description}</p>
+                              <div className="challenge-card__meta">
+                                <span><Calendar size={12} /> {daysLeft}j restants</span>
+                                <span><Users size={12} /> {allParts.length} participants</span>
+                                <span><Trophy size={12} /> {completedCount} terminés</span>
+                              </div>
+                              {myPart ? (
+                                <div className="challenge-card__progress">
+                                  <div className="challenge-card__progress-bar">
+                                    <div className="challenge-card__progress-fill" style={{ width: `${progress}%` }} />
+                                  </div>
+                                  <span className="challenge-card__progress-text">
+                                    {myPart.completed ? "✓ Terminé !" : `${progress}%`}
+                                  </span>
+                                </div>
+                              ) : (
+                                <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.id)}>
+                                  <Flame size={12} /> Participer
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {page === "wrap" && (() => {
+                const now = new Date();
+                const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+                const games = Object.entries(playtime.games)
+                  .map(([key, g]) => ({ key, ...g }))
+                  .filter(g => g.last_played && new Date(g.last_played) >= monthStart);
+                const totalSeconds = games.reduce((acc, g) => acc + g.seconds, 0);
+                const totalLaunches = games.reduce((acc, g) => acc + g.launches, 0);
+                const topGame = [...games].sort((a, b) => b.seconds - a.seconds)[0];
+                const consoleMap: Record<string, number> = {};
+                games.forEach(g => { consoleMap[g.console] = (consoleMap[g.console] || 0) + g.seconds; });
+                const topConsole = Object.entries(consoleMap).sort((a, b) => b[1] - a[1])[0];
+                const uniqueGames = games.filter(g => g.launches > 0).length;
+                const fmtTime = (s: number) => {
+                  if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+                  if (s >= 60) return `${Math.floor(s / 60)} min`;
+                  return `${s}s`;
+                };
+                const monthName = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+
+                return (
+                  <div className="wrap-page">
+                    <div className="wrap-page__header">
+                      <Gift size={32} />
+                      <h2>Ton Wrap — {monthName}</h2>
+                    </div>
+                    {totalSeconds === 0 ? (
+                      <div className="wrap-page__empty">
+                        <p>Pas encore de données ce mois-ci. Joue un peu et reviens !</p>
+                      </div>
+                    ) : (
+                      <div className="wrap-page__cards">
+                        <div className="wrap-card wrap-card--hero">
+                          <div className="wrap-card__icon">⏱️</div>
+                          <div className="wrap-card__value">{fmtTime(totalSeconds)}</div>
+                          <div className="wrap-card__label">Temps de jeu total</div>
+                        </div>
+                        <div className="wrap-card">
+                          <div className="wrap-card__icon">🎮</div>
+                          <div className="wrap-card__value">{uniqueGames}</div>
+                          <div className="wrap-card__label">Jeux joués</div>
+                        </div>
+                        <div className="wrap-card">
+                          <div className="wrap-card__icon">🚀</div>
+                          <div className="wrap-card__value">{totalLaunches}</div>
+                          <div className="wrap-card__label">Lancements</div>
+                        </div>
+                        {topGame && (
+                          <div className="wrap-card wrap-card--highlight">
+                            <div className="wrap-card__icon">🏆</div>
+                            <div className="wrap-card__value">{topGame.name}</div>
+                            <div className="wrap-card__label">Jeu le + joué — {fmtTime(topGame.seconds)}</div>
+                          </div>
+                        )}
+                        {topConsole && (
+                          <div className="wrap-card">
+                            <div className="wrap-card__icon">🕹️</div>
+                            <div className="wrap-card__value">{topConsole[0]}</div>
+                            <div className="wrap-card__label">Console préférée — {fmtTime(topConsole[1])}</div>
+                          </div>
+                        )}
+                        <div className="wrap-card">
+                          <div className="wrap-card__icon">📅</div>
+                          <div className="wrap-card__value">{Math.round(totalSeconds / 3600 / Math.max(1, now.getDate()))}h</div>
+                          <div className="wrap-card__label">Moyenne par jour</div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
