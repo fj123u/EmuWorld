@@ -3139,6 +3139,48 @@ export default function App() {
           // Auto-dismiss after 8 seconds
           setTimeout(() => setSessionRecap(null), 8000);
           scheduleCloudSync();
+
+          // Update challenge progress
+          if (user?.id) {
+            const today = new Date().toISOString().split("T")[0];
+            const { data: activeChals } = await supabase
+              .from("weekly_challenges")
+              .select("*")
+              .lte("start_date", today)
+              .gte("end_date", today);
+            if (activeChals && activeChals.length > 0) {
+              const chalIds = activeChals.map((c: any) => c.id);
+              const { data: myParts } = await supabase
+                .from("challenge_participants")
+                .select("*")
+                .eq("user_id", user.id)
+                .in("challenge_id", chalIds);
+              for (const part of (myParts || [])) {
+                if (part.completed) continue;
+                const chal = activeChals.find((c: any) => c.id === part.challenge_id);
+                if (!chal) continue;
+                let newProgress = part.progress;
+                if (chal.goal_type === "any_playtime") {
+                  newProgress += sessionSecs;
+                } else if (chal.goal_type === "launches") {
+                  newProgress += 1;
+                } else if (chal.goal_type === "playtime" && chal.game_name && gameName.toLowerCase().includes(chal.game_name.toLowerCase())) {
+                  newProgress += sessionSecs;
+                }
+                if (newProgress !== part.progress) {
+                  const completed = newProgress >= chal.goal_value;
+                  await supabase.from("challenge_participants").update({
+                    progress: newProgress,
+                    completed,
+                    completed_at: completed ? new Date().toISOString() : null,
+                  }).eq("id", part.id);
+                  if (completed) {
+                    showToast(`Challenge "${chal.title}" terminé ! ${chal.badge_icon}`, "success");
+                  }
+                }
+              }
+            }
+          }
         }
         loadPlaytime();
         setCurrentPlayingGame(null);
@@ -3159,7 +3201,7 @@ export default function App() {
       }
     );
     return () => { unlisten.then((fn) => fn()); };
-  }, [loadPlaytime, showToast, scheduleCloudSync, checkAchievements, triggerHiddenAchievement]);
+  }, [loadPlaytime, showToast, scheduleCloudSync, checkAchievements, triggerHiddenAchievement, user]);
 
   // Listen for background 7z extraction completion
   useEffect(() => {
