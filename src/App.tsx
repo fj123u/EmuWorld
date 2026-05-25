@@ -3505,20 +3505,25 @@ export default function App() {
   }, [user, showToast, loadChallenges]);
 
   // --- Guides ---
-  const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean } | null>(null);
+  const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean; scraped?: { summary?: string; achievements?: { title: string; description: string; points: number; badge_url: string }[] } } | null>(null);
   const [guideDraft, setGuideDraft] = useState<{ title: string; content: string }>({ title: "", content: "" });
   const [guideVotes, setGuideVotes] = useState<string[]>([]);
 
   const handleOpenGuide = useCallback(async (rom: RomFile) => {
     setGuideModal({ rom, guides: [], loading: true, tab: "presentation", writing: false });
     setGuideDraft({ title: "", content: "" });
-    const { data: guides } = await supabase
-      .from("game_guides")
-      .select("*")
-      .eq("game_name", rom.name)
-      .eq("game_console", rom.console)
-      .order("upvotes", { ascending: false });
-    let enriched = guides || [];
+
+    const [guidesRes, scrapedRes] = await Promise.all([
+      supabase
+        .from("game_guides")
+        .select("*")
+        .eq("game_name", rom.name)
+        .eq("game_console", rom.console)
+        .order("upvotes", { ascending: false }),
+      invoke<{ summary: string | null; achievements: { title: string; description: string; points: number; badge_url: string }[] }>("fetch_game_guide_data", { gameName: rom.name, console: rom.console }).catch(() => null),
+    ]);
+
+    let enriched = guidesRes.data || [];
     if (enriched.length > 0) {
       const uids = [...new Set(enriched.map((g: any) => g.user_id))];
       const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", uids);
@@ -3534,7 +3539,10 @@ export default function App() {
         setGuideVotes([]);
       }
     }
-    setGuideModal({ rom, guides: enriched, loading: false, tab: "presentation", writing: false });
+    setGuideModal({
+      rom, guides: enriched, loading: false, tab: "presentation", writing: false,
+      scraped: scrapedRes ? { summary: scrapedRes.summary || undefined, achievements: scrapedRes.achievements } : undefined,
+    });
   }, [user]);
 
   const handleSubmitGuide = useCallback(async () => {
@@ -7811,38 +7819,68 @@ export default function App() {
                   <p className="guide-modal__empty">Chargement...</p>
                 ) : (() => {
                   const filtered = guideModal.guides.filter((g: any) => g.section === guideModal.tab);
-                  return filtered.length === 0 && !guideModal.writing ? (
-                    <div className="guide-modal__empty">
-                      <p>Aucun guide dans cette section.</p>
-                      {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> Écrire le premier</button>}
-                    </div>
-                  ) : (
+                  const scraped = guideModal.scraped;
+                  const hasScrapedContent = (guideModal.tab === "presentation" && scraped?.summary) ||
+                    (guideModal.tab === "achievements" && scraped?.achievements && scraped.achievements.length > 0);
+                  return (
                     <>
-                      {filtered.map((g: any) => (
-                        <div key={g.id} className="guide-modal__entry">
-                          <div className="guide-modal__entry-header">
-                            {g.profile?.avatar_url && <img src={g.profile.avatar_url} className="guide-modal__avatar" alt="" />}
-                            <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
-                            <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString("fr-FR")}</span>
-                            <button
-                              className={`guide-modal__vote-btn ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
-                              onClick={() => handleVoteGuide(g.id)}
-                              title="Utile"
-                            >
-                              <ThumbsUp size={12} /> {g.upvotes}
-                            </button>
-                            {g.user_id === user?.id && (
-                              <button className="btn btn--ghost btn--sm" onClick={() => handleDeleteGuide(g.id)} title="Supprimer"><Trash2 size={12} /></button>
-                            )}
-                          </div>
-                          <h4 className="guide-modal__entry-title">{g.title}</h4>
-                          <div className="guide-modal__entry-content">{g.content}</div>
+                      {guideModal.tab === "presentation" && scraped?.summary && (
+                        <div className="guide-modal__scraped">
+                          <div className="guide-modal__scraped-badge">Wikipedia</div>
+                          <p className="guide-modal__scraped-text">{scraped.summary}</p>
                         </div>
-                      ))}
-                      {!guideModal.writing && user && (
-                        <button className="btn btn--ghost btn--sm" style={{ marginTop: 12 }} onClick={() => setGuideModal({ ...guideModal, writing: true })}>
-                          + Ajouter un guide
-                        </button>
+                      )}
+                      {guideModal.tab === "achievements" && scraped?.achievements && scraped.achievements.length > 0 && (
+                        <div className="guide-modal__scraped">
+                          <div className="guide-modal__scraped-badge">RetroAchievements — {scraped.achievements.length} succès</div>
+                          <div className="guide-modal__achievements-list">
+                            {scraped.achievements.slice(0, 30).map((ach, i) => (
+                              <div key={i} className="guide-modal__achievement">
+                                {ach.badge_url && <img src={ach.badge_url} className="guide-modal__achievement-badge" alt="" />}
+                                <div className="guide-modal__achievement-info">
+                                  <span className="guide-modal__achievement-title">{ach.title}</span>
+                                  <span className="guide-modal__achievement-desc">{ach.description}</span>
+                                </div>
+                                <span className="guide-modal__achievement-points">{ach.points} pts</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {filtered.length === 0 && !guideModal.writing && !hasScrapedContent ? (
+                        <div className="guide-modal__empty">
+                          <p>Aucun guide dans cette section.</p>
+                          {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> Écrire le premier</button>}
+                        </div>
+                      ) : (
+                        <>
+                          {filtered.map((g: any) => (
+                            <div key={g.id} className="guide-modal__entry">
+                              <div className="guide-modal__entry-header">
+                                {g.profile?.avatar_url && <img src={g.profile.avatar_url} className="guide-modal__avatar" alt="" />}
+                                <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
+                                <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString("fr-FR")}</span>
+                                <button
+                                  className={`guide-modal__vote-btn ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
+                                  onClick={() => handleVoteGuide(g.id)}
+                                  title="Utile"
+                                >
+                                  <ThumbsUp size={12} /> {g.upvotes}
+                                </button>
+                                {g.user_id === user?.id && (
+                                  <button className="btn btn--ghost btn--sm" onClick={() => handleDeleteGuide(g.id)} title="Supprimer"><Trash2 size={12} /></button>
+                                )}
+                              </div>
+                              <h4 className="guide-modal__entry-title">{g.title}</h4>
+                              <div className="guide-modal__entry-content">{g.content}</div>
+                            </div>
+                          ))}
+                          {!guideModal.writing && user && (
+                            <button className="btn btn--ghost btn--sm" style={{ marginTop: 12 }} onClick={() => setGuideModal({ ...guideModal, writing: true })}>
+                              + Ajouter un guide
+                            </button>
+                          )}
+                        </>
                       )}
                     </>
                   );

@@ -4335,6 +4335,29 @@ body {
 }
 .guide-modal__write-content:focus { border-color: var(--accent); }
 .guide-modal__write-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.guide-modal__scraped {
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(139,92,246,0.05), rgba(34,197,94,0.03));
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.guide-modal__scraped-badge {
+  font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 8px; letter-spacing: 0.5px;
+}
+.guide-modal__scraped-text { font-size: 0.8rem; line-height: 1.5; margin: 0; color: var(--text-primary); }
+.guide-modal__achievements-list { display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto; }
+.guide-modal__achievement {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px;
+  background: rgba(255,255,255,0.03);
+}
+.guide-modal__achievement-badge { width: 28px; height: 28px; border-radius: 4px; }
+.guide-modal__achievement-info { flex: 1; min-width: 0; }
+.guide-modal__achievement-title { display: block; font-size: 0.78rem; font-weight: 600; }
+.guide-modal__achievement-desc { display: block; font-size: 0.7rem; color: var(--text-secondary); }
+.guide-modal__achievement-points { font-size: 0.72rem; font-weight: 700; color: #f59e0b; white-space: nowrap; }
 
 /* RA Overlay */
 .ra-overlay {

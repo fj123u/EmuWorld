@@ -3501,6 +3501,94 @@ async fn get_ra_completed_games() -> Result<Vec<retroachievements::RACompletedGa
 }
 
 // ============================================================
+// GAME GUIDE — scrape Wikipedia summary + RA achievements
+// ============================================================
+
+#[derive(serde::Serialize)]
+struct GameGuideData {
+    summary: Option<String>,
+    achievements: Vec<GuideAchievement>,
+}
+
+#[derive(serde::Serialize)]
+struct GuideAchievement {
+    title: String,
+    description: String,
+    points: u32,
+    badge_url: String,
+}
+
+#[tauri::command]
+async fn fetch_game_guide_data(game_name: String, console: String) -> Result<GameGuideData, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("EmuWorld/1.0.0")
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    // 1. Wikipedia summary
+    let clean = game_name
+        .replace(|c: char| !c.is_alphanumeric() && c != ' ' && c != '-' && c != '\'', "")
+        .trim().to_string();
+    let wiki_url = format!(
+        "https://en.wikipedia.org/api/rest_v1/page/summary/{}",
+        urlencoding::encode(&clean.replace(' ', "_"))
+    );
+    let summary = match client.get(&wiki_url).send().await {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                let extract = json["extract"].as_str().unwrap_or("").to_string();
+                if extract.len() > 50 && (
+                    extract.to_lowercase().contains("video game") ||
+                    extract.to_lowercase().contains("game") ||
+                    extract.to_lowercase().contains("developed") ||
+                    extract.to_lowercase().contains("published") ||
+                    extract.to_lowercase().contains("console") ||
+                    extract.to_lowercase().contains("nintendo") ||
+                    extract.to_lowercase().contains("playstation") ||
+                    extract.to_lowercase().contains("sega")
+                ) {
+                    Some(extract)
+                } else {
+                    None
+                }
+            } else { None }
+        }
+        _ => None,
+    };
+
+    // 2. RetroAchievements
+    let ra_config = retroachievements::load_config();
+    let mut achievements = Vec::new();
+    if !ra_config.api_key.is_empty() {
+        if let Ok(Some(game_id)) = retroachievements::search_game(&game_name, &console, &ra_config.api_key).await {
+            let url = format!(
+                "https://retroachievements.org/API/API_GetGameInfoAndUserProgress.php?g={}&u={}&y={}",
+                game_id, ra_config.username, ra_config.api_key
+            );
+            if let Ok(resp) = client.get(&url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(achs) = json["Achievements"].as_object() {
+                        for (_, ach) in achs {
+                            let title = ach["Title"].as_str().unwrap_or("").to_string();
+                            let description = ach["Description"].as_str().unwrap_or("").to_string();
+                            let points = ach["Points"].as_u64().unwrap_or(0) as u32;
+                            let badge_id = ach["BadgeName"].as_str().unwrap_or("");
+                            let badge_url = if !badge_id.is_empty() {
+                                format!("https://media.retroachievements.org/Badge/{}.png", badge_id)
+                            } else { String::new() };
+                            achievements.push(GuideAchievement { title, description, points, badge_url });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(GameGuideData { summary, achievements })
+}
+
+// ============================================================
 // CLOUD BACKUP — Backblaze B2 save sync
 // ============================================================
 
@@ -4266,6 +4354,7 @@ pub fn run() {
             delete_screenshot,
             clear_achievements,
             overwrite_achievements,
+            fetch_game_guide_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
