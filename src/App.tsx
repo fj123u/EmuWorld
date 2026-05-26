@@ -5914,26 +5914,23 @@ export default function App() {
                     <div className="settings__field">
                       <div className="settings__field-info">
                         <label className="settings__field-label">Vitesse max de téléchargement</label>
-                        <p className="settings__field-desc">0 = illimité. Limite le débit lors du téléchargement de ROMs dans le Store.</p>
+                        <p className="settings__field-desc">Limite le débit en temps réel. Prend effet immédiatement, même pendant un download.</p>
                       </div>
-                      <select
-                        className="settings__field-select gamepad-nav-item"
-                        value={config.bandwidth_limit_kbps}
-                        onChange={async (e) => {
-                          const val = Number(e.target.value);
-                          const newCfg = { ...config, bandwidth_limit_kbps: val };
-                          setConfig(newCfg);
-                          await invoke("save_config", { config: newCfg });
-                        }}
-                      >
-                        <option value={0}>Illimité</option>
-                        <option value={256}>256 KB/s</option>
-                        <option value={512}>512 KB/s</option>
-                        <option value={1024}>1 MB/s</option>
-                        <option value={2048}>2 MB/s</option>
-                        <option value={5120}>5 MB/s</option>
-                        <option value={10240}>10 MB/s</option>
-                      </select>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        {[0, 256, 512, 1024, 2048, 5120, 10240].map(val => (
+                          <button
+                            key={val}
+                            className={`btn btn--sm gamepad-nav-item ${config.bandwidth_limit_kbps === val ? "btn--primary" : "btn--ghost"}`}
+                            onClick={async () => {
+                              const newCfg = { ...config, bandwidth_limit_kbps: val };
+                              setConfig(newCfg);
+                              await invoke("save_config", { config: newCfg });
+                            }}
+                          >
+                            {val === 0 ? "Illimité" : val < 1024 ? `${val} KB/s` : `${val / 1024} MB/s`}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

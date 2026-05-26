@@ -37,8 +37,10 @@ struct CurrentPlayingState {
 }
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 static APP_LOGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
+static BANDWIDTH_LIMIT_KBPS: AtomicU64 = AtomicU64::new(0);
 
 fn app_logs() -> &'static Mutex<Vec<String>> {
     APP_LOGS.get_or_init(|| Mutex::new(Vec::new()))
@@ -224,6 +226,7 @@ fn get_config() -> AppConfig {
     fs::create_dir_all(&config.roms_directory).ok();
     fs::create_dir_all(&config.emulators_directory).ok();
     fs::create_dir_all(&config.covers_directory).ok();
+    BANDWIDTH_LIMIT_KBPS.store(config.bandwidth_limit_kbps, AtomicOrdering::Relaxed);
 
     config
 }
@@ -234,6 +237,7 @@ fn save_config(config: AppConfig) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    BANDWIDTH_LIMIT_KBPS.store(config.bandwidth_limit_kbps, AtomicOrdering::Relaxed);
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, data).map_err(|e| e.to_string())?;
     Ok(())
@@ -2308,7 +2312,6 @@ async fn download_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
-    let bw_limit = config.bandwidth_limit_kbps;
     let mut throttle_bytes = 0u64;
     let mut throttle_start = std::time::Instant::now();
 
@@ -2322,6 +2325,7 @@ async fn download_rom(
         downloaded_bytes += chunk.len() as u64;
 
         // Bandwidth throttling
+        let bw_limit = BANDWIDTH_LIMIT_KBPS.load(AtomicOrdering::Relaxed);
         if bw_limit > 0 {
             throttle_bytes += chunk.len() as u64;
             let limit_bps = bw_limit * 1024;
@@ -2899,7 +2903,6 @@ async fn download_myrient_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
-    let bw_limit = config.bandwidth_limit_kbps;
     let mut throttle_bytes = 0u64;
     let mut throttle_start = std::time::Instant::now();
 
@@ -2909,6 +2912,7 @@ async fn download_myrient_rom(
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded_bytes += chunk.len() as u64;
 
+        let bw_limit = BANDWIDTH_LIMIT_KBPS.load(AtomicOrdering::Relaxed);
         if bw_limit > 0 {
             throttle_bytes += chunk.len() as u64;
             let limit_bps = bw_limit * 1024;
@@ -3313,7 +3317,6 @@ async fn download_vimm_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
-    let bw_limit = config.bandwidth_limit_kbps;
     let mut throttle_bytes = 0u64;
     let mut throttle_start = std::time::Instant::now();
 
@@ -3323,6 +3326,7 @@ async fn download_vimm_rom(
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded_bytes += chunk.len() as u64;
 
+        let bw_limit = BANDWIDTH_LIMIT_KBPS.load(AtomicOrdering::Relaxed);
         if bw_limit > 0 {
             throttle_bytes += chunk.len() as u64;
             let limit_bps = bw_limit * 1024;
