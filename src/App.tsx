@@ -1372,7 +1372,24 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
-    { version: "1.0.0", date: "2026-05-21", changes: [
+    { version: "2.4.0", date: "2026-05-26", changes: [
+      "🎮 Accessibilité manette complète: tous les nouveaux éléments (reviews, guides, challenges) navigables au pad",
+      "📺 Fix Big Picture: fullscreen automatique à l'entrée, restauration à la sortie, F11/ESC pour toggle",
+      "📋 Menu contextuel manette enrichi: Notes, Screenshots, Guide ajoutés pour parité avec le clic droit",
+    ] },
+    { version: "2.3.0", date: "2026-05-26", changes: [
+      "📖 Guides intégrés: scraping Wikipedia (résumé jeu) + RetroAchievements (succès), rédaction communautaire avec upvotes",
+      "⋯ Bouton trois points sur les cartes de jeux pour accéder au menu contextuel",
+      "🎯 Bandwidth limiter: limitation dynamique en temps réel (AtomicU64), changeable pendant un download actif",
+      "📊 Wrap mensuel amélioré: animations stagger, top 5 jeux, top 3 consoles, tendance vs mois précédent",
+    ] },
+    { version: "2.2.0", date: "2026-05-25", changes: [
+      "🏆 Challenges hebdo: pool de 18 défis game-specific rotatifs (seed par semaine), progression auto détectée",
+      "📊 Leaderboard par challenge: classement des participants avec avatars et progression formatée",
+      "⭐ Avis communauté: notes + commentaires publics par jeu avec étoiles, visible via clic droit",
+      "🎲 Jeux similaires: recommandations basées sur les tags/genre depuis le menu contextuel",
+    ] },
+    { version: "2.1.0", date: "2026-05-21", changes: [
       "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
       "🏆 Achievements dans l'overlay: progression RetroAchievements avec points par succès et total",
       "👥 Amis dans l'overlay + comparer avec un ami (temps, jeux, achievements, jeux en commun)",
@@ -1384,23 +1401,18 @@ export default function App() {
       "🔐 OAuth amélioré: serveur HTTP local remplace le deep-link (connexion Google/Discord fonctionne partout)",
       "🔔 Activity feed: un jeu n'apparaît qu'une fois dans le fil (premier lancement uniquement)",
     ] },
-    { version: "1.8.0", date: "2026-05-11", changes: [
+    { version: "2.0.0", date: "2026-05-11", changes: [
       "📦 Import/Export config: sauvegarder toute sa config + playtime en JSON pour restaurer sur un autre PC",
       "🔔 Notifications Windows natives: toast quand un achievement est débloqué, un download terminé, ou une session finie",
       "⌨️ Raccourcis clavier: Ctrl+Shift+L relance le dernier jeu, Ctrl+K focus la recherche",
-    ] },
-    { version: "1.7.0", date: "2026-05-11", changes: [
       "📊 Page Statistiques: temps total, launches, streak, top 8 jeux, top 6 consoles, heatmap 12 semaines",
       "📁 Collections custom: créer des playlists de jeux (RPGs, Backlog, etc.), ajouter/retirer via clic droit",
       "🖱️ Menu contextuel: clic droit sur un jeu → Jouer, Favori, Ajouter à une collection, Supprimer",
-    ] },
-    { version: "1.6.0", date: "2026-05-11", changes: [
       "📋 Vue liste/grille: basculer entre covers et tableau (nom, console, temps joué, note)",
       "🔀 Tri avancé: trier par A-Z, temps joué, note, dernier joué, nb de launches",
       "🔍 Filtres: afficher tous / favoris / non-joués / notés",
-      "📝 Notes par jeu: champ texte libre pour codes, astuces, progression (icône StickyNote sur la card)",
+      "📝 Notes par jeu: champ texte libre pour codes, astuces, progression",
       "⭐ Étoiles: noter chaque jeu de 1 à 5 étoiles, visible dans la grille et la liste",
-      "☁️ Rating & notes synchronisés sur Supabase avec le reste du playtime"
     ] },
     { version: "1.5.0", date: "2026-05-10", changes: [
       "🎆 Fond d'écran dynamique: la cover du jeu survolé s'affiche en arrière-plan avec blur",
@@ -1410,23 +1422,23 @@ export default function App() {
       "🎮 Navigation manette étendue à toutes les pages (leaderboard, backup, settings, changelogs)",
       "☁️ Backup cloud: scan élargi (AppData/Roaming pour Ryujinx, Dolphin, Cemu, etc.)",
       "🗑️ Suppression de backups cloud depuis l'interface",
-      "✨ Auto-update fonctionnel: bouton 'Mise à jour' dans la titlebar + install en 1 clic"
+      "✨ Auto-update fonctionnel: bouton 'Mise à jour' dans la titlebar + install en 1 clic",
     ] },
     { version: "1.4.1", date: "2026-05-09", changes: [
       "🖼️ Fix covers Wii U: noms exacts libretro hardcodés pour les jeux populaires",
       "🖼️ Fix covers web panel: ajout suffixes région (USA/Europe/World) + inversion 'The'",
       "🖼️ Fix covers GBA: fallback vers GBC/GB pour les jeux Pokémon rétro",
       "🔧 Fix warning Rust unused_mut dans generate_search_candidates",
-      "🌐 Covers GameTDB pour Wii/Wii U/DS/3DS sur le profil web"
+      "🌐 Covers GameTDB pour Wii/Wii U/DS/3DS sur le profil web",
     ] },
     { version: "1.4.0", date: "2026-05-05", changes: [
       "🎮 Navigation manette complète: D-pad/stick pour naviguer, A pour confirmer, B pour retour",
-      "📋 Menu contextuel manette: A sur un jeu → Jouer/Favori/Supprimer, sur un émulateur → Installer-Lancer/Désinstaller/Site web",
+      "📋 Menu contextuel manette: A sur un jeu → Jouer/Favori/Supprimer, sur un émulateur → Installer/Lancer/Site web",
       "⌨️ Clavier virtuel: appuyer A sur une barre de recherche ouvre un clavier navigable à la manette",
       "🔧 Remapping des touches manette avec détection anti-conflit",
       "🕹️ Détection native via Rust (gilrs) — compatible Xbox, PlayStation, Switch Pro Controller",
-      "🛒 Store simplifié: Vimm's Lair + RetroGameSets, suppression de Myrient",
-      "🐛 Fix lancement Wii U: Cemu reçoit maintenant le flag -g pour charger le jeu directement"
+      "🛒 Store simplifié: Vimm's Lair + RetroGameSets",
+      "🐛 Fix lancement Wii U: Cemu reçoit maintenant le flag -g pour charger le jeu directement",
     ] },
     { version: "1.3.0", date: "2026-05-03", changes: [
       "🏆 Achievements: 33 succès (21 milestones + 12 cachés) avec détection en temps réel",
@@ -1434,39 +1446,81 @@ export default function App() {
       "☁️ Synchronisation cloud des achievements via Supabase",
       "🌐 Achievements visibles sur le profil web avec rareté % et indices pour les secrets",
       "🎮 Store: téléchargement de ROMs à l'unité via Vimm's Lair",
-      "🦉 Succès cachés uniques: Oiseau de nuit, Speed Runner, Marathon, et plus"
+      "🦉 Succès cachés uniques: Oiseau de nuit, Speed Runner, Marathon, et plus",
     ] },
     { version: "1.2.0", date: "2026-04-28", changes: [
-      "📊 Gaming Profile: total playtime, launches, games played and day streak now show in the Account panel",
-      "🏆 Stats: most-played game, favorite, top emulator, top console and first-played date, with a top-5 podium",
-      "⏱ Every session is tracked locally (stored in playtime.json) — the emulator exit time is the source of truth, no clock-in/out needed",
-      "★ Favorite toggle on every game card + a subtle playtime badge once you've launched it",
-      "🎨 Real console logos throughout the app (NES, SNES, Switch, PlayStation, Xbox, Genesis, Dreamcast…) from RetroArch's asset pack",
-      "🗂 Drill-down navigation on both Roms and Console pages (Manufacturer → Console → content), mirroring the store"
+      "📊 Profil gaming: temps total, launches, jeux joués et streak visibles dans le panneau Account",
+      "🏆 Stats: jeu le + joué, favori, top émulateur, top console, date premier lancement, podium top 5",
+      "⏱️ Chaque session trackée localement (playtime.json) — le temps est calculé à la fermeture de l'ému",
+      "★ Toggle favori sur chaque carte + badge temps joué discret",
+      "🎨 Vrais logos de consoles dans toute l'app (NES, SNES, Switch, PlayStation, Xbox, Genesis...)",
+      "🗂️ Navigation drill-down sur Roms et Consoles (Fabricant → Console → contenu)",
     ] },
     { version: "1.1.1", date: "2026-04-27", changes: [
-      "🔎 Store: replaced the A-Z alphabet with a real search bar — type a name, results appear instantly",
-      "🎨 Cover art: Wii & Wii U now use the front-only box art (no more wrap-around jackets)",
-      "🌐 Vimm search can be scoped to the current console or run globally when no console is picked"
+      "🔎 Store: barre de recherche remplace l'alphabet A-Z — résultats instantanés",
+      "🎨 Covers Wii/Wii U: utilise la face avant uniquement (plus de jaquette wrap-around)",
+      "🌐 Recherche Vimm scopée par console ou globale",
     ] },
     { version: "1.1.0", date: "2026-04-27", changes: [
-      "🎮 New Store: Vimm's Lair for individual game downloads",
-      "🔀 Dual-source Store: toggle between Individual games (Vimm's Lair) and Complete packs (RetroGameSets)",
-      "🖼️ Cover fix: Wii & Wii U covers now load correctly (GameTDB format per console, proper disc IDs)",
-      "🧠 Smarter cover matching: composite titles (A & B), title-case fallback, franchise aliases",
-      "🔁 Retry button on missing covers — force a fresh fetch without restarting the app",
-      "🧹 Removed an unused_mut Rust warning"
+      "🎮 Nouveau Store: Vimm's Lair pour télécharger des jeux à l'unité",
+      "🔀 Store dual-source: toggle entre Jeux individuels (Vimm's Lair) et Packs complets (RetroGameSets)",
+      "🖼️ Fix covers Wii/Wii U: format GameTDB par console, bons disc IDs",
+      "🧠 Cover matching amélioré: titres composés (A & B), title-case fallback, aliases de franchise",
+      "🔁 Bouton Retry sur les covers manquantes",
     ] },
-    { version: "1.0.0", date: "2026-04-20", changes: ["🚀 Automated RGS Imports: Automatic moving, unzipping, and cleanup", "📦 Switch Mastery: Full .xci/.nsp support with instant disk relocation", "🧹 Streamlined UI: Removed Archive.org to focus on RetroGameSets", "🛠️ Improved folder-view download triggers and file picker filters"] },
-    { version: "0.3.6", date: "2026-03-25", changes: ["🎮 Manual Ryubing (Ryujinx) Installation from local zip", "Improved emulator discovery depth", "General stability fixes"] },
-    { version: "0.3.5", date: "2026-03-20", changes: ["🗑️ Fixed uninstallation regression (Case-sensitivity fix)", "🖼️ Better Wii/Wii U cover matching (Region fallbacks)", "🔒 Added 'Access Denied' warning for running emulators"] },
-    { version: "0.3.2", date: "2026-03-19", changes: ["🎮 Added Ryubing for Nintendo Switch emulation", "🖼️ Improved cover matching: Added GB/GBC fallbacks for GBA console (mGBA support)", "🎨 New custom EmuWorld app icon and branding"] },
-    { version: "0.3.0", date: "2026-03-19", changes: ["✨ Cover Art! Box art auto-downloaded from libretro-thumbnails CDN", "Per-console cover caching in Covers directory", "22 consoles supported for cover art", "Shimmer loading animation on game cards"] },
-    { version: "0.2.9", date: "2026-03-19", changes: ["Renamed 'Library' to 'Roms' in the UI", "Stopped automatic ROM folder creation during emulator installation"] },
-    { version: "0.2.3", date: "2026-03-19", changes: ["Fixed Close button (added window control permissions)", "Switched NES emulator to Nestopia UE", "Updated Xbox (xemu), PS3 (RPCS3), and Switch (Ryujinx) links to stable mirrors"] },
-    { version: "0.2.0", date: "2026-03-19", changes: ["Added Changelogs tab", "Fixed Game Launch issues", "Restored Fullscreen permissions", "Implemented Smart Box Art fallbacks", "Unified Flat View for Catalog and Library"] },
-    { version: "0.1.5", date: "2026-03-18", changes: ["Context-aware Sidebars", "Nested 3-level Hierarchy", "Flattened grids for cleaner UI"] },
-    { version: "0.1.0", date: "2026-03-10", changes: ["Initial Beta Launch", "Support for 20+ retro consoles", "Automatic ROM scanning"] }
+    { version: "1.0.0", date: "2026-04-20", changes: [
+      "🚀 Import RGS automatisé: déplacement, dézip et nettoyage automatiques",
+      "📦 Support Switch complet: .xci/.nsp avec relocation disque instantanée",
+      "🧹 UI simplifiée: focus sur RetroGameSets",
+      "🛠️ Amélioration des triggers de téléchargement en vue dossier",
+    ] },
+    { version: "0.3.6", date: "2026-03-25", changes: [
+      "🎮 Installation manuelle de Ryubing (Ryujinx) depuis un zip local",
+      "Amélioration de la profondeur de découverte des émulateurs",
+      "Corrections de stabilité générales",
+    ] },
+    { version: "0.3.5", date: "2026-03-20", changes: [
+      "🗑️ Fix régression de désinstallation (sensibilité à la casse)",
+      "🖼️ Meilleure correspondance covers Wii/Wii U (fallbacks région)",
+      "🔒 Avertissement 'Accès refusé' pour les émulateurs en cours d'exécution",
+    ] },
+    { version: "0.3.2", date: "2026-03-19", changes: [
+      "🎮 Ajout de Ryubing pour l'émulation Nintendo Switch",
+      "🖼️ Amélioration du matching covers: fallbacks GB/GBC pour console GBA (support mGBA)",
+      "🎨 Nouvelle icône et branding EmuWorld",
+    ] },
+    { version: "0.3.0", date: "2026-03-19", changes: [
+      "✨ Cover Art! Box art auto-téléchargé depuis le CDN libretro-thumbnails",
+      "Cache des covers par console dans le dossier Covers",
+      "22 consoles supportées pour le cover art",
+      "Animation shimmer sur les cartes de jeux",
+    ] },
+    { version: "0.2.9", date: "2026-03-19", changes: [
+      "Renommage 'Library' → 'Roms' dans l'UI",
+      "Arrêt de la création automatique du dossier ROMs à l'installation d'un émulateur",
+    ] },
+    { version: "0.2.3", date: "2026-03-19", changes: [
+      "Fix bouton Fermer (ajout permissions window control)",
+      "Changement émulateur NES vers Nestopia UE",
+      "Mise à jour liens Xbox (xemu), PS3 (RPCS3) et Switch (Ryujinx) vers des miroirs stables",
+    ] },
+    { version: "0.2.0", date: "2026-03-19", changes: [
+      "Ajout onglet Changelogs",
+      "Fix des problèmes de lancement de jeux",
+      "Restauration permissions plein écran",
+      "Fallbacks intelligents pour les covers",
+      "Vue aplatie unifiée pour Catalogue et Bibliothèque",
+    ] },
+    { version: "0.1.5", date: "2026-03-18", changes: [
+      "Sidebars contextuelles",
+      "Hiérarchie imbriquée 3 niveaux",
+      "Grilles aplaties pour une UI plus propre",
+    ] },
+    { version: "0.1.0", date: "2026-03-10", changes: [
+      "🚀 Lancement de la bêta initiale",
+      "Support de 20+ consoles rétro",
+      "Scan automatique des ROMs",
+    ] },
   ]);
 
   // ---- Gamepad / Controller state ----
