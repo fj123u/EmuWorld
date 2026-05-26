@@ -6778,70 +6778,123 @@ export default function App() {
               {page === "wrap" && (() => {
                 const now = new Date();
                 const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                const games = Object.entries(playtime.games)
-                  .map(([key, g]) => ({ key, ...g }))
-                  .filter(g => g.last_played && new Date(g.last_played) >= monthStart);
+                const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+
+                const allGames = Object.entries(playtime.games).map(([key, g]) => ({ key, ...g }));
+                const games = allGames.filter(g => g.last_played && new Date(g.last_played) >= monthStart);
+                const prevGames = allGames.filter(g => g.last_played && new Date(g.last_played) >= prevMonthStart && new Date(g.last_played) <= prevMonthEnd);
+
                 const totalSeconds = games.reduce((acc, g) => acc + g.seconds, 0);
+                const prevTotalSeconds = prevGames.reduce((acc, g) => acc + g.seconds, 0);
                 const totalLaunches = games.reduce((acc, g) => acc + g.launches, 0);
-                const topGame = [...games].sort((a, b) => b.seconds - a.seconds)[0];
+                const topGames = [...games].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
                 const consoleMap: Record<string, number> = {};
                 games.forEach(g => { consoleMap[g.console] = (consoleMap[g.console] || 0) + g.seconds; });
-                const topConsole = Object.entries(consoleMap).sort((a, b) => b[1] - a[1])[0];
+                const topConsoles = Object.entries(consoleMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
                 const uniqueGames = games.filter(g => g.launches > 0).length;
+
+                // Streak: count unique days played this month
+                const daysPlayed = new Set(games.filter(g => g.last_played).map(g => new Date(g.last_played!).toDateString())).size;
+
+                // Longest session estimate
+                const longestSession = games.length > 0 ? Math.max(...games.map(g => g.seconds)) : 0;
+
                 const fmtTime = (s: number) => {
                   if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
                   if (s >= 60) return `${Math.floor(s / 60)} min`;
                   return `${s}s`;
                 };
                 const monthName = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+                const pctChange = prevTotalSeconds > 0 ? Math.round(((totalSeconds - prevTotalSeconds) / prevTotalSeconds) * 100) : null;
 
                 return (
                   <div className="wrap-page">
                     <div className="wrap-page__header">
                       <Gift size={32} />
                       <h2>Ton Wrap — {monthName}</h2>
+                      {pctChange !== null && (
+                        <span className={`wrap-page__trend ${pctChange >= 0 ? "wrap-page__trend--up" : "wrap-page__trend--down"}`}>
+                          {pctChange >= 0 ? "↗" : "↘"} {Math.abs(pctChange)}% vs mois dernier
+                        </span>
+                      )}
                     </div>
                     {totalSeconds === 0 ? (
                       <div className="wrap-page__empty">
                         <p>Pas encore de données ce mois-ci. Joue un peu et reviens !</p>
                       </div>
                     ) : (
-                      <div className="wrap-page__cards">
-                        <div className="wrap-card wrap-card--hero">
-                          <div className="wrap-card__icon">⏱️</div>
-                          <div className="wrap-card__value">{fmtTime(totalSeconds)}</div>
-                          <div className="wrap-card__label">Temps de jeu total</div>
+                      <>
+                        <div className="wrap-page__cards">
+                          <motion.div className="wrap-card wrap-card--hero" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+                            <div className="wrap-card__icon">⏱️</div>
+                            <div className="wrap-card__value">{fmtTime(totalSeconds)}</div>
+                            <div className="wrap-card__label">Temps de jeu total</div>
+                          </motion.div>
+                          <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                            <div className="wrap-card__icon">🎮</div>
+                            <div className="wrap-card__value">{uniqueGames}</div>
+                            <div className="wrap-card__label">Jeux joués</div>
+                          </motion.div>
+                          <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                            <div className="wrap-card__icon">🚀</div>
+                            <div className="wrap-card__value">{totalLaunches}</div>
+                            <div className="wrap-card__label">Lancements</div>
+                          </motion.div>
+                          <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                            <div className="wrap-card__icon">📅</div>
+                            <div className="wrap-card__value">{daysPlayed} jours</div>
+                            <div className="wrap-card__label">Jours actifs ce mois</div>
+                          </motion.div>
+                          <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+                            <div className="wrap-card__icon">⚡</div>
+                            <div className="wrap-card__value">{fmtTime(longestSession)}</div>
+                            <div className="wrap-card__label">Plus longue session</div>
+                          </motion.div>
+                          <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+                            <div className="wrap-card__icon">📊</div>
+                            <div className="wrap-card__value">{fmtTime(Math.round(totalSeconds / Math.max(1, now.getDate())))}</div>
+                            <div className="wrap-card__label">Moyenne par jour</div>
+                          </motion.div>
                         </div>
-                        <div className="wrap-card">
-                          <div className="wrap-card__icon">🎮</div>
-                          <div className="wrap-card__value">{uniqueGames}</div>
-                          <div className="wrap-card__label">Jeux joués</div>
-                        </div>
-                        <div className="wrap-card">
-                          <div className="wrap-card__icon">🚀</div>
-                          <div className="wrap-card__value">{totalLaunches}</div>
-                          <div className="wrap-card__label">Lancements</div>
-                        </div>
-                        {topGame && (
-                          <div className="wrap-card wrap-card--highlight">
-                            <div className="wrap-card__icon">🏆</div>
-                            <div className="wrap-card__value">{topGame.name}</div>
-                            <div className="wrap-card__label">Jeu le + joué — {fmtTime(topGame.seconds)}</div>
-                          </div>
+
+                        {topGames.length > 0 && (
+                          <motion.div className="wrap-page__section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}>
+                            <h3 className="wrap-page__section-title">🏆 Top 5 Jeux</h3>
+                            <div className="wrap-page__top-list">
+                              {topGames.map((g, i) => (
+                                <motion.div key={g.key} className="wrap-top-item" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + i * 0.1 }}>
+                                  <span className="wrap-top-item__rank">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                                  <span className="wrap-top-item__name">{g.name}</span>
+                                  <span className="wrap-top-item__console">{g.console}</span>
+                                  <span className="wrap-top-item__time">{fmtTime(g.seconds)}</span>
+                                  <div className="wrap-top-item__bar">
+                                    <div className="wrap-top-item__bar-fill" style={{ width: `${(g.seconds / topGames[0].seconds) * 100}%` }} />
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </div>
+                          </motion.div>
                         )}
-                        {topConsole && (
-                          <div className="wrap-card">
-                            <div className="wrap-card__icon">🕹️</div>
-                            <div className="wrap-card__value">{topConsole[0]}</div>
-                            <div className="wrap-card__label">Console préférée — {fmtTime(topConsole[1])}</div>
-                          </div>
+
+                        {topConsoles.length > 0 && (
+                          <motion.div className="wrap-page__section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>
+                            <h3 className="wrap-page__section-title">🕹️ Top Consoles</h3>
+                            <div className="wrap-page__top-list">
+                              {topConsoles.map(([name, secs], i) => (
+                                <motion.div key={name} className="wrap-top-item" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.3 + i * 0.1 }}>
+                                  <span className="wrap-top-item__rank">{i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉"}</span>
+                                  <span className="wrap-top-item__name">{name}</span>
+                                  <span className="wrap-top-item__time">{fmtTime(secs)}</span>
+                                  <div className="wrap-top-item__bar">
+                                    <div className="wrap-top-item__bar-fill wrap-top-item__bar-fill--alt" style={{ width: `${(secs / topConsoles[0][1]) * 100}%` }} />
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </div>
+                          </motion.div>
                         )}
-                        <div className="wrap-card">
-                          <div className="wrap-card__icon">📅</div>
-                          <div className="wrap-card__value">{Math.round(totalSeconds / 3600 / Math.max(1, now.getDate()))}h</div>
-                          <div className="wrap-card__label">Moyenne par jour</div>
-                        </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 );
