@@ -1201,6 +1201,8 @@ export default function App() {
   }, []);
 
   const [bigPictureMode, setBigPictureMode] = useState(false);
+  const bigPictureModeRef = useRef(bigPictureMode);
+  bigPictureModeRef.current = bigPictureMode;
   const [bpSelectedIndex, setBpSelectedIndex] = useState(0);
   const [bpConsoleFilter, setBpConsoleFilter] = useState<string | null>(null);
   const [newCollectionName, setNewCollectionName] = useState("");
@@ -1880,14 +1882,25 @@ export default function App() {
       if (e.ctrlKey && e.key === "F12") {
         e.preventDefault();
       }
-      // F11 → toggle fullscreen
+      // F11 → toggle big picture / fullscreen
       if (e.key === "F11") {
         e.preventDefault();
+        if (bigPictureModeRef.current) {
+          setBigPictureMode(false);
+          const win = getCurrentWindow();
+          win.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
+        } else {
+          setBigPictureMode(true);
+          const win = getCurrentWindow();
+          win.setFullscreen(true).then(() => setIsFullscreen(true)).catch(() => {});
+        }
+      }
+      // Escape → exit big picture
+      if (e.key === "Escape" && bigPictureModeRef.current) {
+        e.preventDefault();
+        setBigPictureMode(false);
         const win = getCurrentWindow();
-        win.isFullscreen().then(fs => {
-          win.setFullscreen(!fs);
-          setIsFullscreen(!fs);
-        }).catch(() => {});
+        win.setFullscreen(false).then(() => setIsFullscreen(false)).catch(() => {});
       }
     };
     window.addEventListener("keydown", handler);
@@ -2628,8 +2641,6 @@ export default function App() {
   pageRef.current = page;
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
-  const bigPictureModeRef = useRef(bigPictureMode);
-  bigPictureModeRef.current = bigPictureMode;
   const bpSelectedIndexRef = useRef(bpSelectedIndex);
   bpSelectedIndexRef.current = bpSelectedIndex;
   const bpConsoleFilterRef = useRef(bpConsoleFilter);
@@ -4366,9 +4377,19 @@ export default function App() {
     }
   };
 
-  const exitBigPicture = useCallback(() => {
+  const enterBigPicture = useCallback(async () => {
+    setBigPictureMode(true);
+    if (appWindow) {
+      try { await appWindow.setFullscreen(true); setIsFullscreen(true); } catch (_) {}
+    }
+  }, [appWindow]);
+
+  const exitBigPicture = useCallback(async () => {
     setBigPictureMode(false);
-  }, []);
+    if (appWindow) {
+      try { await appWindow.setFullscreen(false); setIsFullscreen(false); } catch (_) {}
+    }
+  }, [appWindow]);
 
   useEffect(() => {
     if (bigPictureMode) {
@@ -4942,12 +4963,12 @@ export default function App() {
                       <RefreshCw size={14} /> Refresh
                     </button>
                   )}
-                  <button 
-                    className="btn btn--ghost" 
-                    onClick={toggleFullscreen}
-                    title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+                  <button
+                    className="btn btn--ghost"
+                    onClick={enterBigPicture}
+                    title="Mode Big Picture"
                   >
-                    {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                    <Maximize2 size={14} />
                   </button>
                 </div>
               </div>
