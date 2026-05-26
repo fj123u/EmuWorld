@@ -181,6 +181,8 @@ pub struct AppConfig {
     pub roms_directory: String,
     pub emulators_directory: String,
     pub covers_directory: String,
+    #[serde(default)]
+    pub bandwidth_limit_kbps: u64,
 }
 
 impl Default for AppConfig {
@@ -190,6 +192,7 @@ impl Default for AppConfig {
             roms_directory: base.join("ROMs").to_string_lossy().to_string(),
             emulators_directory: base.join("Emulators").to_string_lossy().to_string(),
             covers_directory: base.join("Covers").to_string_lossy().to_string(),
+            bandwidth_limit_kbps: 0,
         }
     }
 }
@@ -2305,6 +2308,9 @@ async fn download_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
+    let bw_limit = config.bandwidth_limit_kbps;
+    let mut throttle_bytes = 0u64;
+    let mut throttle_start = std::time::Instant::now();
 
     use std::io::Write;
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
@@ -2314,6 +2320,22 @@ async fn download_rom(
             e.to_string()
         })?;
         downloaded_bytes += chunk.len() as u64;
+
+        // Bandwidth throttling
+        if bw_limit > 0 {
+            throttle_bytes += chunk.len() as u64;
+            let limit_bps = bw_limit * 1024;
+            let elapsed = throttle_start.elapsed().as_secs_f64();
+            let expected_time = throttle_bytes as f64 / limit_bps as f64;
+            if expected_time > elapsed {
+                let sleep_ms = ((expected_time - elapsed) * 1000.0) as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            }
+            if throttle_start.elapsed().as_secs() >= 2 {
+                throttle_bytes = 0;
+                throttle_start = std::time::Instant::now();
+            }
+        }
 
         if last_emit.elapsed().as_millis() >= 400 {
             let progress = (downloaded_bytes as f64 / total_size as f64 * 100.0) as u32;
@@ -2877,12 +2899,30 @@ async fn download_myrient_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
+    let bw_limit = config.bandwidth_limit_kbps;
+    let mut throttle_bytes = 0u64;
+    let mut throttle_start = std::time::Instant::now();
 
     let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
     use std::io::Write;
     while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded_bytes += chunk.len() as u64;
+
+        if bw_limit > 0 {
+            throttle_bytes += chunk.len() as u64;
+            let limit_bps = bw_limit * 1024;
+            let elapsed = throttle_start.elapsed().as_secs_f64();
+            let expected_time = throttle_bytes as f64 / limit_bps as f64;
+            if expected_time > elapsed {
+                let sleep_ms = ((expected_time - elapsed) * 1000.0) as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            }
+            if throttle_start.elapsed().as_secs() >= 2 {
+                throttle_bytes = 0;
+                throttle_start = std::time::Instant::now();
+            }
+        }
 
         if last_emit.elapsed().as_millis() >= 400 {
             let progress = if total_size > 0 {
@@ -3273,12 +3313,30 @@ async fn download_vimm_rom(
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
+    let bw_limit = config.bandwidth_limit_kbps;
+    let mut throttle_bytes = 0u64;
+    let mut throttle_start = std::time::Instant::now();
 
     use std::io::Write;
     let mut stream = response;
     while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded_bytes += chunk.len() as u64;
+
+        if bw_limit > 0 {
+            throttle_bytes += chunk.len() as u64;
+            let limit_bps = bw_limit * 1024;
+            let elapsed = throttle_start.elapsed().as_secs_f64();
+            let expected_time = throttle_bytes as f64 / limit_bps as f64;
+            if expected_time > elapsed {
+                let sleep_ms = ((expected_time - elapsed) * 1000.0) as u64;
+                tokio::time::sleep(std::time::Duration::from_millis(sleep_ms)).await;
+            }
+            if throttle_start.elapsed().as_secs() >= 2 {
+                throttle_bytes = 0;
+                throttle_start = std::time::Instant::now();
+            }
+        }
 
         if last_emit.elapsed().as_millis() >= 400 {
             let effective_total = if total_size > 0 { total_size } else { downloaded_bytes + 10_000_000 };

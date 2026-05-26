@@ -128,6 +128,7 @@ interface AppConfig {
   roms_directory: string;
   emulators_directory: string;
   covers_directory: string;
+  bandwidth_limit_kbps: number;
 }
 
 interface DownloadStats {
@@ -1155,6 +1156,7 @@ export default function App() {
     roms_directory: "",
     emulators_directory: "",
     covers_directory: "",
+    bandwidth_limit_kbps: 0,
   });
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [onboardingStep, setOnboardingStep] = useState(0);
@@ -5904,6 +5906,34 @@ export default function App() {
                       <label className="settings__field-label">{t("settings.emulatorsFolder")}</label>
                       <input className="settings__field-input" value={config.emulators_directory} readOnly />
                       <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => handleBrowseFolder("emulators_directory")}>{t("settings.browse")}</button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Download size={16} /> Limite de bande passante</div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">Vitesse max de téléchargement</label>
+                        <p className="settings__field-desc">0 = illimité. Limite le débit lors du téléchargement de ROMs dans le Store.</p>
+                      </div>
+                      <select
+                        className="settings__field-select gamepad-nav-item"
+                        value={config.bandwidth_limit_kbps}
+                        onChange={async (e) => {
+                          const val = Number(e.target.value);
+                          const newCfg = { ...config, bandwidth_limit_kbps: val };
+                          setConfig(newCfg);
+                          await invoke("save_config", { config: newCfg });
+                        }}
+                      >
+                        <option value={0}>Illimité</option>
+                        <option value={256}>256 KB/s</option>
+                        <option value={512}>512 KB/s</option>
+                        <option value={1024}>1 MB/s</option>
+                        <option value={2048}>2 MB/s</option>
+                        <option value={5120}>5 MB/s</option>
+                        <option value={10240}>10 MB/s</option>
+                      </select>
                     </div>
                   </div>
 
