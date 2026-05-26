@@ -686,7 +686,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
       {/* More options (three dots) */}
       {onContextMenu && (
         <button
-          className="game-card__more"
+          className="game-card__more gamepad-nav-item"
           onClick={(e) => { e.stopPropagation(); onContextMenu(rom, e.clientX, e.clientY); }}
           title="Plus d'options"
         >
@@ -6756,7 +6756,7 @@ export default function App() {
                           return pMin >= 60 ? `${Math.floor(pMin / 60)}h${String(pMin % 60).padStart(2, "0")}/${Math.floor(gMin / 60)}h${String(gMin % 60).padStart(2, "0")}` : `${pMin}/${gMin} min`;
                         };
                         return (
-                          <div key={ch.challenge_id} className="challenge-card">
+                          <div key={ch.challenge_id} className="challenge-card gamepad-nav-item" tabIndex={0}>
                             <div className="challenge-card__badge">{ch.badge_icon}</div>
                             <div className="challenge-card__info">
                               <h3 className="challenge-card__title">{ch.title}</h3>
@@ -7359,6 +7359,24 @@ export default function App() {
                   ))}
                   <button
                     className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); handleOpenNotes(rom); }}
+                  >
+                    <StickyNote size={14} /> Notes
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn"
+                    onClick={async () => { setGamepadContextMenu(null); const entries = await invoke<{ path: string; data_url: string }[]>("get_screenshots", { gameName: rom.name, console: rom.console }); setScreenshotGallery({ gameName: rom.name, console: rom.console, entries }); }}
+                  >
+                    <Camera size={14} /> Screenshots
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); handleOpenGuide(rom); }}
+                  >
+                    <BookOpen size={14} /> Guide
+                  </button>
+                  <button
+                    className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleOpenReviews(rom); }}
                   >
                     <MessageCircle size={14} /> Avis communauté
@@ -7831,11 +7849,11 @@ export default function App() {
                 <div className="reviews-modal__form">
                   <div className="reviews-modal__stars">
                     {[1, 2, 3, 4, 5].map(s => (
-                      <button key={s} className={`reviews-modal__star ${reviewDraft.rating >= s ? "reviews-modal__star--filled" : ""}`} onClick={() => setReviewDraft(d => ({ ...d, rating: d.rating === s ? 0 : s }))}>★</button>
+                      <button key={s} className={`reviews-modal__star gamepad-nav-item ${reviewDraft.rating >= s ? "reviews-modal__star--filled" : ""}`} onClick={() => setReviewDraft(d => ({ ...d, rating: d.rating === s ? 0 : s }))}>★</button>
                     ))}
                   </div>
                   <textarea
-                    className="reviews-modal__textarea"
+                    className="reviews-modal__textarea gamepad-nav-item"
                     value={reviewDraft.comment}
                     onChange={(e) => setReviewDraft(d => ({ ...d, comment: e.target.value }))}
                     placeholder="Ton avis sur ce jeu (optionnel)..."
@@ -7898,7 +7916,7 @@ export default function App() {
                 {(["presentation", "tips", "achievements", "secrets"] as const).map(tab => (
                   <button
                     key={tab}
-                    className={`guide-modal__tab ${guideModal.tab === tab ? "guide-modal__tab--active" : ""}`}
+                    className={`guide-modal__tab gamepad-nav-item ${guideModal.tab === tab ? "guide-modal__tab--active" : ""}`}
                     onClick={() => setGuideModal({ ...guideModal, tab, writing: false })}
                   >
                     {tab === "presentation" ? "📖 Présentation" : tab === "tips" ? "💡 Conseils" : tab === "achievements" ? "🏆 Succès" : "🔑 Secrets"}
@@ -7952,7 +7970,7 @@ export default function App() {
                                 <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
                                 <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString("fr-FR")}</span>
                                 <button
-                                  className={`guide-modal__vote-btn ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
+                                  className={`guide-modal__vote-btn gamepad-nav-item ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
                                   onClick={() => handleVoteGuide(g.id)}
                                   title="Utile"
                                 >
@@ -7979,14 +7997,14 @@ export default function App() {
                 {guideModal.writing && user && (
                   <div className="guide-modal__write">
                     <input
-                      className="guide-modal__write-title"
+                      className="guide-modal__write-title gamepad-nav-item"
                       value={guideDraft.title}
                       onChange={(e) => setGuideDraft(d => ({ ...d, title: e.target.value }))}
                       placeholder="Titre du guide..."
                       autoFocus
                     />
                     <textarea
-                      className="guide-modal__write-content"
+                      className="guide-modal__write-content gamepad-nav-item"
                       value={guideDraft.content}
                       onChange={(e) => setGuideDraft(d => ({ ...d, content: e.target.value }))}
                       placeholder="Écris ton guide ici... (astuces, stratégies, walkthroughs...)"
