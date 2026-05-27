@@ -1431,7 +1431,7 @@ fn clean_game_name(name: &str) -> String {
     let mut cleaned = name.to_string();
     
     // Remove extensions first
-    let extensions = vec![".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64"];
+    let extensions = vec![".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64", ".3ds", ".cci", ".cxi", ".cia", ".3dsx", ".app"];
     for ext in extensions {
         if cleaned.to_lowercase().ends_with(ext) {
             cleaned = cleaned[..cleaned.len()-ext.len()].to_string();
@@ -1446,11 +1446,16 @@ fn clean_game_name(name: &str) -> String {
     let re_tags = Regex::new(r"\[.*?\]|\(.*?\)").unwrap();
     cleaned = re_tags.replace_all(&cleaned, "").to_string();
 
+    // Strip catalog number prefix (e.g. "3DS0762 - ", "NDS1234 - ", "0123 - ")
+    let re_catalog = Regex::new(r"^[A-Za-z0-9]{2,6}\d{2,5}\s*-\s*").unwrap();
+    cleaned = re_catalog.replace(&cleaned, "").to_string();
+
     // Strip common scene keywords
     let scene_keywords = vec![
         "PROPER", "REPACK", "NSW", "MULTi", "READNFO", "INTERNAL", "D0WNLOAD",
         "BigBlueBox", "Kaze-Nico", "kaze-nico", "v1.1", "v1.0", "Update", "DLC", "Patch",
-        "Collection", "v0", "v65536", "nsw2u", "NKA", "NC", "NT"
+        "Collection", "v0", "v65536", "nsw2u", "NKA", "NC", "NT",
+        "decrypted", "encrypted", "trimmed", "undub"
     ];
     for kw in scene_keywords {
         let re = Regex::new(&format!(r"(?i)\b{}\b", kw)).unwrap();
@@ -1731,9 +1736,9 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
         ("pokemon donjon mystere", vec!["Pokemon Super Mystery Dungeon (Europe) (En,Fr,De,Es,It)", "Pokemon Super Mystery Dungeon"]),
         ("pokemon super donjon mystere", vec!["Pokemon Super Mystery Dungeon (Europe) (En,Fr,De,Es,It)", "Pokemon Super Mystery Dungeon"]),
         ("yo kai watch 1", vec!["Yo-Kai Watch (Europe) (En,Fr,De,Es,It)", "Yo-Kai Watch", "Yo-kai Watch"]),
-        ("yo kai watch 2 bouffis", vec!["Yo-Kai Watch 2 - Fleshy Souls (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Fleshy Souls"]),
-        ("yo kai watch 2 espris", vec!["Yo-Kai Watch 2 - Bony Spirits (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Bony Spirits"]),
-        ("yo kai watch 2 spectres", vec!["Yo-Kai Watch 2 - Psychic Specters (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Psychic Specters"]),
+        ("yo kai watch 2 bouffis", vec!["Yo-Kai Watch 2 - Fleshy Souls (Europe) (En,Fr,De,Es,It,Nl)", "Yo-Kai Watch 2 - Fleshy Souls"]),
+        ("yo kai watch 2 espris", vec!["Yo-Kai Watch 2 - Bony Spirits (Europe) (En,Fr,De,Es,It,Nl)", "Yo-Kai Watch 2 - Bony Spirits"]),
+        ("yo kai watch 2 spectres", vec!["Yo-Kai Watch 2 - Psychic Specters (Europe) (En,Fr,De,Es,It,Nl,Ru)", "Yo-Kai Watch 2 - Psychic Specters"]),
         ("zelda link beetween", vec!["Legend of Zelda, The - A Link Between Worlds (USA) (En,Fr,Es)", "The Legend of Zelda - A Link Between Worlds"]),
         ("zelda link between", vec!["Legend of Zelda, The - A Link Between Worlds (USA) (En,Fr,Es)", "The Legend of Zelda - A Link Between Worlds"]),
         ("zelda ocarina", vec!["Legend of Zelda, The - Ocarina of Time 3D (USA) (En,Fr,Es)", "The Legend of Zelda - Ocarina of Time 3D"]),
@@ -1742,7 +1747,7 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
         ("pac man et l'aventure des fantomes", vec!["Pac-Man and the Ghostly Adventures (Europe) (En,Fr,De,Es,It)", "Pac-Man and the Ghostly Adventures"]),
         ("pac man et l'aventure de", vec!["Pac-Man and the Ghostly Adventures (Europe) (En,Fr,De,Es,It)", "Pac-Man and the Ghostly Adventures"]),
         ("sonic", vec!["Sonic Generations (Europe) (En,Fr,De,Es,It)", "Sonic Lost World (Europe) (En,Fr,De,Es,It)"]),
-        ("mario kart 7", vec!["Mario Kart 7 (Europe) (En,Fr,De,Es,It,Nl,Pt,Ru)", "Mario Kart 7"]),
+        ("mario kart 7", vec!["Mario Kart 7 (Europe) (En,Fr,De,Es,It,Nl,Pt,Ru)", "Mario Kart 7 (USA) (En,Fr,Es)", "Mario Kart 7"]),
     ];
     for (fr_name, en_names) in &fr_game_map {
         if lower_pure.contains(fr_name) || lower_pure == *fr_name {
