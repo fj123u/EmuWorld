@@ -599,6 +599,12 @@ async fn launch_emulator(
             "pcsx2" => { cmd.arg("-fullscreen"); },
             "mgba" => { cmd.arg("-f"); },
             "rpcs3" => { cmd.arg("--fullscreen"); },
+            "ryubing" => { cmd.arg("--fullscreen"); },
+            "azahar" => { cmd.arg("--fullscreen"); },
+            "melonds" => { cmd.arg("--fullscreen"); },
+            "project64" => { cmd.arg("--fullscreen"); },
+            "xemu" => { cmd.arg("-full-screen"); },
+            "flycast" => { cmd.arg("--config"); cmd.arg("window:fullscreen=yes"); },
             _ => {}
         }
     }
