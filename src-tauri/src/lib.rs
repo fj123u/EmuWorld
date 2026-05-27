@@ -598,7 +598,7 @@ async fn launch_emulator(
             "duckstation" => { cmd.arg("-fullscreen"); },
             "pcsx2" => { cmd.arg("-fullscreen"); },
             "mgba" => { cmd.arg("-f"); },
-            "rpcs3" => { cmd.arg("--fullscreen"); },
+            "rpcs3" => { cmd.arg("--no-gui"); cmd.arg("--fullscreen"); },
             "ryubing" => { cmd.arg("--fullscreen"); },
             "azahar" => { cmd.arg("--fullscreen"); },
             "melonds" => { cmd.arg("--fullscreen"); },
