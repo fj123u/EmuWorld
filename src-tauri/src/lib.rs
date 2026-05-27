@@ -440,10 +440,15 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
     for sz_path in &candidates {
         if sz_path.exists() {
             println!("[Extract] Using 7z: {}", sz_path.display());
-            let output = Command::new(sz_path)
-                .args(&["x", "-y", &format!("-o{}", install_dir.display())])
-                .arg(archive_path)
-                .output()
+            let mut sz_cmd = Command::new(sz_path);
+            sz_cmd.args(&["x", "-y", &format!("-o{}", install_dir.display())])
+                .arg(archive_path);
+            #[cfg(target_os = "windows")]
+            {
+                use std::os::windows::process::CommandExt;
+                sz_cmd.creation_flags(0x08000000);
+            }
+            let output = sz_cmd.output()
                 .map_err(|e| format!("7z exec failed: {}", e))?;
             if output.status.success() {
                 return Ok(());
@@ -703,11 +708,40 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
     let mut roms = vec![];
     let dir = PathBuf::from(&directory);
     if !dir.exists() { return roms; }
+
+    // PS3 folder-based game detection: look for directories containing PS3_DISC.SFB
+    let ps3_dir = dir.join("PlayStation 3");
+    if ps3_dir.exists() {
+        if let Ok(entries) = fs::read_dir(&ps3_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() && path.join("PS3_DISC.SFB").exists() {
+                    let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                    let eboot = path.join("PS3_GAME").join("USRDIR").join("EBOOT.BIN");
+                    let launch_path = if eboot.exists() { eboot } else { path.clone() };
+                    roms.push(RomFile {
+                        name,
+                        path: launch_path.to_string_lossy().to_string(),
+                        console: "PlayStation 3".to_string(),
+                        emulator_id: "rpcs3".to_string(),
+                        extension: "bin".to_string(),
+                    });
+                }
+            }
+        }
+    }
+
     for entry in walkdir::WalkDir::new(&dir).max_depth(5) {
         if let Ok(e) = entry {
             if e.file_type().is_file() {
                 if let Some(ext) = e.path().extension() {
                     let ext_str = ext.to_string_lossy().to_lowercase();
+
+                    // Skip EBOOT.BIN files inside PS3 game folders (handled above)
+                    let path_str = e.path().to_string_lossy().to_lowercase();
+                    if ext_str == "bin" && (path_str.contains("ps3_game") || path_str.contains("usrdir")) {
+                        continue;
+                    }
 
                     // Try to infer console from parent folder name (matches target_console from Vimm or user-created folders)
                     let folder_console = e.path().strip_prefix(&dir).ok()
@@ -3999,9 +4033,14 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
         path_str.replace('\\', "/")
     );
 
-    let output = Cmd::new("powershell")
-        .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script])
-        .output()
+    let mut ps_cmd = Cmd::new("powershell");
+    ps_cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        ps_cmd.creation_flags(0x08000000);
+    }
+    let output = ps_cmd.output()
         .map_err(|e| format!("Failed to run screenshot: {}", e))?;
 
     if !output.status.success() {

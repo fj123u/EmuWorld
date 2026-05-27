@@ -201,7 +201,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
             core_name: Some("beetle_vb_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![
+                SetupFile {
+                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/beetle_vb_libretro.dll.zip".to_string(),
+                    dest: "cores".to_string(),
+                    extract: true,
+                },
+            ],
         },
         // ═══════════════════════════════════════════════════════════
         //  SONY
