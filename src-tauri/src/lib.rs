@@ -1718,6 +1718,41 @@ fn generate_search_candidates(name: &str, console: &str) -> Vec<String> {
         candidates.push("Tomodachi Life".to_string());
     }
 
+    // French-to-English full game name mapping (especially 3DS titles)
+    let fr_game_map: Vec<(&str, Vec<&str>)> = vec![
+        ("pokemon soleil", vec!["Pokemon Sun (Europe) (En,Ja,Fr,De,Es,It,Zh,Ko)", "Pokemon Sun"]),
+        ("pokemon lune", vec!["Pokemon Moon (Europe) (En,Ja,Fr,De,Es,It,Zh,Ko)", "Pokemon Moon"]),
+        ("pokemon ultra soleil", vec!["Pokemon Ultra Sun (Europe) (En,Ja,Fr,De,Es,It,Zh,Ko)", "Pokemon Ultra Sun"]),
+        ("pokemon ultra lune", vec!["Pokemon Ultra Moon (Europe) (En,Ja,Fr,De,Es,It,Zh,Ko)", "Pokemon Ultra Moon"]),
+        ("pokemon x", vec!["Pokemon X (Europe) (En,Ja,Fr,De,Es,It,Ko)", "Pokemon X"]),
+        ("pokemon y", vec!["Pokemon Y (Europe) (En,Ja,Fr,De,Es,It,Ko)", "Pokemon Y"]),
+        ("pokemon saphir alpha", vec!["Pokemon Alpha Sapphire (Europe) (En,Ja,Fr,De,Es,It,Ko)", "Pokemon Alpha Sapphire"]),
+        ("pokemon rubis omega", vec!["Pokemon Omega Ruby (Europe) (En,Ja,Fr,De,Es,It,Ko)", "Pokemon Omega Ruby"]),
+        ("pokemon donjon mystere", vec!["Pokemon Super Mystery Dungeon (Europe) (En,Fr,De,Es,It)", "Pokemon Super Mystery Dungeon"]),
+        ("pokemon super donjon mystere", vec!["Pokemon Super Mystery Dungeon (Europe) (En,Fr,De,Es,It)", "Pokemon Super Mystery Dungeon"]),
+        ("yo kai watch 1", vec!["Yo-Kai Watch (Europe) (En,Fr,De,Es,It)", "Yo-Kai Watch", "Yo-kai Watch"]),
+        ("yo kai watch 2 bouffis", vec!["Yo-Kai Watch 2 - Fleshy Souls (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Fleshy Souls"]),
+        ("yo kai watch 2 espris", vec!["Yo-Kai Watch 2 - Bony Spirits (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Bony Spirits"]),
+        ("yo kai watch 2 spectres", vec!["Yo-Kai Watch 2 - Psychic Specters (Europe) (En,Fr,De,Es,It)", "Yo-kai Watch 2 - Psychic Specters"]),
+        ("zelda link beetween", vec!["Legend of Zelda, The - A Link Between Worlds (USA) (En,Fr,Es)", "The Legend of Zelda - A Link Between Worlds"]),
+        ("zelda link between", vec!["Legend of Zelda, The - A Link Between Worlds (USA) (En,Fr,Es)", "The Legend of Zelda - A Link Between Worlds"]),
+        ("zelda ocarina", vec!["Legend of Zelda, The - Ocarina of Time 3D (USA) (En,Fr,Es)", "The Legend of Zelda - Ocarina of Time 3D"]),
+        ("zelda majora", vec!["Legend of Zelda, The - Majora's Mask 3D (USA) (En,Fr,Es)", "The Legend of Zelda - Majora's Mask 3D"]),
+        ("pac man party 3d", vec!["Pac-Man Party 3D (Europe) (En,Fr,De,Es,It)", "Pac-Man Party 3D"]),
+        ("pac man et l'aventure des fantomes", vec!["Pac-Man and the Ghostly Adventures (Europe) (En,Fr,De,Es,It)", "Pac-Man and the Ghostly Adventures"]),
+        ("pac man et l'aventure de", vec!["Pac-Man and the Ghostly Adventures (Europe) (En,Fr,De,Es,It)", "Pac-Man and the Ghostly Adventures"]),
+        ("sonic", vec!["Sonic Generations (Europe) (En,Fr,De,Es,It)", "Sonic Lost World (Europe) (En,Fr,De,Es,It)"]),
+        ("mario kart 7", vec!["Mario Kart 7 (Europe) (En,Fr,De,Es,It,Nl,Pt,Ru)", "Mario Kart 7"]),
+    ];
+    for (fr_name, en_names) in &fr_game_map {
+        if lower_pure.contains(fr_name) || lower_pure == *fr_name {
+            for en in en_names {
+                candidates.insert(0, en.to_string());
+            }
+            break;
+        }
+    }
+
     // Split composite titles on " & " or " and " (e.g. "Wii Sports & Wii Sports Resort")
     let split_pattern = regex::Regex::new(r"(?i) & | and ").unwrap();
     for chunk in split_pattern.split(&pure) {
