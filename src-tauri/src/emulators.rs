@@ -200,10 +200,10 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Nintendo".to_string(),
-            core_name: Some("beetle_vb_libretro.dll".to_string()),
+            core_name: Some("mednafen_vb_libretro.dll".to_string()),
             setup_files: vec![
                 SetupFile {
-                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/beetle_vb_libretro.dll.zip".to_string(),
+                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_vb_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
                 },
