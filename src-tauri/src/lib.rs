@@ -610,7 +610,8 @@ async fn launch_emulator(
     // Force borderless windowed fullscreen for RetroArch (no --fullscreen CLI flag,
     // as that triggers exclusive fullscreen which minimizes on focus loss)
     if effective_id == "retroarch" || effective_id.starts_with("retroarch-") {
-        let cfg_path = install_dir.join("retroarch.cfg");
+        let ra_dir = exe_path.parent().unwrap_or(&install_dir);
+        let cfg_path = ra_dir.join("retroarch.cfg");
         if cfg_path.exists() {
             let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
             let settings = [
@@ -784,8 +785,10 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                         .and_then(|rel| rel.components().next())
                         .and_then(|c| {
                             let folder = c.as_os_str().to_string_lossy().to_string();
+                            let normalized = normalize_console_folder(&folder);
                             catalog.iter().find(|emu| {
-                                emu.console.eq_ignore_ascii_case(&folder) && emu.supported_extensions.contains(&ext_str)
+                                (emu.console.eq_ignore_ascii_case(&folder) || emu.console.eq_ignore_ascii_case(&normalized))
+                                && emu.supported_extensions.contains(&ext_str)
                             }).map(|emu| (emu.console.clone(), emu.id.clone()))
                         });
 
@@ -795,8 +798,9 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                             .and_then(|rel| rel.components().next())
                             .and_then(|c| {
                                 let folder = c.as_os_str().to_string_lossy().to_string();
+                                let normalized = normalize_console_folder(&folder);
                                 catalog.iter().find(|emu| {
-                                    emu.console.eq_ignore_ascii_case(&folder)
+                                    emu.console.eq_ignore_ascii_case(&folder) || emu.console.eq_ignore_ascii_case(&normalized)
                                 }).map(|emu| (emu.console.clone(), emu.id.clone()))
                             })
                     } else { None };
@@ -825,6 +829,31 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
     }
     push_log("INFO", &format!("Scan ROMs terminé: {} jeux trouvés dans {}", roms.len(), directory));
     roms
+}
+
+fn normalize_console_folder(folder: &str) -> String {
+    match folder.to_lowercase().as_str() {
+        "psp" | "playstation portable" => "PlayStation Portable".to_string(),
+        "ps1" | "psx" | "playstation" | "playstation 1" => "PlayStation 1".to_string(),
+        "ps2" | "playstation 2" => "PlayStation 2".to_string(),
+        "ps3" | "playstation 3" => "PlayStation 3".to_string(),
+        "n64" | "nintendo 64" => "Nintendo 64".to_string(),
+        "nds" | "ds" | "nintendo ds" => "Nintendo DS".to_string(),
+        "3ds" | "nintendo 3ds" => "Nintendo 3DS".to_string(),
+        "gc" | "gamecube" | "ngc" => "GameCube / Wii".to_string(),
+        "wii" => "GameCube / Wii".to_string(),
+        "wiiu" | "wii u" => "Wii U".to_string(),
+        "nes" | "famicom" => "NES".to_string(),
+        "snes" | "super nintendo" | "super famicom" => "SNES".to_string(),
+        "gba" | "game boy advance" => "Game Boy Advance".to_string(),
+        "gb" | "game boy" => "Game Boy".to_string(),
+        "gbc" | "game boy color" => "Game Boy Color".to_string(),
+        "switch" | "nintendo switch" => "Nintendo Switch".to_string(),
+        "md" | "megadrive" | "mega drive" | "genesis" => "Mega Drive".to_string(),
+        "dc" | "dreamcast" => "Dreamcast".to_string(),
+        "vb" | "virtual boy" => "Virtual Boy".to_string(),
+        _ => folder.to_string(),
+    }
 }
 
 /// Detect if a ROM file is a game update or DLC (should be hidden from the library)
