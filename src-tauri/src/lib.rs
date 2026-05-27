@@ -354,9 +354,14 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
             "progress": 85
         }));
 
+        // Resolve setup file paths relative to the exe's parent dir (handles nested archive folders)
+        let exe_base_dir = find_executable(&install_dir, &emu.executable_name)
+            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_else(|| install_dir.clone());
+
         for sf in &emu.setup_files {
             if sf.url.starts_with("PLACEHOLDER") { continue; }
-            let dest_path = install_dir.join(&sf.dest);
+            let dest_path = exe_base_dir.join(&sf.dest);
             if let Some(parent) = dest_path.parent() {
                 fs::create_dir_all(parent).ok();
             }
@@ -388,6 +393,35 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
                     }
                 }
                 Err(e) => println!("[Setup] Download failed for {}: {}", sf.dest, e),
+            }
+        }
+
+        // RPCS3: auto-install firmware after download
+        if emu.id == "rpcs3" {
+            let fw_path = exe_base_dir.join("PS3UPDAT.PUP");
+            if fw_path.exists() {
+                if let Some(rpcs3_exe) = find_executable(&install_dir, "rpcs3.exe") {
+                    println!("[Setup] Installing PS3 firmware via rpcs3 --installfw...");
+                    let mut fw_cmd = Command::new(&rpcs3_exe);
+                    fw_cmd.arg("--installfw").arg(&fw_path);
+                    #[cfg(target_os = "windows")]
+                    {
+                        use std::os::windows::process::CommandExt;
+                        fw_cmd.creation_flags(0x08000000);
+                    }
+                    match fw_cmd.output() {
+                        Ok(out) => {
+                            if out.status.success() {
+                                println!("[Setup] PS3 firmware installed successfully");
+                                fs::remove_file(&fw_path).ok();
+                            } else {
+                                let stderr = String::from_utf8_lossy(&out.stderr);
+                                println!("[Setup] Firmware install failed: {}", stderr);
+                            }
+                        }
+                        Err(e) => println!("[Setup] Failed to run rpcs3 --installfw: {}", e),
+                    }
+                }
             }
         }
     }
@@ -553,12 +587,14 @@ async fn launch_emulator(
             }
         } else if effective_id.starts_with("retroarch") {
             if let Some(core) = &emu.core_name {
-                if let Some(core_path) = find_executable(&install_dir, core) {
+                let exe_dir = exe_path.parent().unwrap_or(&install_dir).to_path_buf();
+                let core_search_path = if exe_dir.join("cores").exists() { exe_dir.clone() } else { install_dir.clone() };
+                if let Some(core_path) = find_executable(&core_search_path, core) {
                     println!("[Launch] Detected RetroArch core: {:?}", core_path);
                     cmd.arg("-L");
                     cmd.arg(core_path);
                 } else {
-                    println!("[Launch] WARNING: Core '{}' not found in {}", core, install_dir.display());
+                    println!("[Launch] WARNING: Core '{}' not found in {}", core, core_search_path.display());
                 }
             }
         }
@@ -573,7 +609,7 @@ async fn launch_emulator(
 
     // Force borderless windowed fullscreen for RetroArch (no --fullscreen CLI flag,
     // as that triggers exclusive fullscreen which minimizes on focus loss)
-    if effective_id == "retroarch" {
+    if effective_id == "retroarch" || effective_id.starts_with("retroarch-") {
         let cfg_path = install_dir.join("retroarch.cfg");
         if cfg_path.exists() {
             let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
