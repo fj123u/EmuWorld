@@ -798,7 +798,15 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                         }
                     }
 
-                    // Skip .md extension in non-Mega Drive context (markdown files)
+                    // Delete junk files found in ROM folders
+                    let file_name_lower = e.path().file_name()
+                        .map(|f| f.to_string_lossy().to_lowercase()).unwrap_or_default();
+                    if file_name_lower == "vimm's lair.txt" || file_name_lower == "vimm.txt" {
+                        let _ = fs::remove_file(e.path());
+                        continue;
+                    }
+
+                    // Skip/delete .md files (markdown) — NOT Mega Drive ROMs
                     if ext_str == "md" {
                         let in_megadrive_folder = e.path().strip_prefix(&dir).ok()
                             .and_then(|rel| rel.components().next())
@@ -807,6 +815,8 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                                 f.contains("mega") || f.contains("genesis") || f == "md"
                             }).unwrap_or(false);
                         if !in_megadrive_folder {
+                            // It's a markdown file, delete it
+                            let _ = fs::remove_file(e.path());
                             continue;
                         }
                     }
