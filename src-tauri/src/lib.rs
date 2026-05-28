@@ -782,6 +782,35 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                         continue;
                     }
 
+                    // Skip .bin/.raw track files when a .cue or .gdi exists in the same folder
+                    // (CD-based games: Dreamcast, Saturn, Sega CD, PS1)
+                    if ext_str == "bin" || ext_str == "raw" {
+                        if let Some(parent) = e.path().parent() {
+                            let has_cue_or_gdi = parent.read_dir().map(|rd| {
+                                rd.flatten().any(|f| {
+                                    let fe = f.path().extension().map(|x| x.to_string_lossy().to_lowercase()).unwrap_or_default();
+                                    fe == "cue" || fe == "gdi"
+                                })
+                            }).unwrap_or(false);
+                            if has_cue_or_gdi {
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Skip .md extension in non-Mega Drive context (markdown files)
+                    if ext_str == "md" {
+                        let in_megadrive_folder = e.path().strip_prefix(&dir).ok()
+                            .and_then(|rel| rel.components().next())
+                            .map(|c| {
+                                let f = c.as_os_str().to_string_lossy().to_lowercase();
+                                f.contains("mega") || f.contains("genesis") || f == "md"
+                            }).unwrap_or(false);
+                        if !in_megadrive_folder {
+                            continue;
+                        }
+                    }
+
                     // Try to infer console from parent folder name (matches target_console from Vimm or user-created folders)
                     let folder_console = e.path().strip_prefix(&dir).ok()
                         .and_then(|rel| rel.components().next())
@@ -854,6 +883,11 @@ fn normalize_console_folder(folder: &str) -> String {
         "md" | "megadrive" | "mega drive" | "genesis" => "Mega Drive".to_string(),
         "dc" | "dreamcast" => "Dreamcast".to_string(),
         "vb" | "virtual boy" => "Virtual Boy".to_string(),
+        "sega cd" | "mega cd" | "segacd" | "megacd" => "Sega CD".to_string(),
+        "32x" | "sega 32x" => "Sega 32X".to_string(),
+        "saturn" | "sega saturn" => "Saturn".to_string(),
+        "game gear" | "gg" | "gamegear" => "Game Gear".to_string(),
+        "sms" | "master system" | "sega master system" => "Master System".to_string(),
         _ => folder.to_string(),
     }
 }
