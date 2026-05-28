@@ -1198,6 +1198,13 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         "Mega Drive" | "Genesis" => vec!["Sega - Mega Drive - Genesis"],
         "Dreamcast" => vec!["Sega - Dreamcast"],
         "Master System" => vec!["Sega - Master System - Mark III"],
+        "Game Gear" => vec!["Sega - Game Gear"],
+        "Saturn" => vec!["Sega - Saturn"],
+        "Sega CD" => vec!["Sega - Mega-CD - Sega CD"],
+        "Sega 32X" => vec!["Sega - 32X"],
+        "Xbox" => vec!["Microsoft - Xbox"],
+        "Xbox 360" => vec!["Microsoft - Xbox 360"],
+        "PlayStation 3" | "PS3" => vec!["Sony - PlayStation 3"],
         _ => vec![],
     };
 
