@@ -1661,7 +1661,7 @@ fn clean_game_name(name: &str) -> String {
     let mut cleaned = name.to_string();
     
     // Remove extensions first
-    let extensions = vec![".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64", ".3ds", ".cci", ".cxi", ".cia", ".3dsx", ".app"];
+    let extensions = vec![".xiso.iso", ".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64", ".3ds", ".cci", ".cxi", ".cia", ".3dsx", ".app", ".xiso", ".xbe", ".xex"];
     for ext in extensions {
         if cleaned.to_lowercase().ends_with(ext) {
             cleaned = cleaned[..cleaned.len()-ext.len()].to_string();
