@@ -469,7 +469,23 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "zip".to_string(),
             category: "Microsoft".to_string(),
             core_name: None,
-            setup_files: vec![],
+            setup_files: vec![
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/mcpx_1.0.bin".to_string(),
+                    dest: "mcpx_1.0.bin".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/Complex_4627v1.03.bin".to_string(),
+                    dest: "Complex_4627v1.03.bin".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/xbox_hdd.qcow2".to_string(),
+                    dest: "xbox_hdd.qcow2".to_string(),
+                    extract: false,
+                },
+            ],
         },
 
         // ═══════════════════════════════════════════════════════════

@@ -651,6 +651,32 @@ async fn launch_emulator(
         }
     }
 
+    // xemu: copy BIOS files to %APPDATA%/xemu/xemu/ and configure xemu.toml
+    if effective_id == "xemu" {
+        if let Some(appdata) = dirs::config_dir() {
+            let xemu_dir = appdata.join("xemu").join("xemu");
+            fs::create_dir_all(&xemu_dir).ok();
+            let exe_dir = exe_path.parent().unwrap_or(&install_dir);
+            for file in &["mcpx_1.0.bin", "Complex_4627v1.03.bin", "xbox_hdd.qcow2"] {
+                let src = exe_dir.join(file);
+                let dst = xemu_dir.join(file);
+                if src.exists() && !dst.exists() {
+                    fs::copy(&src, &dst).ok();
+                }
+            }
+            let toml_path = xemu_dir.join("xemu.toml");
+            let mcpx = xemu_dir.join("mcpx_1.0.bin").to_string_lossy().to_string();
+            let flash = xemu_dir.join("Complex_4627v1.03.bin").to_string_lossy().to_string();
+            let hdd = xemu_dir.join("xbox_hdd.qcow2").to_string_lossy().to_string();
+            let eeprom = xemu_dir.join("eeprom.bin").to_string_lossy().to_string();
+            let toml_content = format!(
+                "[general]\nshow_welcome = false\n\n[sys.files]\nbootrom_path = '{}'\nflashrom_path = '{}'\nhdd_path = '{}'\neeprom_path = '{}'\n",
+                mcpx, flash, hdd, eeprom
+            );
+            let _ = fs::write(&toml_path, &toml_content);
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
