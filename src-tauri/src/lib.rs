@@ -1455,6 +1455,62 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         }
     }
 
+    // 3.5 Wikipedia fallback: search article images for "cover"/"box" keywords
+    if libretro_systems.is_empty() || console == "Xbox 360" || console == "Xbox" || console == "PlayStation 3" {
+        let wiki_search_name = candidates.first().cloned().unwrap_or_else(|| game_name.clone());
+        for suffix in &[" (video game)", ""] {
+            let wiki_title = format!("{}{}", wiki_search_name, suffix);
+            let search_url = format!("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch={}&srlimit=1&format=json", urlencoding::encode(&wiki_title));
+            if let Ok(resp) = client.get(&search_url).send().await {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(title) = json["query"]["search"].as_array().and_then(|a| a.get(0)).and_then(|r| r["title"].as_str()) {
+                        let images_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=images&format=json", urlencoding::encode(title));
+                        if let Ok(img_resp) = client.get(&images_url).send().await {
+                            if let Ok(img_json) = img_resp.json::<serde_json::Value>().await {
+                                if let Some(pages) = img_json["query"]["pages"].as_object() {
+                                    for (_, page) in pages {
+                                        if let Some(images) = page["images"].as_array() {
+                                            for img in images {
+                                                let img_title = img["title"].as_str().unwrap_or_default().to_lowercase();
+                                                if img_title.contains("cover") || img_title.contains("box") {
+                                                    let file_title = img["title"].as_str().unwrap_or_default();
+                                                    let info_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=imageinfo&iiprop=url&format=json", urlencoding::encode(file_title));
+                                                    if let Ok(info_resp) = client.get(&info_url).send().await {
+                                                        if let Ok(info_json) = info_resp.json::<serde_json::Value>().await {
+                                                            if let Some(info_pages) = info_json["query"]["pages"].as_object() {
+                                                                for (_, info_page) in info_pages {
+                                                                    if let Some(url) = info_page["imageinfo"].as_array().and_then(|a| a.get(0)).and_then(|i| i["url"].as_str()) {
+                                                                        if let Ok(img_dl) = client.get(url).send().await {
+                                                                            if let Ok(bytes) = img_dl.bytes().await {
+                                                                                if bytes.len() >= min_size {
+                                                                                    write_to_boxart_log(&format!("Result: Wikipedia Cover Image Success ({})", file_title));
+                                                                                    if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                                                                        return Ok(data_url);
+                                                                                    }
+                                                                                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                                                                                    return Ok(format!("data:image/png;base64,{}", b64));
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // 4. Try Title ID Fallback (GameTDB for Wii / Wii U / GameCube; Switch uses Tinfoil above)
     if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
         // Pick the right GameTDB path + file extension per console:
