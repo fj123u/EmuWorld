@@ -646,12 +646,13 @@ async fn launch_emulator(
             "melonds" => { cmd.arg("--fullscreen"); },
             "project64" => { cmd.arg("--fullscreen"); },
             "xemu" => { cmd.arg("-full-screen"); },
+            "xenia" => { cmd.arg("--fullscreen"); },
             "flycast" => { cmd.arg("--config"); cmd.arg("window:fullscreen=yes"); },
             _ => {}
         }
     }
 
-    // xemu: copy BIOS files to %APPDATA%/xemu/xemu/ and configure xemu.toml
+    // xemu: copy BIOS files to %APPDATA%/xemu/xemu/ and configure xemu.toml with dvd_path
     if effective_id == "xemu" {
         if let Some(appdata) = dirs::config_dir() {
             let xemu_dir = appdata.join("xemu").join("xemu");
@@ -669,12 +670,18 @@ async fn launch_emulator(
             let flash = xemu_dir.join("Complex_4627v1.03.bin").to_string_lossy().to_string();
             let hdd = xemu_dir.join("xbox_hdd.qcow2").to_string_lossy().to_string();
             let eeprom = xemu_dir.join("eeprom.bin").to_string_lossy().to_string();
+            let dvd = rom_path.clone().unwrap_or_default();
             let toml_content = format!(
-                "[general]\nshow_welcome = false\n\n[sys.files]\nbootrom_path = '{}'\nflashrom_path = '{}'\nhdd_path = '{}'\neeprom_path = '{}'\n",
-                mcpx, flash, hdd, eeprom
+                "[general]\nshow_welcome = false\n\n[general.ui]\nfit = 'stretch'\nanimation = 'fadeout'\n\n[sys]\nmem_limit = '128'\n\n[sys.files]\nbootrom_path = '{}'\nflashrom_path = '{}'\nhdd_path = '{}'\neeprom_path = '{}'\ndvd_path = '{}'\n",
+                mcpx, flash, hdd, eeprom, dvd
             );
             let _ = fs::write(&toml_path, &toml_content);
         }
+        // xemu reads the game from xemu.toml, remove the rom arg from cmd
+        // Rebuild cmd without the rom path argument
+        cmd = Command::new(&exe_path);
+        cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
+        cmd.arg("-full-screen");
     }
 
     #[cfg(target_os = "windows")]
@@ -933,6 +940,8 @@ fn normalize_console_folder(folder: &str) -> String {
         "vb" | "virtual boy" => "Virtual Boy".to_string(),
         "sega cd" | "mega cd" | "segacd" | "megacd" => "Sega CD".to_string(),
         "32x" | "sega 32x" => "Sega 32X".to_string(),
+        "xbox" => "Xbox".to_string(),
+        "xbox 360" | "xbox360" | "x360" => "Xbox 360".to_string(),
         "saturn" | "sega saturn" => "Saturn".to_string(),
         "game gear" | "gg" | "gamegear" => "Game Gear".to_string(),
         "sms" | "master system" | "sega master system" => "Master System".to_string(),

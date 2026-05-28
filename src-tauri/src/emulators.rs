@@ -488,6 +488,22 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             ],
         },
 
+        EmulatorInfo {
+            id: "xenia".to_string(),
+            name: "Xenia Canary".to_string(),
+            console: "Xbox 360".to_string(),
+            description: "Émulateur Xbox 360 expérimental. Bonne compatibilité sur les titres populaires.".to_string(),
+            download_url: "https://github.com/xenia-canary/xenia-canary/releases/download/29311dd/xenia_canary_windows.zip".to_string(),
+            executable_name: "xenia_canary.exe".to_string(),
+            supported_extensions: vec!["iso".to_string(), "xex".to_string(), "zar".to_string()],
+            icon: "🟢".to_string(),
+            website: "https://xenia.jp".to_string(),
+            archive_type: "zip".to_string(),
+            category: "Microsoft".to_string(),
+            core_name: None,
+            setup_files: vec![],
+        },
+
         // ═══════════════════════════════════════════════════════════
         //  ARCADE & RETRO
         // ═══════════════════════════════════════════════════════════
