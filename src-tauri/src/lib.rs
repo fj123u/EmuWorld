@@ -614,25 +614,23 @@ async fn launch_emulator(
     if effective_id == "retroarch" || effective_id.starts_with("retroarch-") {
         let ra_dir = exe_path.parent().unwrap_or(&install_dir);
         let cfg_path = ra_dir.join("retroarch.cfg");
-        if cfg_path.exists() {
-            let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
-            let settings = [
-                ("video_fullscreen", "true"),
-                ("video_windowed_fullscreen", "true"),
-                ("pause_nonactive", "false"),
-                ("menu_pause_libretro", "false"),
-            ];
-            for (key, val) in settings {
-                let pattern = format!("{} = ", key);
-                if let Some(pos) = cfg.find(&pattern) {
-                    let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
-                    cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
-                } else {
-                    cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
-                }
+        let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+        let settings = [
+            ("video_fullscreen", "true"),
+            ("video_windowed_fullscreen", "true"),
+            ("pause_nonactive", "false"),
+            ("menu_pause_libretro", "false"),
+        ];
+        for (key, val) in settings {
+            let pattern = format!("{} = ", key);
+            if let Some(pos) = cfg.find(&pattern) {
+                let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
+                cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
+            } else {
+                cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
             }
-            let _ = fs::write(&cfg_path, &cfg);
         }
+        let _ = fs::write(&cfg_path, &cfg);
         // No --fullscreen arg: config handles it via borderless windowed mode
     } else {
         match effective_id.as_str() {
