@@ -9,6 +9,8 @@ use reqwest;
 use urlencoding;
 use base64::Engine;
 use std::io::Write;
+use image::ImageReader;
+use std::io::Cursor;
 
 /// Returns the base data directory for EmuWorld.
 /// In portable mode (portable.txt next to exe), uses the exe's directory.
@@ -1049,6 +1051,18 @@ fn match_extension(ext: &str, catalog: &[emulators::EmulatorInfo]) -> Option<(St
     None
 }
 
+fn save_cover_as_webp(png_bytes: &[u8], dest_dir: &PathBuf, safe_name: &str) -> Option<String> {
+    let _ = fs::create_dir_all(dest_dir);
+    let img = ImageReader::new(Cursor::new(png_bytes))
+        .with_guessed_format().ok()?
+        .decode().ok()?;
+    let encoder = webp::Encoder::from_image(&img).ok()?;
+    let webp_data = encoder.encode(85.0);
+    let webp_path = dest_dir.join(format!("{}.webp", safe_name));
+    fs::write(&webp_path, &*webp_data).ok()?;
+    Some(format!("data:image/webp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&*webp_data)))
+}
+
 #[tauri::command]
 async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
     let force_refresh = force_refresh.unwrap_or(false);
@@ -1155,7 +1169,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     // If the user hit Retry, remove any stale cache entry so we can't fall back to it.
     if force_refresh {
         let target_png = console_covers_dir.join(format!("{}.png", &safe_name));
+        let target_webp = console_covers_dir.join(format!("{}.webp", &safe_name));
         let _ = std::fs::remove_file(&target_png);
+        let _ = std::fs::remove_file(&target_webp);
     }
 
     // 1. First check local covers directory (skipped when force_refresh is set)
@@ -1165,7 +1181,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str() {
                 let lower = file_name.to_lowercase();
-                if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
+                if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") || lower.ends_with(".webp") {
                     let name_no_ext = lower.rsplit_once('.').map(|(n,_)| n).unwrap_or(&lower);
                     let norm_file = name_no_ext.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
                     
@@ -1193,7 +1209,8 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     log_event("Local Cache", "Match Found", None);
                     write_to_boxart_log("Result: Local Cache Success");
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
-                    return Ok(format!("data:image/png;base64,{}", b64));
+                    let mime = if path.extension().and_then(|e| e.to_str()) == Some("webp") { "image/webp" } else { "image/png" };
+                    return Ok(format!("data:{};base64,{}", mime, b64));
                 }
             }
         }
@@ -1218,8 +1235,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     if let Ok(bytes) = resp.bytes().await {
                         if bytes.len() >= min_size {
                             write_to_boxart_log(&format!("Result: Tinfoil.media Success (ID: {})", id));
-                            let _ = std::fs::create_dir_all(&console_covers_dir);
-                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                return Ok(data_url);
+                            }
                             return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                         }
                     }
@@ -1239,7 +1257,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     if bytes.len() >= min_size {
                         write_to_boxart_log(&format!("Result: Libretro Raw Success ({})", raw_libretro_name));
                         let _ = std::fs::create_dir_all(&console_covers_dir);
-                        let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                        if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                            return Ok(data_url);
+                        }
                         return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                     }
                 }
@@ -1259,8 +1279,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if let Ok(bytes) = resp.bytes().await {
                             if bytes.len() >= min_size {
                                 write_to_boxart_log(&format!("Result: Libretro Stripped Success ({})", stripped));
-                                let _ = std::fs::create_dir_all(&console_covers_dir);
-                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                    return Ok(data_url);
+                                }
                                 return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                             }
                         }
@@ -1282,8 +1303,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if let Ok(bytes) = resp.bytes().await {
                             if bytes.len() >= min_size {
                                 write_to_boxart_log(&format!("Result: Libretro Success ({})", variant));
-                                let _ = std::fs::create_dir_all(&console_covers_dir);
-                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                    return Ok(data_url);
+                                }
                                 return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                             }
                         }
@@ -1317,8 +1339,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                                                 if let Ok(bytes) = bytes_resp.bytes().await {
                                                     if bytes.len() >= min_size {
                                                         write_to_boxart_log(&format!("Result: Wikipedia Success ({})", title));
-                                                        let _ = std::fs::create_dir_all(&console_covers_dir);
-                                                        let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                        if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                                            return Ok(data_url);
+                                                        }
                                                         return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                                                     }
                                                 }
@@ -1381,8 +1404,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if let Ok(bytes) = resp.bytes().await {
                             if bytes.len() >= min_size {
                                 write_to_boxart_log(&format!("Result: GameTDB Success ({}/{})", region, id));
-                                let _ = std::fs::create_dir_all(&console_covers_dir);
-                                let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                    return Ok(data_url);
+                                }
                                 return Ok(format!("data:{};base64,{}", mime, base64::engine::general_purpose::STANDARD.encode(&bytes)));
                             }
                         }
@@ -1409,8 +1433,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if bytes.len() >= min_size {
                             log_event(&url, "SUCCESS", None);
                             write_to_boxart_log("Result: Libretro Success");
-                            let _ = std::fs::create_dir_all(&console_covers_dir);
-                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                            if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                return Ok(data_url);
+                            }
                             return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                         } else {
                             write_to_boxart_log(&format!("Libretro Ignored (Too small: {} bytes)", bytes.len()));
@@ -1454,8 +1479,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                                                         if bytes.len() >= min_size {
                                                             log_event(&img_url, "SUCCESS", None);
                                                             write_to_boxart_log("Result: Archive.org Success");
-                                                            let _ = std::fs::create_dir_all(&console_covers_dir);
-                                                            let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                            if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                                                return Ok(data_url);
+                                                            }
                                                             return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                                                         }
                                                     }
@@ -1508,8 +1534,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                                                 if bytes.len() >= min_size {
                                                     log_event(src, "SUCCESS (Wiki)", None);
                                                     write_to_boxart_log("Result: Wikipedia Success");
-                                                    let _ = std::fs::create_dir_all(&console_covers_dir);
-                                                    let _ = std::fs::write(console_covers_dir.join(format!("{}.png", &safe_name)), &bytes);
+                                                    if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                                        return Ok(data_url);
+                                                    }
                                                     let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
                                                     return Ok(format!("data:image/png;base64,{}", b64));
                                                 }
@@ -4077,6 +4104,51 @@ fn get_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>) -> (
 }
 
 #[tauri::command]
+fn migrate_covers_to_webp() -> Result<String, String> {
+    let config = get_config();
+    let covers_dir = PathBuf::from(&config.covers_directory);
+    if !covers_dir.exists() { return Ok("No covers directory".to_string()); }
+
+    let mut converted = 0u32;
+    let mut saved_bytes: u64 = 0;
+
+    for entry in walkdir::WalkDir::new(&covers_dir).max_depth(3) {
+        if let Ok(e) = entry {
+            if e.file_type().is_file() {
+                let path = e.path().to_path_buf();
+                let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                if ext == "png" || ext == "jpg" || ext == "jpeg" {
+                    let original_size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+                    if let Ok(data) = fs::read(&path) {
+                        if let Ok(img) = ImageReader::new(Cursor::new(&data)).with_guessed_format().and_then(|r| Ok(r.decode())) {
+                            if let Ok(img) = img {
+                                if let Ok(encoder) = webp::Encoder::from_image(&img) {
+                                    let webp_data = encoder.encode(85.0);
+                                    let webp_path = path.with_extension("webp");
+                                    if fs::write(&webp_path, &*webp_data).is_ok() {
+                                        let new_size = webp_data.len() as u64;
+                                        if new_size < original_size {
+                                            saved_bytes += original_size - new_size;
+                                            let _ = fs::remove_file(&path);
+                                            converted += 1;
+                                        } else {
+                                            let _ = fs::remove_file(&webp_path);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let saved_mb = saved_bytes as f64 / 1024.0 / 1024.0;
+    Ok(format!("{} covers converties, {:.1} MB économisés", converted, saved_mb))
+}
+
+#[tauri::command]
 fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
     use std::process::Command as Cmd;
 
@@ -4586,6 +4658,7 @@ pub fn run() {
             set_current_playing,
             get_current_playing,
             take_screenshot,
+            migrate_covers_to_webp,
             get_screenshots,
             get_all_screenshots,
             delete_screenshot,

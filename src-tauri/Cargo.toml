@@ -42,3 +42,5 @@ tauri-plugin-notification = "2"
 notify = { version = "7", features = ["macos_kqueue"] }
 tauri-plugin-global-shortcut = "2"
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "minwindef"] }
+image = "0.25"
+webp = "0.3"

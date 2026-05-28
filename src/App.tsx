@@ -5976,6 +5976,20 @@ export default function App() {
                         <X size={14} /> {t("settings.clearCache")}
                       </button>
                     </div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">Compresser les covers</label>
+                        <p className="settings__field-desc">Convertit les PNG/JPG en WebP (qualité 85) pour réduire l'espace disque (~80% de gain).</p>
+                      </div>
+                      <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={async () => {
+                        try {
+                          const result = await invoke<string>("migrate_covers_to_webp");
+                          alert(result);
+                        } catch (e: any) { alert("Erreur: " + e); }
+                      }}>
+                        <RefreshCw size={14} /> Compresser
+                      </button>
+                    </div>
                   </div>
 
                   <div className="settings__group">
