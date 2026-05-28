@@ -798,6 +798,20 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                         }
                     }
 
+                    // Skip .cue when a .gdi exists in the same folder (prefer .gdi for Dreamcast)
+                    if ext_str == "cue" {
+                        if let Some(parent) = e.path().parent() {
+                            let has_gdi = parent.read_dir().map(|rd| {
+                                rd.flatten().any(|f| {
+                                    f.path().extension().map(|x| x.to_string_lossy().to_lowercase() == "gdi").unwrap_or(false)
+                                })
+                            }).unwrap_or(false);
+                            if has_gdi {
+                                continue;
+                            }
+                        }
+                    }
+
                     // Delete junk files found in ROM folders
                     let file_name_lower = e.path().file_name()
                         .map(|f| f.to_string_lossy().to_lowercase()).unwrap_or_default();

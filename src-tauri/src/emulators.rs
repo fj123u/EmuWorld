@@ -322,7 +322,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-sms".to_string(),
@@ -337,7 +341,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-gg".to_string(),
@@ -352,7 +360,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-segacd".to_string(),
@@ -367,7 +379,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-32x".to_string(),
@@ -382,7 +398,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("picodrive_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/picodrive_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-saturn".to_string(),
@@ -396,8 +416,12 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
-            core_name: Some("beetle_saturn_libretro.dll".to_string()),
-            setup_files: vec![],
+            core_name: Some("mednafen_saturn_libretro.dll".to_string()),
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_saturn_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
 
         // ═══════════════════════════════════════════════════════════
