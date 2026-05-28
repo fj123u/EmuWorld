@@ -370,7 +370,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             id: "retroarch-segacd".to_string(),
             name: "RetroArch (Sega CD)".to_string(),
             console: "Sega CD".to_string(),
-            description: "Sega CD / Mega CD via Genesis Plus GX. BIOS requis: bios_CD_U.bin / bios_CD_E.bin dans system/.".to_string(),
+            description: "Sega CD / Mega CD via RetroArch's Genesis Plus GX core.".to_string(),
             download_url: "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z".to_string(),
             executable_name: "retroarch.exe".to_string(),
             supported_extensions: vec!["cue".to_string(), "chd".to_string(), "iso".to_string()],
@@ -379,11 +379,28 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
             core_name: Some("genesis_plus_gx_libretro.dll".to_string()),
-            setup_files: vec![SetupFile {
-                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
-                dest: "cores".to_string(),
-                extract: true,
-            }],
+            setup_files: vec![
+                SetupFile {
+                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
+                    dest: "cores".to_string(),
+                    extract: true,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_E.bin".to_string(),
+                    dest: "system/bios_CD_E.bin".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_U.bin".to_string(),
+                    dest: "system/bios_CD_U.bin".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_J.bin".to_string(),
+                    dest: "system/bios_CD_J.bin".to_string(),
+                    extract: false,
+                },
+            ],
         },
         EmulatorInfo {
             id: "retroarch-32x".to_string(),
@@ -408,7 +425,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             id: "retroarch-saturn".to_string(),
             name: "RetroArch (Saturn)".to_string(),
             console: "Saturn".to_string(),
-            description: "Sega Saturn via RetroArch's Yabause core (BIOS HLE intégré).".to_string(),
+            description: "Sega Saturn via RetroArch's Kronos core.".to_string(),
             download_url: "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z".to_string(),
             executable_name: "retroarch.exe".to_string(),
             supported_extensions: vec!["cue".to_string(), "iso".to_string(), "chd".to_string()],
@@ -416,12 +433,24 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             website: "https://www.retroarch.com".to_string(),
             archive_type: "7z".to_string(),
             category: "Sega".to_string(),
-            core_name: Some("yabause_libretro.dll".to_string()),
-            setup_files: vec![SetupFile {
-                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/yabause_libretro.dll.zip".to_string(),
-                dest: "cores".to_string(),
-                extract: true,
-            }],
+            core_name: Some("kronos_libretro.dll".to_string()),
+            setup_files: vec![
+                SetupFile {
+                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/kronos_libretro.dll.zip".to_string(),
+                    dest: "cores".to_string(),
+                    extract: true,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/saturn/sega_101.bin".to_string(),
+                    dest: "system/sega_101.bin".to_string(),
+                    extract: false,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/saturn/mpr-17933.bin".to_string(),
+                    dest: "system/mpr-17933.bin".to_string(),
+                    extract: false,
+                },
+            ],
         },
 
         // ═══════════════════════════════════════════════════════════
