@@ -696,7 +696,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             id: "retroarch-cdi".to_string(),
             name: "RetroArch (CD-i)".to_string(),
             console: "CD-i".to_string(),
-            description: "Philips CD-i via SAME CDi (expérimental). BIOS MAME requis: cdimono1.zip dans system/.".to_string(),
+            description: "Philips CD-i via SAME CDi (expérimental).".to_string(),
             download_url: "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z".to_string(),
             executable_name: "retroarch.exe".to_string(),
             supported_extensions: vec!["chd".to_string(), "iso".to_string(), "cue".to_string()],
@@ -705,11 +705,18 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("same_cdi_libretro.dll".to_string()),
-            setup_files: vec![SetupFile {
-                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/same_cdi_libretro.dll.zip".to_string(),
-                dest: "cores".to_string(),
-                extract: true,
-            }],
+            setup_files: vec![
+                SetupFile {
+                    url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/same_cdi_libretro.dll.zip".to_string(),
+                    dest: "cores".to_string(),
+                    extract: true,
+                },
+                SetupFile {
+                    url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/cdi/cdimono1.zip".to_string(),
+                    dest: "system/cdimono1.zip".to_string(),
+                    extract: false,
+                },
+            ],
         },
         EmulatorInfo {
             id: "retroarch-wswan".to_string(),
