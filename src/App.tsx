@@ -1372,6 +1372,20 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.1.0", date: "2026-06-01", changes: [
+      "🎮 Ajout émulateurs: Azahar (3DS), Xenia (Xbox 360), Atari 5200/7800/Jaguar/Lynx, TurboGrafx-16/CD, CD-i",
+      "💾 RetroArch partagé: une seule installation pour tous les cores (~9GB économisés)",
+      "🔧 Auto-download des cores RetroArch manquants au lancement",
+      "🖼️ Covers Xbox/Xbox 360: fallback Wikipedia article images",
+      "🖼️ Covers 3DS: mapping français→anglais (Pokémon, Yo-Kai Watch, Zelda, etc.)",
+      "📀 CD-i: conversion automatique CUE→CHD via chdman intégré",
+      "🎮 BIOS auto-téléchargés: Saturn, Sega CD, Xbox, TurboGrafx-CD",
+      "📺 Fullscreen sur tous les émulateurs (Ryubing, Azahar, melonDS, xemu, etc.)",
+      "🔇 Suppression des fenêtres CMD lors des extractions",
+      "🧹 Auto-suppression des fichiers .md et Vimm.txt dans les dossiers ROMs",
+      "📂 Aliases de dossiers: PSP, PS1, 3DS, Xbox 360, Sega CD, etc. reconnus automatiquement",
+      "📀 Scanner: ignore les .bin tracks quand un .cue/.gdi existe, déduplique Dreamcast",
+    ] },
     { version: "2.0.0", date: "2026-05-26", changes: [
       "🎮 Overlay in-game Steam-style: fenêtre transparente par-dessus le jeu (Shift+Tab pour toggle)",
       "🏆 Challenges hebdo: 18 défis game-specific rotatifs avec leaderboard et progression auto",
