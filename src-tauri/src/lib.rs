@@ -266,8 +266,24 @@ fn get_installed_emulators() -> Vec<String> {
                     .unwrap_or(false);
                 if has_files {
                     if let Some(name) = entry.file_name().to_str() {
-                        // Always return lowercase to match catalog IDs
                         installed.push(name.to_lowercase());
+                    }
+                }
+            }
+        }
+    }
+    // Check retroarch-* emulators by core presence in shared retroarch/
+    let ra_dir = emu_dir.join("retroarch");
+    if ra_dir.exists() {
+        if let Some(ra_exe) = find_executable(&ra_dir, "retroarch.exe") {
+            let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
+            let catalog = emulators::get_catalog();
+            for emu in &catalog {
+                if emu.id.starts_with("retroarch-") && !installed.contains(&emu.id) {
+                    if let Some(core) = &emu.core_name {
+                        if cores_dir.join(core).exists() {
+                            installed.push(emu.id.clone());
+                        }
                     }
                 }
             }
@@ -287,12 +303,12 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
     push_log("INFO", &format!("Installation de {} ({})...", emu.name, emu.id));
 
     let config = get_config();
-    let install_dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
-
-    if install_dir.exists() {
-        fs::remove_dir_all(&install_dir).ok();
-    }
-    fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+    let is_shared_retroarch = emu.id.starts_with("retroarch-");
+    let install_dir = if is_shared_retroarch {
+        PathBuf::from(&config.emulators_directory).join("retroarch")
+    } else {
+        PathBuf::from(&config.emulators_directory).join(&emu.id)
+    };
 
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
@@ -306,42 +322,58 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    let response = client
-        .get(&emu.download_url)
-        .header("User-Agent", "EmuWorld/0.1.0 (Windows; Desktop)")
-        .send()
-        .await
-        .map_err(|e| format!("Download failed: {}", e))?;
+    // For shared RetroArch: only download base if not already installed
+    let ra_already_installed = is_shared_retroarch && find_executable(&install_dir, "retroarch.exe").is_some();
 
-    if !response.status().is_success() {
-        return Err(format!("Download failed with HTTP status: {}", response.status()));
-    }
+    if !ra_already_installed {
+        if !is_shared_retroarch && install_dir.exists() {
+            fs::remove_dir_all(&install_dir).ok();
+        }
+        fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
 
-    let bytes = response.bytes().await.map_err(|e| format!("Failed to read download data: {}", e))?;
-    if bytes.is_empty() {
-        return Err("Downloaded file is empty".to_string());
-    }
+        let response = client
+            .get(&emu.download_url)
+            .header("User-Agent", "EmuWorld/0.1.0 (Windows; Desktop)")
+            .send()
+            .await
+            .map_err(|e| format!("Download failed: {}", e))?;
 
-    let _ = app_handle.emit("install-progress", serde_json::json!({
-        "emulator_id": emulator_id,
-        "status": "extracting",
-        "progress": 60
-    }));
+        if !response.status().is_success() {
+            return Err(format!("Download failed with HTTP status: {}", response.status()));
+        }
 
-    let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
-    let archive_path = install_dir.join(format!("archive.{}", archive_ext));
-    fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
+        let bytes = response.bytes().await.map_err(|e| format!("Failed to read download data: {}", e))?;
+        if bytes.is_empty() {
+            return Err("Downloaded file is empty".to_string());
+        }
 
-    if emu.archive_type == "zip" {
-        extract_zip(&archive_path, &install_dir).map_err(|e| format!("Zip extraction failed: {}", e))?;
-    } else if emu.archive_type == "7z" {
-        extract_7z(&archive_path, &install_dir).map_err(|e| format!("7z extraction failed: {}", e))?;
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "extracting",
+            "progress": 60
+        }));
+
+        let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
+        let archive_path = install_dir.join(format!("archive.{}", archive_ext));
+        fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
+
+        if emu.archive_type == "zip" {
+            extract_zip(&archive_path, &install_dir).map_err(|e| format!("Zip extraction failed: {}", e))?;
+        } else if emu.archive_type == "7z" {
+            extract_7z(&archive_path, &install_dir).map_err(|e| format!("7z extraction failed: {}", e))?;
+        } else {
+            return Err(format!("Unsupported archive type: {}", emu.archive_type));
+        }
+
+        fs::remove_file(&archive_path).ok();
     } else {
-        return Err(format!("Unsupported archive type: {}", emu.archive_type));
+        // RetroArch already installed, skip to core download
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "extracting",
+            "progress": 70
+        }));
     }
-
-    // Clean up archive
-    fs::remove_file(&archive_path).ok();
 
     // Verify executable exists
     if find_executable(&install_dir, &emu.executable_name).is_none() {
@@ -502,10 +534,32 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
 fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
     let id_lower = emulator_id.to_lowercase();
     let config = get_config();
+    let catalog = emulators::get_catalog();
+
+    // For retroarch-* emulators: only remove the core DLL from the shared retroarch folder
+    if id_lower.starts_with("retroarch-") && id_lower != "retroarch" {
+        let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+        if let Some(emu) = catalog.iter().find(|e| e.id == id_lower) {
+            if let Some(core) = &emu.core_name {
+                if let Some(ra_exe) = find_executable(&ra_dir, "retroarch.exe") {
+                    let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
+                    let core_path = cores_dir.join(core);
+                    if core_path.exists() {
+                        fs::remove_file(&core_path).ok();
+                    }
+                }
+            }
+        }
+        // Also remove old standalone folder if it exists
+        let old_dir = PathBuf::from(&config.emulators_directory).join(&id_lower);
+        if old_dir.exists() {
+            fs::remove_dir_all(&old_dir).ok();
+        }
+        return Ok(format!("Emulator '{}' uninstalled (core removed)", id_lower));
+    }
+
     let install_dir = PathBuf::from(&config.emulators_directory).join(&id_lower);
-    
     if install_dir.exists() {
-        // Try to remove. On Windows, this fails if an EXE is running.
         fs::remove_dir_all(&install_dir).map_err(|e| {
             if e.to_string().contains("Access is denied") {
                 format!("Uninstallation failed: The emulator folder is locked. Please make sure the emulator is closed before uninstalling.")
@@ -561,7 +615,17 @@ async fn launch_emulator(
             (dir, exe, emu.id.clone())
         }
     } else {
-        let dir = PathBuf::from(&config.emulators_directory).join(&emu.id);
+        // For retroarch-* emulators, use the shared retroarch/ folder
+        let dir = if emu.id.starts_with("retroarch-") {
+            let shared_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+            if find_executable(&shared_dir, &emu.executable_name).is_some() {
+                shared_dir
+            } else {
+                PathBuf::from(&config.emulators_directory).join(&emu.id)
+            }
+        } else {
+            PathBuf::from(&config.emulators_directory).join(&emu.id)
+        };
         let exe = find_executable(&dir, &emu.executable_name)
             .ok_or_else(|| format!("Executable '{}' not found.", emu.executable_name))?;
         (dir, exe, emu.id.clone())
