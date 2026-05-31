@@ -90,31 +90,45 @@ pub fn discord_set_idle(state: tauri::State<'_, RpcState>) -> Result<(), String>
     })
 }
 
-// Playing presence — shown while a game is running. Keeps EmuWorld as the
-// large image (brand persistence); game name is the big text, "via
-// EmuWorld" the subtitle. No console badge — kept deliberately minimal.
+// Playing presence — shows the game cover as large image, EmuWorld logo as small.
 #[tauri::command]
 pub fn discord_set_playing(
     state: tauri::State<'_, RpcState>,
     game_name: String,
+    console: Option<String>,
+    cover_url: Option<String>,
 ) -> Result<(), String> {
-    // Reset session start so the elapsed timer begins now.
     let now = unix_ts();
     {
         let mut start_lock = state.start_ts.lock().map_err(|e| e.to_string())?;
         *start_lock = Some(now);
     }
 
-    with_client(&state, move |client| {
-        let assets = activity::Assets::new()
-            .large_image("emuworld_logo")
-            .large_text("EmuWorld — retro emulation launcher");
+    let console_str = console.unwrap_or_default();
+    let cover = cover_url.unwrap_or_default();
 
-        let details_line = game_name.clone();
+    with_client(&state, move |client| {
+        let assets = if !cover.is_empty() {
+            activity::Assets::new()
+                .large_image(&cover)
+                .large_text(&game_name)
+                .small_image("emuworld_logo")
+                .small_text("EmuWorld")
+        } else {
+            activity::Assets::new()
+                .large_image("emuworld_logo")
+                .large_text("EmuWorld — retro emulation launcher")
+        };
+
+        let state_text = if !console_str.is_empty() {
+            format!("{} · via EmuWorld", console_str)
+        } else {
+            "via EmuWorld".to_string()
+        };
 
         let activity = activity::Activity::new()
-            .state("via EmuWorld")
-            .details(details_line.as_str())
+            .state(&state_text)
+            .details(&game_name)
             .assets(assets)
             .timestamps(activity::Timestamps::new().start(now));
 
