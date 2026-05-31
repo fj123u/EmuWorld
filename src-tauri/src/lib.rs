@@ -1455,39 +1455,50 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     write_to_boxart_log("Result: Local Cache Success");
                     // Store a public URL for Discord Rich Presence
                     let cover_key = format!("{}::{}", console, game_name);
-                    if let Some(folder) = libretro_systems.first() {
-                        let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy();
+                    let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+                    let stored = if let Some(folder) = libretro_systems.first() {
                         let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&cover_file_name));
                         store_cover_url(&cover_key, &url);
+                        true
                     } else {
-                        // For consoles without libretro (Switch, Wii, Wii U, 3DS): use GameTDB or tinfoil
                         match console.as_ref() {
                             "Nintendo Switch" => {
                                 if let Some(id) = extract_title_id(&game_name) {
-                                    let url = format!("https://tinfoil.media/ti/{}/0/0/0", id);
-                                    store_cover_url(&cover_key, &url);
-                                }
+                                    store_cover_url(&cover_key, &format!("https://tinfoil.media/ti/{}/0/0/0", id));
+                                    true
+                                } else { false }
                             }
                             "Wii" | "GameCube / Wii" | "GameCube" => {
                                 if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
-                                    let url = format!("https://art.gametdb.com/wii/cover/EN/{}.png", id);
-                                    store_cover_url(&cover_key, &url);
-                                }
+                                    store_cover_url(&cover_key, &format!("https://art.gametdb.com/wii/cover/EN/{}.png", id));
+                                    true
+                                } else { false }
                             }
                             "Wii U" => {
                                 if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
-                                    let url = format!("https://art.gametdb.com/wiiu/coverHQ/EN/{}.jpg", id);
-                                    store_cover_url(&cover_key, &url);
-                                }
+                                    store_cover_url(&cover_key, &format!("https://art.gametdb.com/wiiu/coverHQ/EN/{}.jpg", id));
+                                    true
+                                } else { false }
                             }
                             "Nintendo 3DS" => {
-                                if let Some(folder) = vec!["Nintendo - Nintendo 3DS"].first() {
-                                    let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy();
-                                    let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&cover_file_name));
-                                    store_cover_url(&cover_key, &url);
-                                }
+                                let url = format!("https://thumbnails.libretro.com/Nintendo%20-%20Nintendo%203DS/Named_Boxarts/{}.png", urlencoding::encode(&cover_file_name));
+                                store_cover_url(&cover_key, &url);
+                                true
                             }
-                            _ => {}
+                            _ => false,
+                        }
+                    };
+                    if !stored {
+                        // Last resort: use the cover file name as-is for a libretro guess
+                        let guess_systems = match console.as_ref() {
+                            "Wii U" => "Nintendo - Wii U",
+                            "GameCube / Wii" => "Nintendo - Wii",
+                            "Nintendo Switch" => "Nintendo - Nintendo Switch",
+                            _ => "",
+                        };
+                        if !guess_systems.is_empty() {
+                            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(guess_systems), urlencoding::encode(&cover_file_name));
+                            store_cover_url(&cover_key, &url);
                         }
                     }
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
