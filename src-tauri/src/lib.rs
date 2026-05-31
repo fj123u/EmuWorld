@@ -4705,7 +4705,44 @@ fn clear_logs() {
 #[tauri::command]
 fn get_cover_url(game_name: String, console: String) -> Option<String> {
     let key = format!("{}::{}", console, game_name);
-    cover_urls().lock().ok().and_then(|map| map.get(&key).cloned())
+    let stored = cover_urls().lock().ok().and_then(|map| map.get(&key).cloned());
+    // Only return URLs that Discord can display (libretro thumbnails or tinfoil)
+    if let Some(ref url) = stored {
+        if url.contains("thumbnails.libretro.com") || url.contains("tinfoil.media") {
+            return stored;
+        }
+    }
+    // Fallback: try to construct a libretro URL from the cover filename
+    let config = get_config();
+    let safe_console = console.replace("/", "-");
+    let covers_dir = PathBuf::from(&config.covers_directory).join(&safe_console);
+    let norm_target = game_name.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+    if let Ok(entries) = std::fs::read_dir(&covers_dir) {
+        for entry in entries.flatten() {
+            if let Some(fname) = entry.file_name().to_str() {
+                let lower = fname.to_lowercase();
+                if lower.ends_with(".webp") || lower.ends_with(".png") {
+                    let name_no_ext = lower.rsplit_once('.').map(|(n,_)| n).unwrap_or(&lower);
+                    let norm = name_no_ext.chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+                    if norm == norm_target || norm.contains(&norm_target) || norm_target.contains(&norm) {
+                        let libretro_name = fname.rsplit_once('.').map(|(n,_)| n).unwrap_or(fname);
+                        let systems: &[&str] = match console.as_str() {
+                            "Wii U" => &["Nintendo - Wii U"],
+                            "GameCube / Wii" | "Wii" => &["Nintendo - Wii"],
+                            "Nintendo Switch" => &["Nintendo - Nintendo Switch"],
+                            "Nintendo 3DS" => &["Nintendo - Nintendo 3DS"],
+                            _ => &[],
+                        };
+                        if let Some(system) = systems.first() {
+                            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(system), urlencoding::encode(libretro_name));
+                            return Some(url);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    stored
 }
 
 static OAUTH_PORT: OnceLock<Mutex<u16>> = OnceLock::new();
