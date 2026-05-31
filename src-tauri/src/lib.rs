@@ -1453,6 +1453,12 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 if data.len() >= min_size {
                     log_event("Local Cache", "Match Found", None);
                     write_to_boxart_log("Result: Local Cache Success");
+                    // Store a libretro URL for Discord Rich Presence
+                    if let Some(folder) = libretro_systems.first() {
+                        let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy();
+                        let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&cover_file_name));
+                        store_cover_url(&format!("{}::{}", console, game_name), &url);
+                    }
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
                     let mime = if path.extension().and_then(|e| e.to_str()) == Some("webp") { "image/webp" } else { "image/png" };
                     return Ok(format!("data:{};base64,{}", mime, b64));
