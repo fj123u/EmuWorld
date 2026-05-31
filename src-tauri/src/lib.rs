@@ -43,6 +43,17 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
 static APP_LOGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 static BANDWIDTH_LIMIT_KBPS: AtomicU64 = AtomicU64::new(0);
+static COVER_URLS: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();
+
+fn cover_urls() -> &'static Mutex<std::collections::HashMap<String, String>> {
+    COVER_URLS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+fn store_cover_url(key: &str, url: &str) {
+    if let Ok(mut map) = cover_urls().lock() {
+        map.insert(key.to_string(), url.to_string());
+    }
+}
 
 fn app_logs() -> &'static Mutex<Vec<String>> {
     APP_LOGS.get_or_init(|| Mutex::new(Vec::new()))
@@ -1490,6 +1501,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 if let Ok(bytes) = resp.bytes().await {
                     if bytes.len() >= min_size {
                         write_to_boxart_log(&format!("Result: Libretro Raw Success ({})", raw_libretro_name));
+                        store_cover_url(&format!("{}::{}", console, game_name), &url);
                         let _ = std::fs::create_dir_all(&console_covers_dir);
                         if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
                             return Ok(data_url);
@@ -1537,6 +1549,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if let Ok(bytes) = resp.bytes().await {
                             if bytes.len() >= min_size {
                                 write_to_boxart_log(&format!("Result: Libretro Success ({})", variant));
+                                store_cover_url(&format!("{}::{}", console, game_name), &url);
                                 if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
                                     return Ok(data_url);
                                 }
@@ -4626,6 +4639,12 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
+#[tauri::command]
+fn get_cover_url(game_name: String, console: String) -> Option<String> {
+    let key = format!("{}::{}", console, game_name);
+    cover_urls().lock().ok().and_then(|map| map.get(&key).cloned())
+}
+
 static OAUTH_PORT: OnceLock<Mutex<u16>> = OnceLock::new();
 
 fn oauth_port() -> &'static Mutex<u16> {
@@ -4938,6 +4957,7 @@ pub fn run() {
             discord_rpc::discord_clear,
             get_logs,
             clear_logs,
+            get_cover_url,
             start_oauth_server,
             create_overlay_window,
             close_overlay_window,

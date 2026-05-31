@@ -4268,30 +4268,13 @@ export default function App() {
       }
       showToast(`Launching ${rom.name}...`, "success");
       if (rom.name) {
-        const libretroSystems: Record<string, string> = {
-          "NES": "Nintendo - Nintendo Entertainment System",
-          "SNES": "Nintendo - Super Nintendo Entertainment System",
-          "Super Nintendo": "Nintendo - Super Nintendo Entertainment System",
-          "Nintendo 64": "Nintendo - Nintendo 64",
-          "Game Boy Advance": "Nintendo - Game Boy Advance",
-          "Game Boy": "Nintendo - Game Boy",
-          "Game Boy Color": "Nintendo - Game Boy Color",
-          "Nintendo DS": "Nintendo - Nintendo DS",
-          "Nintendo 3DS": "Nintendo - Nintendo 3DS",
-          "GameCube / Wii": "Nintendo - Wii",
-          "Wii U": "Nintendo - Wii U",
-          "Nintendo Switch": "Nintendo - Nintendo Switch",
-          "PlayStation 1": "Sony - PlayStation",
-          "PlayStation 2": "Sony - PlayStation 2",
-          "PlayStation Portable": "Sony - PlayStation Portable",
-          "Mega Drive": "Sega - Mega Drive - Genesis",
-          "Dreamcast": "Sega - Dreamcast",
-          "Xbox": "Microsoft - Xbox",
-          "Xbox 360": "Microsoft - Xbox 360",
-        };
-        const system = libretroSystems[rom.console] || "";
-        const coverUrl = system ? `https://thumbnails.libretro.com/${encodeURIComponent(system)}/Named_Boxarts/${encodeURIComponent(rom.name)}.png` : "";
-        invoke("discord_set_playing", { gameName: rom.name, console: rom.console, coverUrl }).catch(() => {});
+        invoke<string | null>("get_cover_url", { gameName: rom.name, console: rom.console })
+          .then((coverUrl) => {
+            invoke("discord_set_playing", { gameName: rom.name, console: rom.console, coverUrl: coverUrl || "" }).catch(() => {});
+          })
+          .catch(() => {
+            invoke("discord_set_playing", { gameName: rom.name, console: rom.console, coverUrl: "" }).catch(() => {});
+          });
       }
     } catch (err: any) {
       console.error("Launch Exception:", err);
