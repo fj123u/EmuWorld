@@ -656,7 +656,42 @@ async fn launch_emulator(
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
     if let Some(rom) = rom_path.clone() {
-        let final_path = rom.replace(r"\\?\", "").replace("/", "\\");
+        let mut final_path = rom.replace(r"\\?\", "").replace("/", "\\");
+
+        // CD-i: auto-convert .cue to .chd if needed (SAME CDi core only supports CHD)
+        if emu.id == "retroarch-cdi" && final_path.to_lowercase().ends_with(".cue") {
+            let chd_path = format!("{}.chd", &final_path[..final_path.len() - 4]);
+            if !PathBuf::from(&chd_path).exists() {
+                println!("[Launch] Converting CUE to CHD for CD-i: {}", final_path);
+                push_log("INFO", "Conversion CUE → CHD en cours...");
+                let chdman = std::env::current_exe().ok()
+                    .and_then(|p| p.parent().map(|d| d.join("binaries").join("chdman.exe")));
+                if let Some(chdman_path) = chdman {
+                    if chdman_path.exists() {
+                        let mut conv_cmd = Command::new(&chdman_path);
+                        conv_cmd.args(&["createcd", "-i", &final_path, "-o", &chd_path]);
+                        #[cfg(target_os = "windows")]
+                        {
+                            use std::os::windows::process::CommandExt;
+                            conv_cmd.creation_flags(0x08000000);
+                        }
+                        match conv_cmd.output() {
+                            Ok(out) if out.status.success() => {
+                                println!("[Launch] CHD conversion successful");
+                                final_path = chd_path;
+                            }
+                            Ok(out) => {
+                                let stderr = String::from_utf8_lossy(&out.stderr);
+                                println!("[Launch] CHD conversion failed: {}", stderr);
+                            }
+                            Err(e) => println!("[Launch] Failed to run chdman: {}", e),
+                        }
+                    }
+                }
+            } else {
+                final_path = chd_path;
+            }
+        }
         println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
         push_log("INFO", &format!("Lancement: {} via {}", final_path.split('\\').last().unwrap_or(&final_path), effective_id));
 
