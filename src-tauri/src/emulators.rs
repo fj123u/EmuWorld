@@ -520,7 +520,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mame_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mame_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-neogeo".to_string(),
@@ -535,7 +539,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("fbneo_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/fbneo_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-pce".to_string(),
@@ -550,7 +558,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mednafen_pce_fast_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_pce_fast_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
         EmulatorInfo {
             id: "retroarch-atari2600".to_string(),
@@ -731,7 +743,11 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             archive_type: "7z".to_string(),
             category: "Arcade & Retro".to_string(),
             core_name: Some("mednafen_wswan_libretro.dll".to_string()),
-            setup_files: vec![],
+            setup_files: vec![SetupFile {
+                url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_wswan_libretro.dll.zip".to_string(),
+                dest: "cores".to_string(),
+                extract: true,
+            }],
         },
 
         // ═══════════════════════════════════════════════════════════
