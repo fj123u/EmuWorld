@@ -1453,11 +1453,42 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 if data.len() >= min_size {
                     log_event("Local Cache", "Match Found", None);
                     write_to_boxart_log("Result: Local Cache Success");
-                    // Store a libretro URL for Discord Rich Presence
+                    // Store a public URL for Discord Rich Presence
+                    let cover_key = format!("{}::{}", console, game_name);
                     if let Some(folder) = libretro_systems.first() {
                         let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy();
                         let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&cover_file_name));
-                        store_cover_url(&format!("{}::{}", console, game_name), &url);
+                        store_cover_url(&cover_key, &url);
+                    } else {
+                        // For consoles without libretro (Switch, Wii, Wii U, 3DS): use GameTDB or tinfoil
+                        match console.as_ref() {
+                            "Nintendo Switch" => {
+                                if let Some(id) = extract_title_id(&game_name) {
+                                    let url = format!("https://tinfoil.media/ti/{}/0/0/0", id);
+                                    store_cover_url(&cover_key, &url);
+                                }
+                            }
+                            "Wii" | "GameCube / Wii" | "GameCube" => {
+                                if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
+                                    let url = format!("https://art.gametdb.com/wii/cover/EN/{}.png", id);
+                                    store_cover_url(&cover_key, &url);
+                                }
+                            }
+                            "Wii U" => {
+                                if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
+                                    let url = format!("https://art.gametdb.com/wiiu/coverHQ/EN/{}.jpg", id);
+                                    store_cover_url(&cover_key, &url);
+                                }
+                            }
+                            "Nintendo 3DS" => {
+                                if let Some(folder) = vec!["Nintendo - Nintendo 3DS"].first() {
+                                    let cover_file_name = path.file_stem().unwrap_or_default().to_string_lossy();
+                                    let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&cover_file_name));
+                                    store_cover_url(&cover_key, &url);
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
                     let mime = if path.extension().and_then(|e| e.to_str()) == Some("webp") { "image/webp" } else { "image/png" };
@@ -1486,6 +1517,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     if let Ok(bytes) = resp.bytes().await {
                         if bytes.len() >= min_size {
                             write_to_boxart_log(&format!("Result: Tinfoil.media Success (ID: {})", id));
+                            store_cover_url(&format!("{}::{}", console, game_name), &url);
                             if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
                                 return Ok(data_url);
                             }
@@ -1713,6 +1745,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         if let Ok(bytes) = resp.bytes().await {
                             if bytes.len() >= min_size {
                                 write_to_boxart_log(&format!("Result: GameTDB Success ({}/{})", region, id));
+                                store_cover_url(&format!("{}::{}", console, game_name), &url);
                                 if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
                                     return Ok(data_url);
                                 }
