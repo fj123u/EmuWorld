@@ -1478,7 +1478,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                         match console.as_ref() {
                             "Nintendo Switch" => {
                                 if let Some(id) = extract_title_id(&game_name) {
-                                    store_cover_url(&cover_key, &format!("https://tinfoil.media/ti/{}/0/0/0", id));
+                                    store_cover_url(&cover_key, &format!("https://tinfoil.media/ti/{}/800/800", id));
                                     true
                                 } else { false }
                             }
@@ -1544,7 +1544,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                     if let Ok(bytes) = resp.bytes().await {
                         if bytes.len() >= min_size {
                             write_to_boxart_log(&format!("Result: Tinfoil.media Success (ID: {})", id));
-                            store_cover_url(&format!("{}::{}", console, game_name), &url);
+                            store_cover_url(&format!("{}::{}", console, game_name), &format!("https://tinfoil.media/ti/{}/800/800", id));
                             if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
                                 return Ok(data_url);
                             }
