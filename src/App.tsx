@@ -1372,6 +1372,9 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.1.1", date: "2026-06-01", changes: [
+      "🐛 Fix lancement 3DS: Azahar ne supporte pas --fullscreen en CLI, le jeu se lance correctement maintenant",
+    ] },
     { version: "2.1.0", date: "2026-06-01", changes: [
       "🎮 Ajout émulateurs: Azahar (3DS), Xenia (Xbox 360), Atari 5200/7800/Jaguar/Lynx, TurboGrafx-16/CD, CD-i",
       "💾 RetroArch partagé: une seule installation pour tous les cores (~9GB économisés)",
