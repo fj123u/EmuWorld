@@ -763,7 +763,7 @@ async fn launch_emulator(
             "mgba" => { cmd.arg("-f"); },
             "rpcs3" => { cmd.arg("--no-gui"); cmd.arg("--fullscreen"); },
             "ryubing" => { cmd.arg("--fullscreen"); },
-            "azahar" => { cmd.arg("--fullscreen"); },
+            "azahar" => { /* no fullscreen flag — azahar doesn't support CLI fullscreen */ },
             "melonds" => { cmd.arg("--fullscreen"); },
             "project64" => { cmd.arg("--fullscreen"); },
             "xemu" => { cmd.arg("-full-screen"); },
