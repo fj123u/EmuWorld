@@ -596,8 +596,30 @@ async fn launch_emulator(
         let ra_exe = find_executable(&ra_dir, "retroarch.exe");
         if let Some(exe) = ra_exe {
             println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
-            // Use the exe's parent dir as the effective RA dir (handles nested folders like RetroArch-Win64/)
             let effective_ra_dir = exe.parent().unwrap_or(&ra_dir).to_path_buf();
+            // Auto-download missing RA core if needed
+            if let Some(core_name) = ra_core {
+                let cores_dir = effective_ra_dir.join("cores");
+                fs::create_dir_all(&cores_dir).ok();
+                if !cores_dir.join(core_name).exists() {
+                    println!("[Launch] Core '{}' missing — downloading...", core_name);
+                    let correct_url = format!("https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip", core_name);
+                    if let Ok(dl_client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
+                        if let Ok(resp) = dl_client.get(&correct_url).send().await {
+                            if resp.status().is_success() {
+                                if let Ok(data) = resp.bytes().await {
+                                    let tmp = effective_ra_dir.join("_core_tmp.zip");
+                                    if fs::write(&tmp, &data).is_ok() {
+                                        let _ = extract_zip(&tmp, &cores_dir);
+                                        fs::remove_file(&tmp).ok();
+                                        println!("[Launch] Core '{}' installed", core_name);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             // Inject RA credentials into retroarch.cfg next to the exe
             let cfg_path = effective_ra_dir.join("retroarch.cfg");
             let cfg_content = fs::read_to_string(&cfg_path).unwrap_or_default();
