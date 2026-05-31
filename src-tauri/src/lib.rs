@@ -46,12 +46,24 @@ static BANDWIDTH_LIMIT_KBPS: AtomicU64 = AtomicU64::new(0);
 static COVER_URLS: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();
 
 fn cover_urls() -> &'static Mutex<std::collections::HashMap<String, String>> {
-    COVER_URLS.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+    COVER_URLS.get_or_init(|| {
+        let path = emuworld_base_dir().join("cover_urls.json");
+        let map = if let Ok(data) = fs::read_to_string(&path) {
+            serde_json::from_str::<std::collections::HashMap<String, String>>(&data).unwrap_or_default()
+        } else {
+            std::collections::HashMap::new()
+        };
+        Mutex::new(map)
+    })
 }
 
 fn store_cover_url(key: &str, url: &str) {
     if let Ok(mut map) = cover_urls().lock() {
-        map.insert(key.to_string(), url.to_string());
+        if map.get(key).map(|v| v.as_str()) != Some(url) {
+            map.insert(key.to_string(), url.to_string());
+            let path = emuworld_base_dir().join("cover_urls.json");
+            let _ = fs::write(&path, serde_json::to_string(&*map).unwrap_or_default());
+        }
     }
 }
 
@@ -1476,7 +1488,8 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                             }
                             "Wii U" => {
                                 if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
-                                    store_cover_url(&cover_key, &format!("https://art.gametdb.com/wiiu/coverHQ/EN/{}.jpg", id));
+                                    // Try multiple regions for GameTDB
+                                    store_cover_url(&cover_key, &format!("https://art.gametdb.com/wiiu/coverHQ/US/{}.jpg", id));
                                     true
                                 } else { false }
                             }
@@ -2055,7 +2068,7 @@ fn resolve_title_id(name: &str) -> Option<String> {
         (&["1.2.switch"], "01000320000CC000"),
         (&["tomodachi life living"], "010051F0207B2000"),
         // Wii U HD remasters — GameTDB disc IDs (4-char or 6-char, not 16-hex Title IDs)
-        (&["zelda", "wind waker"], "WDKE"),           // Wind Waker HD (US; EUR = WDKP, JP = WDKJ)
+        (&["zelda", "wind waker"], "WDKP"),           // Wind Waker HD (EUR; US = WDKE, JP = WDKJ)
         (&["zelda", "twilight princess"], "BCZP01"),  // Twilight Princess HD (EUR)
         (&["mario kart 8"], "AMKP01"),
         (&["super mario 3d world"], "ARDP01"),
