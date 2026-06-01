@@ -7499,6 +7499,34 @@ export default function App() {
 
                 return (
                   <div className="discover-page">
+                    {versusChallenges.filter(v => v.status === "active").length > 0 && (
+                      <div className="discover-versus">
+                        <h3 className="discover-section-title"><Swords size={16} /> Défis en cours</h3>
+                        <div className="discover-versus__grid">
+                          {versusChallenges.filter(v => v.status === "active").map(v => {
+                            const isChallenger = v.challenger_id === user?.id;
+                            const myProgress = isChallenger ? v.challenger_progress : v.opponent_progress;
+                            const theirProgress = isChallenger ? v.opponent_progress : v.challenger_progress;
+                            const opponent = isChallenger ? v.opponent_profile : v.challenger_profile;
+                            const total = myProgress + theirProgress || 1;
+                            return (
+                              <div key={v.id} className="discover-versus__card gamepad-nav-item">
+                                <div className="discover-versus__title">{v.goal_description}</div>
+                                <div className="discover-versus__bar">
+                                  <div className="discover-versus__bar-me" style={{ width: `${(myProgress / total) * 100}%` }} />
+                                </div>
+                                <div className="discover-versus__scores">
+                                  <span className="discover-versus__me">Toi: <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong></span>
+                                  <span className="discover-versus__them">{opponent?.username || "Adversaire"}: <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong></span>
+                                </div>
+                                {v.ends_at && <div className="discover-versus__timer">Fin : {new Date(v.ends_at).toLocaleDateString("fr-FR")}</div>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {gameOfTheDay && (
                       <div className="discover-hero gamepad-nav-item" onClick={() => handleLaunch(gameOfTheDay)}>
                         <div className="discover-hero__bg" />

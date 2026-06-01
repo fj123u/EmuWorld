@@ -1444,6 +1444,18 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Discover Versus ─── */
+.discover-versus { margin-bottom: 1.5rem; }
+.discover-versus__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.discover-versus__card { background: var(--bg-card); border: 1px solid var(--border-neon); border-radius: 12px; padding: 1rem; }
+.discover-versus__title { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.8rem; }
+.discover-versus__bar { height: 8px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; margin-bottom: 0.6rem; }
+.discover-versus__bar-me { height: 100%; background: linear-gradient(90deg, var(--neon-purple), var(--neon-cyan, var(--neon-purple))); border-radius: 4px; transition: width 0.3s; min-width: 2px; }
+.discover-versus__scores { display: flex; justify-content: space-between; font-size: 0.8rem; }
+.discover-versus__me strong { color: var(--neon-purple); }
+.discover-versus__them strong { opacity: 0.7; }
+.discover-versus__timer { font-size: 0.7rem; opacity: 0.5; margin-top: 0.4rem; text-align: right; }
+
 /* ─── Modal Backdrop ─── */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
 
