@@ -4649,37 +4649,69 @@ async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lo
     let catalog = emulators::get_catalog();
     let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or("Emulator not found")?;
     let config = get_config();
-
-    let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-    let ra_exe = find_executable(&ra_dir, "retroarch.exe")
-        .ok_or("RetroArch not installed — required for netplay")?;
-    let effective_ra_dir = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
-
-    let core_name = emu.core_name.as_deref()
-        .or_else(|| retroachievements::retroarch_core_for_emulator(&emu.id))
-        .ok_or("No RetroArch core available for this emulator")?;
-    let cores_dir = effective_ra_dir.join("cores");
-    let core_path = cores_dir.join(core_name);
-    if !core_path.exists() {
-        return Err(format!("Core '{}' not found in RetroArch cores/", core_name));
-    }
-
     let final_path = rom_path.replace(r"\\?\", "").replace("/", "\\");
-    let mut cmd = Command::new(&ra_exe);
-    cmd.current_dir(&effective_ra_dir);
-    cmd.arg("-L").arg(&core_path);
 
-    if is_host {
-        cmd.arg("--host");
-        cmd.arg("--mitm=netplay.libretro.com");
-        cmd.arg("--nick=EmuWorld-Host");
+    let mut cmd = if emu.id == "dolphin" {
+        // Dolphin netplay via traversal server
+        let dolphin_dir = PathBuf::from(&config.emulators_directory).join("dolphin");
+        let dolphin_exe = find_executable(&dolphin_dir, "Dolphin.exe")
+            .ok_or("Dolphin not installed")?;
+
+        // Configure Dolphin to use traversal mode
+        let dolphin_cfg_dir = dirs::config_dir().unwrap_or_default().join("Dolphin Emulator").join("Config");
+        let dolphin_ini = dolphin_cfg_dir.join("Dolphin.ini");
+        if dolphin_ini.exists() {
+            let mut cfg = std::fs::read_to_string(&dolphin_ini).unwrap_or_default();
+            if cfg.contains("[NetPlay]") {
+                let re = regex::Regex::new(r"TraversalChoice = \w+").unwrap();
+                cfg = re.replace(&cfg, "TraversalChoice = traversal").to_string();
+            } else {
+                cfg.push_str("\n[NetPlay]\nTraversalChoice = traversal\n");
+            }
+            let _ = std::fs::write(&dolphin_ini, &cfg);
+        }
+
+        let mut c = Command::new(&dolphin_exe);
+        c.current_dir(dolphin_exe.parent().unwrap_or(&dolphin_dir));
+        c.arg("-e").arg(&final_path);
+        if is_host {
+            c.arg("--netplay=host");
+        } else {
+            c.arg("--netplay=connect");
+        }
+        c
     } else {
-        cmd.arg("--connect");
-        cmd.arg("netplay.libretro.com");
-        cmd.arg("--mitm=netplay.libretro.com");
-        cmd.arg("--nick=EmuWorld-Client");
-    }
-    cmd.arg(&final_path);
+        // RetroArch netplay via MITM relay
+        let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+        let ra_exe = find_executable(&ra_dir, "retroarch.exe")
+            .ok_or("RetroArch not installed — required for netplay")?;
+        let effective_ra_dir = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
+
+        let core_name = emu.core_name.as_deref()
+            .or_else(|| retroachievements::retroarch_core_for_emulator(&emu.id))
+            .ok_or("No RetroArch core available for this emulator")?;
+        let cores_dir = effective_ra_dir.join("cores");
+        let core_path = cores_dir.join(core_name);
+        if !core_path.exists() {
+            return Err(format!("Core '{}' not found in RetroArch cores/", core_name));
+        }
+
+        let mut c = Command::new(&ra_exe);
+        c.current_dir(&effective_ra_dir);
+        c.arg("-L").arg(&core_path);
+        if is_host {
+            c.arg("--host");
+            c.arg("--mitm=netplay.libretro.com");
+            c.arg("--nick=EmuWorld-Host");
+        } else {
+            c.arg("--connect");
+            c.arg("netplay.libretro.com");
+            c.arg("--mitm=netplay.libretro.com");
+            c.arg("--nick=EmuWorld-Client");
+        }
+        c.arg(&final_path);
+        c
+    };
 
     #[cfg(target_os = "windows")]
     {
@@ -4687,7 +4719,7 @@ async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lo
         cmd.creation_flags(0x08000000);
     }
 
-    println!("[Netplay] Launching as {} for lobby {}", if is_host { "HOST" } else { "CLIENT" }, lobby_id);
+    println!("[Netplay] Launching {} as {} for lobby {}", emu.id, if is_host { "HOST" } else { "CLIENT" }, lobby_id);
     push_log("INFO", &format!("Netplay {} — {}", if is_host { "Host" } else { "Client" }, emu.name));
 
     cmd.spawn().map_err(|e| format!("Failed to launch netplay: {}", e))?;
