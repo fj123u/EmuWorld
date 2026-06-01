@@ -1444,6 +1444,28 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Versus Mode ─── */
+.versus-list { display: flex; flex-direction: column; gap: 0.8rem; }
+.versus-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+.versus-card__header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; color: var(--neon-purple); font-size: 0.85rem; font-weight: 600; }
+.versus-card__game { margin-left: auto; font-size: 0.75rem; opacity: 0.6; font-weight: 400; }
+.versus-card__desc { font-size: 0.8rem; opacity: 0.7; margin: 0 0 0.8rem; }
+.versus-card__scores { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.versus-card__player { text-align: center; flex: 1; }
+.versus-card__player span { display: block; font-size: 0.7rem; opacity: 0.6; }
+.versus-card__player strong { font-size: 1.1rem; color: var(--neon-purple); }
+.versus-card__vs { font-weight: 700; font-size: 0.9rem; opacity: 0.5; }
+.versus-card__actions { display: flex; gap: 0.5rem; margin-top: 0.8rem; }
+.versus-card__timer { font-size: 0.7rem; opacity: 0.5; margin-top: 0.5rem; text-align: right; }
+
+.versus-modal { background: var(--bg-card); border: 1px solid var(--border-neon); border-radius: 16px; padding: 1.5rem; width: 380px; max-width: 90vw; }
+.versus-modal h2 { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1.2rem; font-size: 1.2rem; }
+.versus-modal__field { margin-bottom: 1rem; }
+.versus-modal__field label { display: block; font-size: 0.8rem; opacity: 0.7; margin-bottom: 0.3rem; }
+.versus-modal__select, .versus-modal__input { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 0.8rem; color: var(--text-primary); font-size: 0.9rem; }
+.versus-modal__select:focus, .versus-modal__input:focus { border-color: var(--neon-purple); outline: none; }
+.versus-modal__actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.2rem; }
+
 /* ─── Lobby Panel ─── */
 .lobby-panel { position: fixed; bottom: 20px; right: 20px; width: 300px; background: var(--bg-card); border: 1px solid var(--border-neon); border-radius: 12px; padding: 1rem; z-index: 900; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
 .lobby-panel__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }

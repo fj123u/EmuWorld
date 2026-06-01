@@ -74,6 +74,7 @@ import {
   Calendar,
   BookOpen,
   ThumbsUp,
+  Swords,
 } from "lucide-react";
 
 /* ============================
@@ -3633,6 +3634,58 @@ export default function App() {
     if (guideModal) handleOpenGuide(guideModal.rom);
   }, [user, guideModal, showToast, handleOpenGuide]);
 
+  // ─── Versus Mode ───
+  interface VersusChallenge { id: string; challenger_id: string; opponent_id: string; game_name: string | null; game_console: string | null; challenge_type: string; goal_description: string; duration_days: number; challenger_progress: number; opponent_progress: number; winner_id: string | null; status: string; created_at: string; ends_at: string | null; challenger_profile?: { username: string; avatar_url: string }; opponent_profile?: { username: string; avatar_url: string } }
+  const [versusChallenges, setVersusChallenges] = useState<VersusChallenge[]>([]);
+  const [versusModal, setVersusModal] = useState<{ friendId: string; friendName: string } | null>(null);
+  const [versusForm, setVersusForm] = useState({ type: "playtime" as string, game: "", console: "", days: 7, description: "" });
+
+  const loadVersusChallenges = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase.from("versus_challenges").select("*").or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`).in("status", ["pending", "active"]).order("created_at", { ascending: false });
+    if (data) {
+      const userIds = [...new Set(data.flatMap((v: any) => [v.challenger_id, v.opponent_id]))];
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      setVersusChallenges(data.map((v: any) => ({ ...v, challenger_profile: profileMap.get(v.challenger_id), opponent_profile: profileMap.get(v.opponent_id) })));
+    }
+  }, [user]);
+
+  const handleCreateVersus = useCallback(async () => {
+    if (!user || !versusModal) return;
+    const desc = versusForm.description || (versusForm.type === "playtime" ? `Qui joue le plus${versusForm.game ? ` à ${versusForm.game}` : ""} en ${versusForm.days} jours ?` : versusForm.type === "launches" ? `Qui lance le plus de jeux en ${versusForm.days} jours ?` : `Qui maintient le plus long streak ?`);
+    const endsAt = new Date(Date.now() + versusForm.days * 86400000).toISOString();
+    const { error } = await supabase.from("versus_challenges").insert({
+      challenger_id: user.id,
+      opponent_id: versusModal.friendId,
+      game_name: versusForm.game || null,
+      game_console: versusForm.console || null,
+      challenge_type: versusForm.type,
+      goal_description: desc,
+      duration_days: versusForm.days,
+      ends_at: endsAt,
+    });
+    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
+    showToast(`Défi envoyé à ${versusModal.friendName} !`, "success");
+    setVersusModal(null);
+    setVersusForm({ type: "playtime", game: "", console: "", days: 7, description: "" });
+    loadVersusChallenges();
+  }, [user, versusModal, versusForm, showToast, loadVersusChallenges]);
+
+  const handleAcceptVersus = useCallback(async (id: string) => {
+    await supabase.from("versus_challenges").update({ status: "active" }).eq("id", id);
+    showToast("Défi accepté ! C'est parti !", "success");
+    loadVersusChallenges();
+  }, [showToast, loadVersusChallenges]);
+
+  const handleDeclineVersus = useCallback(async (id: string) => {
+    await supabase.from("versus_challenges").update({ status: "declined" }).eq("id", id);
+    showToast("Défi refusé", "success");
+    loadVersusChallenges();
+  }, [showToast, loadVersusChallenges]);
+
+  useEffect(() => { if (user) loadVersusChallenges(); }, [user, loadVersusChallenges]);
+
   // ─── Lobby / Multiplayer ───
   interface Lobby { id: string; host_id: string; game_name: string; game_console: string; status: string; max_players: number; netplay_code: string | null; created_at: string; members?: LobbyMember[]; host_profile?: { username: string; avatar_url: string } }
   interface LobbyMember { id: string; lobby_id: string; user_id: string; is_ready: boolean; profile?: { username: string; avatar_url: string } }
@@ -6565,6 +6618,9 @@ export default function App() {
                                 {unreadCounts[otherId] > 0 && (
                                   <span className="friend-card__unread">{unreadCounts[otherId]}</span>
                                 )}
+                                <button className="btn btn--ghost btn--sm" title="Défier" onClick={(e) => { e.stopPropagation(); setVersusModal({ friendId: otherId, friendName: f.profile?.username || "Anonyme" }); }}>
+                                  <Swords size={12} />
+                                </button>
                                 <button className="btn btn--ghost btn--sm" title="Comparer" onClick={(e) => { e.stopPropagation(); compareWithFriend(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
                                   <BarChart2 size={12} />
                                 </button>
@@ -6579,6 +6635,50 @@ export default function App() {
                           );
                         })}
                       </div>
+
+                      {/* Versus Challenges */}
+                      {versusChallenges.length > 0 && (
+                        <div className="settings__group">
+                          <div className="settings__group-title"><Swords size={16} /> Défis en cours</div>
+                          <div className="versus-list">
+                            {versusChallenges.map(v => {
+                              const isChallenger = v.challenger_id === user?.id;
+                              const myProgress = isChallenger ? v.challenger_progress : v.opponent_progress;
+                              const theirProgress = isChallenger ? v.opponent_progress : v.challenger_progress;
+                              const opponent = isChallenger ? v.opponent_profile : v.challenger_profile;
+                              const isPending = v.status === "pending" && v.opponent_id === user?.id;
+                              return (
+                                <div key={v.id} className="versus-card gamepad-nav-item">
+                                  <div className="versus-card__header">
+                                    <Swords size={14} />
+                                    <span className="versus-card__type">{v.challenge_type === "playtime" ? "Temps de jeu" : v.challenge_type === "launches" ? "Lancements" : "Streak"}</span>
+                                    {v.game_name && <span className="versus-card__game">{v.game_name}</span>}
+                                  </div>
+                                  <p className="versus-card__desc">{v.goal_description}</p>
+                                  <div className="versus-card__scores">
+                                    <div className="versus-card__player">
+                                      <span>Toi</span>
+                                      <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong>
+                                    </div>
+                                    <span className="versus-card__vs">VS</span>
+                                    <div className="versus-card__player">
+                                      <span>{opponent?.username || "Adversaire"}</span>
+                                      <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong>
+                                    </div>
+                                  </div>
+                                  {isPending && (
+                                    <div className="versus-card__actions">
+                                      <button className="btn btn--success btn--sm" onClick={() => handleAcceptVersus(v.id)}>Accepter</button>
+                                      <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>Refuser</button>
+                                    </div>
+                                  )}
+                                  {v.ends_at && <div className="versus-card__timer">Fin : {new Date(v.ends_at).toLocaleDateString("fr-FR")}</div>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Activity Feed */}
                       {activityFeed.length > 0 && (
@@ -7847,6 +7947,39 @@ export default function App() {
       </AnimatePresence>
 
       {/* Right-click context menu on game cards */}
+      {versusModal && (
+        <div className="modal-backdrop" onClick={() => setVersusModal(null)}>
+          <motion.div className="versus-modal" onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+            <h2><Swords size={20} /> Défier {versusModal.friendName}</h2>
+            <div className="versus-modal__field">
+              <label>Type de défi</label>
+              <select value={versusForm.type} onChange={(e) => setVersusForm({ ...versusForm, type: e.target.value })} className="versus-modal__select gamepad-nav-item">
+                <option value="playtime">Temps de jeu</option>
+                <option value="launches">Nombre de lancements</option>
+                <option value="streak">Plus long streak</option>
+              </select>
+            </div>
+            <div className="versus-modal__field">
+              <label>Jeu spécifique (optionnel)</label>
+              <input className="versus-modal__input gamepad-nav-item" placeholder="Tous les jeux..." value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
+            </div>
+            <div className="versus-modal__field">
+              <label>Durée</label>
+              <select value={versusForm.days} onChange={(e) => setVersusForm({ ...versusForm, days: parseInt(e.target.value) })} className="versus-modal__select gamepad-nav-item">
+                <option value={3}>3 jours</option>
+                <option value={7}>7 jours</option>
+                <option value={14}>14 jours</option>
+                <option value={30}>30 jours</option>
+              </select>
+            </div>
+            <div className="versus-modal__actions">
+              <button className="btn btn--ghost" onClick={() => setVersusModal(null)}>Annuler</button>
+              <button className="btn btn--primary" onClick={handleCreateVersus}><Swords size={14} /> Envoyer le défi</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {currentLobby && (
         <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <div className="lobby-panel__header">
