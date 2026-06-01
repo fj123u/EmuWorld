@@ -3702,12 +3702,16 @@ export default function App() {
 
   const handleLeaveLobby = useCallback(async () => {
     if (!currentLobby || !user) return;
-    await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id).eq("user_id", user.id);
     if (currentLobby.host_id === user.id) {
-      await supabase.from("lobbies").update({ status: "closed" }).eq("id", currentLobby.id);
+      await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id);
+      await supabase.from("lobbies").delete().eq("id", currentLobby.id);
+      showToast("Lobby dissous", "success");
+    } else {
+      await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id).eq("user_id", user.id);
+      showToast("Tu as quitté le lobby", "success");
     }
     setCurrentLobby(null);
-  }, [currentLobby, user]);
+  }, [currentLobby, user, showToast]);
 
   useEffect(() => { if (user) loadLobbyInvites(); }, [user, loadLobbyInvites]);
 
@@ -7847,7 +7851,9 @@ export default function App() {
         <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <div className="lobby-panel__header">
             <h3>Lobby</h3>
-            <button className="btn btn--ghost btn--sm" onClick={handleLeaveLobby}><X size={14} /></button>
+            <button className="btn btn--danger btn--sm" onClick={handleLeaveLobby}>
+              {currentLobby.host_id === user?.id ? "Dissoudre" : "Quitter"}
+            </button>
           </div>
           <div className="lobby-panel__game">
             <strong>{currentLobby.game_name}</strong>
