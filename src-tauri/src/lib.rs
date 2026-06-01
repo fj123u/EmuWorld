@@ -4651,7 +4651,44 @@ async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lo
     let config = get_config();
     let final_path = rom_path.replace(r"\\?\", "").replace("/", "\\");
 
-    let mut cmd = if emu.id == "dolphin" {
+    let mut cmd = if emu.id == "ppsspp" {
+        // PPSSPP adhoc multiplayer — configure adhoc server then launch game
+        let ppsspp_dir = PathBuf::from(&config.emulators_directory).join("ppsspp");
+        let ppsspp_exe = find_executable(&ppsspp_dir, "PPSSPPWindows64.exe")
+            .ok_or("PPSSPP not installed")?;
+        let exe_dir = ppsspp_exe.parent().unwrap_or(&ppsspp_dir);
+        let memstick = exe_dir.join("memstick");
+        let psp_dir = memstick.join("PSP").join("SYSTEM");
+        fs::create_dir_all(&psp_dir).ok();
+        let ini_path = psp_dir.join("ppsspp.ini");
+        let mut ini = fs::read_to_string(&ini_path).unwrap_or_default();
+        // Enable networking + set adhoc server
+        let net_settings = [
+            ("Enable", "True"),
+            ("EnableWlan", "True"),
+            ("EnableAdhocServer", "False"),
+            ("proAdhocServer", "myneighborsushicat.com"),
+            ("PortOffset", "0"),
+            ("MacAddress", if is_host { "01:02:03:04:05:06" } else { "01:02:03:04:05:07" }),
+        ];
+        for (key, val) in net_settings {
+            let pattern = format!("{} = ", key);
+            if let Some(pos) = ini.find(&pattern) {
+                let end = ini[pos..].find('\n').map(|p| pos + p).unwrap_or(ini.len());
+                ini.replace_range(pos..end, &format!("{} = {}", key, val));
+            } else {
+                if !ini.contains("[Network]") { ini.push_str("\n[Network]\n"); }
+                ini.push_str(&format!("{} = {}\n", key, val));
+            }
+        }
+        let _ = fs::write(&ini_path, &ini);
+
+        let mut c = Command::new(&ppsspp_exe);
+        c.current_dir(exe_dir);
+        c.arg(&final_path);
+        c.arg("--fullscreen");
+        c
+    } else if emu.id == "dolphin" {
         // Dolphin netplay via traversal server
         let dolphin_dir = PathBuf::from(&config.emulators_directory).join("dolphin");
         let dolphin_exe = find_executable(&dolphin_dir, "Dolphin.exe")
