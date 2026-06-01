@@ -359,7 +359,7 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends" | "challenges" | "wrap";
+type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends" | "challenges" | "wrap" | "marketplace";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -3633,6 +3633,60 @@ export default function App() {
     if (guideModal) handleOpenGuide(guideModal.rom);
   }, [user, guideModal, showToast, handleOpenGuide]);
 
+  // ─── Marketplace ───
+  interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }
+  const [marketplaceThemes, setMarketplaceThemes] = useState<CommunityTheme[]>([]);
+  const [marketplaceLoading, setMarketplaceLoading] = useState(false);
+  const [publishingTheme, setPublishingTheme] = useState(false);
+  const [newThemeName, setNewThemeName] = useState("");
+  const [newThemeDesc, setNewThemeDesc] = useState("");
+
+  const loadMarketplaceThemes = useCallback(async () => {
+    setMarketplaceLoading(true);
+    const { data } = await supabase.from("community_themes").select("*").order("downloads", { ascending: false }).limit(50);
+    if (data) {
+      const userIds = [...new Set(data.map((t: any) => t.user_id))];
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+      setMarketplaceThemes(data.map((t: any) => ({ ...t, profile: profileMap.get(t.user_id) })));
+    }
+    setMarketplaceLoading(false);
+  }, []);
+
+  const handlePublishTheme = useCallback(async () => {
+    if (!user || !newThemeName.trim()) return;
+    const themeData = {
+      user_id: user.id,
+      name: newThemeName.trim(),
+      description: newThemeDesc.trim(),
+      base_theme: theme,
+      accent_hue: accentHue,
+      custom_css: {},
+    };
+    const { error } = await supabase.from("community_themes").insert(themeData);
+    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
+    showToast("Thème publié !", "success");
+    setPublishingTheme(false);
+    setNewThemeName("");
+    setNewThemeDesc("");
+    loadMarketplaceThemes();
+  }, [user, newThemeName, newThemeDesc, theme, accentHue, loadMarketplaceThemes]);
+
+  const handleApplyMarketplaceTheme = useCallback(async (t: CommunityTheme) => {
+    setTheme(t.base_theme);
+    if (t.accent_hue !== null) setAccentHue(t.accent_hue);
+    else setAccentHue(null);
+    await supabase.rpc("increment_theme_downloads", { theme_id: t.id });
+    showToast(`Thème "${t.name}" appliqué !`, "success");
+  }, [setTheme, setAccentHue]);
+
+  const handleDeleteMarketplaceTheme = useCallback(async (id: string) => {
+    await supabase.from("community_themes").delete().eq("id", id);
+    loadMarketplaceThemes();
+  }, [loadMarketplaceThemes]);
+
+  useEffect(() => { if (page === "marketplace") loadMarketplaceThemes(); }, [page, loadMarketplaceThemes]);
+
   const handleSaveNotes = useCallback(async () => {
     if (!notesModal) return;
     try {
@@ -4646,6 +4700,13 @@ export default function App() {
             >
               <span className="sidebar__item-icon"><Settings size={16} /></span>
               {t("nav.settings")}
+            </button>
+            <button
+              className={`sidebar__item ${page === "marketplace" ? "sidebar__item--active" : ""}`}
+              onClick={() => setPage("marketplace")}
+            >
+              <span className="sidebar__item-icon"><Palette size={16} /></span>
+              Marketplace
             </button>
             <button
               className={`sidebar__item ${page === "changelogs" ? "sidebar__item--active" : ""}`}
@@ -7358,6 +7419,85 @@ export default function App() {
                   </div>
                 );
               })()}
+
+              {page === "marketplace" && (
+                <div className="marketplace">
+                  <div className="marketplace__header">
+                    <h1 className="page-title">Marketplace</h1>
+                    <p className="page-subtitle">Thèmes partagés par la communauté</p>
+                    {user && (
+                      <button className="btn btn--primary btn--sm" onClick={() => setPublishingTheme(true)}>
+                        <Palette size={14} /> Publier mon thème
+                      </button>
+                    )}
+                  </div>
+
+                  {publishingTheme && (
+                    <motion.div className="marketplace__publish" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+                      <input
+                        className="marketplace__input gamepad-nav-item"
+                        placeholder="Nom du thème..."
+                        value={newThemeName}
+                        onChange={(e) => setNewThemeName(e.target.value)}
+                        autoFocus
+                      />
+                      <input
+                        className="marketplace__input gamepad-nav-item"
+                        placeholder="Description (optionnel)..."
+                        value={newThemeDesc}
+                        onChange={(e) => setNewThemeDesc(e.target.value)}
+                      />
+                      <div className="marketplace__publish-info">
+                        Thème actuel : <strong>{theme === "default" ? "Discord Dark" : theme}</strong>
+                        {accentHue !== null && <> + accent <span className="marketplace__hue-badge" style={{ background: `hsl(${accentHue}, 80%, 65%)` }} /></>}
+                      </div>
+                      <div className="marketplace__publish-actions">
+                        <button className="btn btn--ghost btn--sm" onClick={() => setPublishingTheme(false)}>Annuler</button>
+                        <button className="btn btn--primary btn--sm" onClick={handlePublishTheme} disabled={!newThemeName.trim()}>Publier</button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {marketplaceLoading ? (
+                    <div className="loading-spinner" style={{ margin: "3rem auto" }}><span className="spinner" /></div>
+                  ) : (
+                    <div className="marketplace__grid">
+                      {marketplaceThemes.map((t) => (
+                        <motion.div key={t.id} className="marketplace__card gamepad-nav-item" whileHover={{ scale: 1.02 }}>
+                          <div className="marketplace__card-preview" data-theme={t.base_theme !== "default" ? t.base_theme : undefined}>
+                            <div className="marketplace__card-colors">
+                              <span className="marketplace__swatch" style={{ background: t.accent_hue !== null ? `hsl(${t.accent_hue}, 80%, 65%)` : t.base_theme === "midnight" ? "#3b82f6" : t.base_theme === "retro" ? "#22c55e" : t.base_theme === "sakura" ? "#ec4899" : t.base_theme === "sunset" ? "#f59e0b" : t.base_theme === "oled" ? "#ffffff" : "#5865F2" }} />
+                              <span className="marketplace__swatch marketplace__swatch--dark" />
+                            </div>
+                          </div>
+                          <div className="marketplace__card-info">
+                            <h3 className="marketplace__card-name">{t.name}</h3>
+                            {t.description && <p className="marketplace__card-desc">{t.description}</p>}
+                            <div className="marketplace__card-meta">
+                              {t.profile?.avatar_url && <img src={t.profile.avatar_url} className="marketplace__card-avatar" alt="" />}
+                              <span className="marketplace__card-author">{t.profile?.username || "Anonyme"}</span>
+                              <span className="marketplace__card-downloads"><Download size={12} /> {t.downloads}</span>
+                            </div>
+                          </div>
+                          <div className="marketplace__card-actions">
+                            <button className="btn btn--primary btn--sm" onClick={() => handleApplyMarketplaceTheme(t)}>Appliquer</button>
+                            {user?.id === t.user_id && (
+                              <button className="btn btn--danger btn--sm" onClick={() => handleDeleteMarketplaceTheme(t.id)}><Trash2 size={12} /></button>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))}
+                      {marketplaceThemes.length === 0 && !marketplaceLoading && (
+                        <div className="marketplace__empty">
+                          <Palette size={48} />
+                          <p>Aucun thème partagé pour le moment.</p>
+                          <p>Sois le premier à publier ton thème !</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {page === "changelogs" && (
                 <div className="changelogs">

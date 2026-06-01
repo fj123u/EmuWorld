@@ -1444,6 +1444,34 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Marketplace ─── */
+.marketplace { padding: 1.5rem 0; }
+.marketplace__header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+.marketplace__header .page-title { margin: 0; }
+.marketplace__header .page-subtitle { flex: 1; opacity: 0.6; margin: 0; }
+.marketplace__publish { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.2rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.marketplace__input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 0.6rem 1rem; color: var(--text-primary); font-size: 0.9rem; outline: none; }
+.marketplace__input:focus { border-color: var(--neon-purple); }
+.marketplace__publish-info { font-size: 0.85rem; opacity: 0.7; }
+.marketplace__hue-badge { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: middle; margin-left: 4px; }
+.marketplace__publish-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+.marketplace__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.marketplace__card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.2s; }
+.marketplace__card:hover { border-color: var(--neon-purple); }
+.marketplace__card-preview { height: 60px; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; padding: 0.8rem; }
+.marketplace__card-colors { display: flex; gap: 8px; }
+.marketplace__swatch { width: 32px; height: 32px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.1); }
+.marketplace__swatch--dark { background: var(--bg-primary, #1a1a2e); }
+.marketplace__card-info { padding: 1rem; flex: 1; }
+.marketplace__card-name { margin: 0 0 0.3rem; font-size: 1rem; }
+.marketplace__card-desc { margin: 0 0 0.5rem; font-size: 0.8rem; opacity: 0.6; }
+.marketplace__card-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; opacity: 0.7; }
+.marketplace__card-avatar { width: 18px; height: 18px; border-radius: 50%; }
+.marketplace__card-downloads { margin-left: auto; display: flex; align-items: center; gap: 3px; }
+.marketplace__card-actions { padding: 0.8rem 1rem; border-top: 1px solid var(--border); display: flex; gap: 0.5rem; }
+.marketplace__empty { grid-column: 1 / -1; text-align: center; padding: 3rem; opacity: 0.5; }
+.marketplace__empty svg { margin-bottom: 1rem; opacity: 0.3; }
+
 .changelogs {
   display: flex;
   flex-direction: column;
