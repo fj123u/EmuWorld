@@ -1444,6 +1444,20 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Lobby Panel ─── */
+.lobby-panel { position: fixed; bottom: 20px; right: 20px; width: 300px; background: var(--bg-card); border: 1px solid var(--border-neon); border-radius: 12px; padding: 1rem; z-index: 900; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+.lobby-panel__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; }
+.lobby-panel__header h3 { margin: 0; font-size: 1rem; color: var(--neon-purple); }
+.lobby-panel__game { margin-bottom: 0.8rem; font-size: 0.85rem; }
+.lobby-panel__game strong { display: block; }
+.lobby-panel__game span { opacity: 0.6; font-size: 0.75rem; }
+.lobby-panel__members { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.8rem; }
+.lobby-panel__member { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; background: var(--bg-secondary); border-radius: 6px; font-size: 0.8rem; }
+.lobby-panel__member--ready { border-left: 3px solid #22c55e; }
+.lobby-panel__status { font-size: 0.75rem; opacity: 0.7; }
+.lobby-panel__actions { display: flex; flex-direction: column; gap: 0.5rem; }
+.lobby-panel__invite-select { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem; color: var(--text-primary); font-size: 0.8rem; }
+
 /* ─── Marketplace ─── */
 .marketplace { padding: 1.5rem 0; }
 .marketplace__header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }

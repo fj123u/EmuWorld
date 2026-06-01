@@ -4645,6 +4645,56 @@ async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
 
 
 #[tauri::command]
+async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lobby_id: String) -> Result<String, String> {
+    let catalog = emulators::get_catalog();
+    let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or("Emulator not found")?;
+    let config = get_config();
+
+    let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
+    let ra_exe = find_executable(&ra_dir, "retroarch.exe")
+        .ok_or("RetroArch not installed — required for netplay")?;
+    let effective_ra_dir = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
+
+    let core_name = emu.core_name.as_deref()
+        .or_else(|| retroachievements::retroarch_core_for_emulator(&emu.id))
+        .ok_or("No RetroArch core available for this emulator")?;
+    let cores_dir = effective_ra_dir.join("cores");
+    let core_path = cores_dir.join(core_name);
+    if !core_path.exists() {
+        return Err(format!("Core '{}' not found in RetroArch cores/", core_name));
+    }
+
+    let final_path = rom_path.replace(r"\\?\", "").replace("/", "\\");
+    let mut cmd = Command::new(&ra_exe);
+    cmd.current_dir(&effective_ra_dir);
+    cmd.arg("-L").arg(&core_path);
+
+    if is_host {
+        cmd.arg("--host");
+        cmd.arg("--mitm=netplay.libretro.com");
+        cmd.arg("--nick=EmuWorld-Host");
+    } else {
+        cmd.arg("--connect");
+        cmd.arg("netplay.libretro.com");
+        cmd.arg("--mitm=netplay.libretro.com");
+        cmd.arg("--nick=EmuWorld-Client");
+    }
+    cmd.arg(&final_path);
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+
+    println!("[Netplay] Launching as {} for lobby {}", if is_host { "HOST" } else { "CLIENT" }, lobby_id);
+    push_log("INFO", &format!("Netplay {} — {}", if is_host { "Host" } else { "Client" }, emu.name));
+
+    cmd.spawn().map_err(|e| format!("Failed to launch netplay: {}", e))?;
+    Ok(format!("Netplay {} started", if is_host { "host" } else { "client" }))
+}
+
+#[tauri::command]
 fn get_logs() -> Vec<String> {
     app_logs().lock().map(|l| l.clone()).unwrap_or_default()
 }
@@ -5010,6 +5060,7 @@ pub fn run() {
             get_logs,
             clear_logs,
             get_cover_url,
+            launch_netplay,
             start_oauth_server,
             create_overlay_window,
             close_overlay_window,

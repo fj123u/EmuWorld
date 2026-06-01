@@ -3633,6 +3633,84 @@ export default function App() {
     if (guideModal) handleOpenGuide(guideModal.rom);
   }, [user, guideModal, showToast, handleOpenGuide]);
 
+  // ─── Lobby / Multiplayer ───
+  interface Lobby { id: string; host_id: string; game_name: string; game_console: string; status: string; max_players: number; netplay_code: string | null; created_at: string; members?: LobbyMember[]; host_profile?: { username: string; avatar_url: string } }
+  interface LobbyMember { id: string; lobby_id: string; user_id: string; is_ready: boolean; profile?: { username: string; avatar_url: string } }
+  const [currentLobby, setCurrentLobby] = useState<Lobby | null>(null);
+  const [lobbyInvites, setLobbyInvites] = useState<Lobby[]>([]);
+
+  const loadLobbyInvites = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase.from("lobby_members").select("lobby_id").eq("user_id", user.id);
+    if (data && data.length > 0) {
+      const lobbyIds = data.map((m: any) => m.lobby_id);
+      const { data: lobbies } = await supabase.from("lobbies").select("*").in("id", lobbyIds).eq("status", "waiting");
+      if (lobbies && lobbies.length > 0) {
+        const hostIds = [...new Set(lobbies.map((l: any) => l.host_id))];
+        const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", hostIds);
+        const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
+        setLobbyInvites(lobbies.map((l: any) => ({ ...l, host_profile: profileMap.get(l.host_id) })));
+      }
+    }
+  }, [user]);
+
+  const handleCreateLobby = useCallback(async (rom: RomFile) => {
+    if (!user) return;
+    const { data, error } = await supabase.from("lobbies").insert({
+      host_id: user.id,
+      game_name: rom.name,
+      game_console: rom.console,
+    }).select().single();
+    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
+    await supabase.from("lobby_members").insert({ lobby_id: data.id, user_id: user.id, is_ready: true });
+    setCurrentLobby({ ...data, members: [{ id: "", lobby_id: data.id, user_id: user.id, is_ready: true }] });
+    showToast("Lobby créé ! Invite un ami.", "success");
+  }, [user, showToast]);
+
+  const handleInviteToLobby = useCallback(async (friendId: string) => {
+    if (!currentLobby) return;
+    const { error } = await supabase.from("lobby_members").insert({ lobby_id: currentLobby.id, user_id: friendId });
+    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
+    showToast("Invitation envoyée !", "success");
+  }, [currentLobby, showToast]);
+
+  const handleJoinLobby = useCallback(async (lobbyId: string) => {
+    if (!user) return;
+    await supabase.from("lobby_members").upsert({ lobby_id: lobbyId, user_id: user.id, is_ready: false });
+    const { data } = await supabase.from("lobbies").select("*").eq("id", lobbyId).single();
+    const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", lobbyId);
+    if (data) setCurrentLobby({ ...data, members: members || [] });
+  }, [user]);
+
+  const handleReadyLobby = useCallback(async () => {
+    if (!currentLobby || !user) return;
+    await supabase.from("lobby_members").update({ is_ready: true }).eq("lobby_id", currentLobby.id).eq("user_id", user.id);
+    const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
+    setCurrentLobby({ ...currentLobby, members: members || [] });
+    const allReady = (members || []).every((m: any) => m.is_ready);
+    if (allReady && (members || []).length >= 2) {
+      await supabase.from("lobbies").update({ status: "ready" }).eq("id", currentLobby.id);
+      showToast("Tous les joueurs sont prêts ! Lancement du netplay...", "success");
+      const isHost = currentLobby.host_id === user.id;
+      const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
+      if (rom) {
+        const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
+        if (emu) invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost, lobbyId: currentLobby.id }).catch(() => {});
+      }
+    }
+  }, [currentLobby, user, roms, showToast]);
+
+  const handleLeaveLobby = useCallback(async () => {
+    if (!currentLobby || !user) return;
+    await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id).eq("user_id", user.id);
+    if (currentLobby.host_id === user.id) {
+      await supabase.from("lobbies").update({ status: "closed" }).eq("id", currentLobby.id);
+    }
+    setCurrentLobby(null);
+  }, [currentLobby, user]);
+
+  useEffect(() => { if (user) loadLobbyInvites(); }, [user, loadLobbyInvites]);
+
   // ─── Marketplace ───
   interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }
   const [marketplaceThemes, setMarketplaceThemes] = useState<CommunityTheme[]>([]);
@@ -7765,6 +7843,42 @@ export default function App() {
       </AnimatePresence>
 
       {/* Right-click context menu on game cards */}
+      {currentLobby && (
+        <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+          <div className="lobby-panel__header">
+            <h3>Lobby</h3>
+            <button className="btn btn--ghost btn--sm" onClick={handleLeaveLobby}><X size={14} /></button>
+          </div>
+          <div className="lobby-panel__game">
+            <strong>{currentLobby.game_name}</strong>
+            <span>{currentLobby.game_console}</span>
+          </div>
+          <div className="lobby-panel__members">
+            {(currentLobby.members || []).map((m, i) => (
+              <div key={m.user_id || i} className={`lobby-panel__member ${m.is_ready ? "lobby-panel__member--ready" : ""}`}>
+                <span>{m.user_id === user?.id ? "Toi" : (m.profile?.username || "Joueur")}</span>
+                <span className="lobby-panel__status">{m.is_ready ? "✓ Prêt" : "En attente..."}</span>
+              </div>
+            ))}
+          </div>
+          <div className="lobby-panel__actions">
+            {currentLobby.host_id === user?.id && friends.length > 0 && (
+              <select className="lobby-panel__invite-select" onChange={(e) => { if (e.target.value) handleInviteToLobby(e.target.value); e.target.value = ""; }}>
+                <option value="">Inviter un ami...</option>
+                {friends.map(f => {
+                  const friendId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
+                  if ((currentLobby.members || []).some(m => m.user_id === friendId)) return null;
+                  return <option key={friendId} value={friendId}>{f.profile?.username || "Ami"}</option>;
+                })}
+              </select>
+            )}
+            {!(currentLobby.members || []).find(m => m.user_id === user?.id)?.is_ready && (
+              <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>Je suis prêt !</button>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       {romContextMenu && (
         <div className="rom-context-overlay" onClick={() => setRomContextMenu(null)}>
           <div className="rom-context-menu" style={{ left: romContextMenu.x, top: romContextMenu.y }} onClick={(e) => e.stopPropagation()}>
@@ -7810,6 +7924,11 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleShowRecommendations(romContextMenu.rom); }}>
               <Sparkles size={14} /> Jeux similaires
             </button>
+            {user && (
+              <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleCreateLobby(romContextMenu.rom); }}>
+                <Users size={14} /> Créer un lobby
+              </button>
+            )}
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Trash2 size={14} /> Supprimer
