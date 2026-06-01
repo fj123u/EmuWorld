@@ -1444,6 +1444,9 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Modal Backdrop ─── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
+
 /* ─── Versus Mode ─── */
 .versus-list { display: flex; flex-direction: column; gap: 0.8rem; }
 .versus-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
