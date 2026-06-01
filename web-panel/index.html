@@ -1327,7 +1327,7 @@
       const achCardsHtml = ACHIEVEMENTS.map((def) => {
         const unlocked = userAchMap[def.id];
         const rarity = rarityMap[def.id];
-        const rarityPct = rarity ? `${rarity.unlock_percent}%` : '—';
+        const rarityPct = rarity ? `${Math.min(100, rarity.unlock_percent)}%` : '—';
         const rarityCount = rarity ? rarity.unlock_count : 0;
 
         if (def.hidden && !unlocked) {

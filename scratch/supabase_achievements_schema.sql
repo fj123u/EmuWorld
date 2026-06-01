@@ -28,10 +28,10 @@ WITH (security_invoker = true) AS
 SELECT
   achievement_id,
   COUNT(DISTINCT user_id) AS unlock_count,
-  ROUND(
+  LEAST(100, ROUND(
     COUNT(DISTINCT user_id)::numeric / GREATEST((SELECT COUNT(*) FROM profiles), 1) * 100,
     1
-  ) AS unlock_percent
+  )) AS unlock_percent
 FROM user_achievements
 GROUP BY achievement_id;
 
