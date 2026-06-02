@@ -16,10 +16,10 @@
 - [x] **Système d'amis** *(hard)*
   - [x] liste d'amis (table Supabase `friendships` avec statut pending/accepted)
   - [x] présence : "x est en train de jouer à Y"
-  - [ ] inviter dans un lobby
+  - [x] inviter dans un lobby
   - [x] voir le profil
   - [x] chat 1:1
-- [ ] **Multijoueur / lobby** *(très hard, dépend des émulateurs)* — netplay natif supporté uniquement par certains émus (RetroArch, Dolphin, Citra). On pourrait wrapper ces features.
+- [x] **Multijoueur / lobby** *(très hard, dépend des émulateurs)* — netplay natif supporté uniquement par certains émus (RetroArch, Dolphin, Citra). On pourrait wrapper ces features.
 - [x] **Update Automatique** — plugin Tauri updater + signing key + workflow GitHub Actions. L'app check `latest.json` au boot, affiche un bouton "✨ Mise à jour" dans la titlebar, download + relance avec progress. Guide dans [scratch/release_guide.md](scratch/release_guide.md).
 - [x] **leaderboard in app**
 - [x] **Backup cloud des saves** — *Techniquement faisable sans souci* : scanner le dossier saves de chaque émulateur connu, zipper par jeu, uploader sur Supabase Storage (~quelques MB par save). Versioning simple avec timestamp. **Limite** : le plan gratuit Supabase c'est 1 GB de Storage donc ça tient facilement tant que tu restes seul. Si tu veux pousser à des amis c'est peut-être 5 GB (~50 jeux × 100 MB) qui suffisent aussi. Pas lourd, juste chiadé côté UI.
@@ -40,7 +40,7 @@
 
 - [x] Session recap toast à la fermeture de l'émulateur ("Session de 2h34 · +3 launches · total 47h")
 - [x] Discover page avec jeu du jour, suggestion classique du jour, top friends, covers en parallax
-- [ ] Mode "Versus" / challenge 7 jours entre amis
+- [x] Mode "Versus" / challenge 7 jours entre amis
 
 ### 🎨 UI / UX
 
@@ -71,7 +71,6 @@
 - [x] **Notes par jeu** *(quick win)* — champ texte libre sur chaque fiche jeu pour noter des codes, astuces, où on en est, etc.
 - [x] **Rating / Note perso** *(quick win)* — étoiles ou note /10 sur chaque jeu, visible dans la bibliothèque et utilisable comme filtre/tri
 - [x] **Détection auto des ROMs** *(moyen)* — watcher sur le dossier ROMs qui détecte les nouveaux fichiers et propose automatiquement de les ajouter à la bibliothèque sans rescan manuel
-- [ ] **Speed run timer** *(gros)* — chrono intégré avec splits, comparable avec tes propres records et éventuellement ceux des amis (comme livesplit)
 
 ### 🔧 Technique & QoL
 
@@ -89,4 +88,51 @@
 - [x] **Recommandations "Si t'as aimé X..."** *(moyen)* — algo simple basé sur console + genre + tags pour suggérer des jeux similaires depuis le store
 - [x] **Reviews par la communauté** *(gros)* — notes + commentaires publics sur chaque jeu, visibles par tous les utilisateurs EmuWorld
 - [x] **Événements / Challenges hebdo** *(gros)* — "Cette semaine : finir Mega Man 2 en moins de 2h" avec leaderboard dédié et badge reward
-- [ ] **Marketplace de thèmes** *(moyen)* — les utilisateurs partagent leurs thèmes custom, téléchargeables en un clic depuis un onglet "Community"
+- [x] **Marketplace de thèmes** *(moyen)* — les utilisateurs partagent leurs thèmes custom, téléchargeables en un clic depuis un onglet "Community"
+
+## 🚀 V3 — Nouvelles features
+
+### 🎮 Gameplay avancé
+
+- [ ] **Speed run timer** *(gros)* — chrono intégré avec splits personnalisables, PB (personal best) sauvegardé par jeu, comparaison temps réel avec ton record, export/partage du run
+- [ ] **Save states manager** *(moyen)* — gérer les save states RetroArch depuis l'app : prévisualisation screenshot, renommer, dupliquer, partager avec des amis
+- [ ] **Cheats database** *(moyen)* — base de données de codes triches (Action Replay, GameShark) intégrée, activables en un clic avant de lancer le jeu
+- [ ] **Input display / macros** *(moyen)* — afficher les inputs en overlay (pour les streams), enregistrer et rejouer des macros pour les combos
+- [ ] **Rewind intégré** *(quick win)* — activer automatiquement le rewind dans RetroArch au lancement (configurer retroarch.cfg)
+
+### 📱 Multi-plateforme & Cloud
+
+- [ ] **App mobile (companion)** *(très gros)* — app React Native qui affiche ta bibliothèque, stats, achievements, chat amis. Pas d'émulation, juste le social + remote launch
+- [ ] **Cloud gaming** *(très gros)* — streamer un jeu depuis ton PC vers un autre appareil (Moonlight/Sunshine wrapper)
+- [ ] **Synchronisation multi-PC** *(moyen)* — sync config, playtime, saves entre plusieurs installations EmuWorld via Supabase
+- [ ] **Web app** *(gros)* — version web complète (sans émulation) pour consulter sa bibliothèque, stats, amis depuis n'importe où
+
+### 🤖 Intelligence & Automatisation
+
+- [ ] **Auto-config émulateurs** *(moyen)* — détecter le hardware (GPU, CPU) et configurer automatiquement les settings optimaux de chaque émulateur
+- [ ] **ROM health check** *(quick win)* — vérifier l'intégrité des ROMs (checksum), détecter les fichiers corrompus ou incomplets (0 octets)
+- [ ] **Smart playlists** *(moyen)* — playlists auto-générées : "Pas joué depuis 1 mois", "Sessions courtes (<30min)", "Presque terminé", "Co-op entre amis"
+- [ ] **Game recommendations AI** *(gros)* — recommandations basées sur tes habitudes de jeu (temps, genre, console) via un algo ML simple
+
+### 🎨 UI & Experience
+
+- [ ] **Thèmes dynamiques par console** *(quick win)* — quand tu navigues dans une console, les couleurs de l'app changent (bleu Nintendo, vert Xbox, etc.)
+- [ ] **Widgets bureau** *(moyen)* — mini-widgets Windows : dernière session, jeu en cours, achievement récent, streak
+- [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage sur Discord/amis, comparaison avant/après, slideshow
+- [ ] **Profil personnalisable** *(quick win)* — bannière custom, bio, jeu favori épinglé, badges mis en avant sur le profil public
+- [ ] **Animations de déblocage** *(quick win)* — animation plein écran quand un achievement est débloqué (confettis, effet gold)
+
+### 🌐 Social & Communauté
+
+- [ ] **Tournois** *(gros)* — créer des tournois bracket entre amis (single/double elimination), avec seeds et résultats
+- [ ] **Clubs / Guildes** *(gros)* — groupes permanents de joueurs avec chat de groupe, événements, leaderboard interne
+- [ ] **Live spectate** *(très gros)* — regarder un ami jouer en temps réel via stream intégré (basse qualité mais instantané)
+- [ ] **Trading cards** *(moyen)* — cartes virtuelles à collectionner par jeu/achievement, échangeables entre amis
+- [ ] **Système de parrainage** *(quick win)* — inviter des amis avec un code, gagner des badges/récompenses quand ils s'inscrivent
+
+### 🔧 Technique
+
+- [ ] **Plugin system** *(très gros)* — API pour que les utilisateurs créent des extensions (nouveaux émulateurs, sources de covers, intégrations)
+- [ ] **Linux / macOS support** *(gros)* — porter l'app sur les autres OS (Tauri est cross-platform, mais les émulateurs changent)
+- [ ] **Auto-update émulateurs** *(moyen)* — détecter les nouvelles versions des émulateurs installés et proposer la mise à jour
+- [ ] **Performance monitoring** *(quick win)* — afficher FPS, latence, usage RAM/CPU pendant le jeu dans l'overlay
