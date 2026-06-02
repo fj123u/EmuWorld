@@ -1737,14 +1737,15 @@ export default function App() {
     }
   };
 
-  // Social login — uses a local HTTP server to receive the OAuth callback
+  // Social login — uses alwaysdata bounce page + deep-link or local HTTP fallback
   const handleSocialLogin = async (provider: Provider) => {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      // Start a local HTTP server to receive the callback tokens
+      // Start local HTTP server as fallback receiver
       const port = await invoke<number>("start_oauth_server");
-      const redirectUrl = `http://localhost:${port}/callback`;
+      // Use alwaysdata bounce page as primary redirect (works through proxies/firewalls)
+      const redirectUrl = "https://emuworld.alwaysdata.net/auth-callback.html";
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,

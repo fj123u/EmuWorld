@@ -93,41 +93,68 @@
       <span class="spinner"></span>Ouverture d'EmuWorld…
     </div>
     <button class="btn" id="retry" style="display:none" onclick="jump()">↻ Réessayer</button>
+    <div id="manual" style="display:none; margin-top: 16px; text-align: left;">
+      <p style="font-size: 12px; margin-bottom: 8px;">Si l'app ne s'ouvre pas, copie ce token et colle-le dans EmuWorld (Réglages → Coller un token) :</p>
+      <button class="btn" id="copy-btn" onclick="copyToken()" style="width:100%; justify-content: center;">📋 Copier le token</button>
+    </div>
   </div>
 
 <script>
-  // Forward whatever Supabase put in the URL (hash or query) to the desktop
-  // app via the custom scheme. Supabase may use either #access_token=...
-  // (implicit) or ?code=... (PKCE) — we preserve both paths.
-  function buildDeepLink() {
+  function getTokens() {
     const hash = window.location.hash;
     const search = window.location.search;
-    // Prefer the hash fragment when present (Supabase default for OAuth).
-    if (hash && hash.length > 1) {
-      return 'emuworld://auth-callback' + hash;
-    }
-    if (search && search.length > 1) {
-      return 'emuworld://auth-callback' + search;
-    }
-    return 'emuworld://auth-callback';
+    if (hash && hash.length > 1) return hash;
+    if (search && search.length > 1) return search;
+    return '';
+  }
+
+  function buildDeepLink() {
+    return 'emuworld://auth-callback' + getTokens();
+  }
+
+  function tryLocalhost() {
+    // Try common ports used by EmuWorld's OAuth server
+    const tokens = getTokens();
+    const ports = [19847, 19848, 19849, 19850];
+    for (let i = 14000; i < 14020; i++) ports.push(i);
+
+    // Also try to extract port from localStorage if available
+    const img = new Image();
+    let tried = 0;
+
+    ports.forEach(port => {
+      fetch(`http://127.0.0.1:${port}/callback${tokens}`, { mode: 'no-cors' }).catch(() => {});
+    });
   }
 
   function jump() {
     const url = buildDeepLink();
-    // Try to trigger the custom-scheme handler. Most browsers will prompt the
-    // user the first time ("Allow emuworld:// to open this link?") and the
-    // app picks it up from there.
-    window.location.replace(url);
-    // Show a fallback button + close attempt after a short delay in case the
-    // browser blocked the scheme or the user dismissed the prompt.
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.src = url;
+    document.body.appendChild(iframe);
+
+    setTimeout(() => {
+      window.open(url, '_self');
+    }, 300);
+
+    // Also try localhost as fallback
+    tryLocalhost();
+
     setTimeout(() => {
       document.getElementById('status').innerHTML =
-        '✅ EmuWorld devrait s\'être ouverte. Si ce n\'est pas le cas, clique ci-dessous.';
+        '✅ Connecté ! Tu peux fermer cet onglet.';
       document.getElementById('retry').style.display = 'inline-flex';
-      // window.close() is a best-effort — only works when the tab was opened
-      // by a script (some browsers block it otherwise). Non-fatal.
+      document.getElementById('manual').style.display = 'block';
       window.close();
-    }, 1500);
+    }, 2000);
+  }
+
+  function copyToken() {
+    const tokens = getTokens();
+    navigator.clipboard.writeText(tokens).then(() => {
+      document.getElementById('copy-btn').textContent = '✓ Copié !';
+    });
   }
 
   jump();
