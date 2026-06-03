@@ -5150,20 +5150,20 @@ export default function App() {
                       <button className={`btn btn--ghost btn--sm ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title="List view">
                         <List size={14} />
                       </button>
-                      <select className="library-sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+                      <select className="library-sort-select gamepad-nav-item" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
                         <option value="name">A-Z</option>
                         <option value="playtime">{t("library.sortPlaytime")}</option>
                         <option value="rating">{t("library.sortRating")}</option>
                         <option value="last_played">{t("library.sortLastPlayed")}</option>
                         <option value="launches">{t("library.sortLaunches")}</option>
                       </select>
-                      <select className="library-sort-select" value={filterMode} onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}>
+                      <select className="library-sort-select gamepad-nav-item" value={filterMode} onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}>
                         <option value="all">{t("library.filterAll")}</option>
                         <option value="favorites">{t("library.filterFavorites")}</option>
                         <option value="unplayed">{t("library.filterUnplayed")}</option>
                         <option value="rated">{t("library.filterRated")}</option>
                       </select>
-                      <select className="library-sort-select" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
+                      <select className="library-sort-select gamepad-nav-item" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
                         <option value="">Collections</option>
                         {playtime.collections.map(c => (
                           <option key={c.name} value={c.name}>{c.name} ({c.games.length})</option>
@@ -6688,7 +6688,7 @@ export default function App() {
                               const opponent = isChallenger ? v.opponent_profile : v.challenger_profile;
                               const isPending = v.status === "pending" && v.opponent_id === user?.id;
                               return (
-                                <div key={v.id} className="versus-card gamepad-nav-item">
+                                <div key={v.id} className="versus-card gamepad-nav-item" tabIndex={0}>
                                   <div className="versus-card__header">
                                     <Swords size={14} />
                                     <span className="versus-card__type">{v.challenge_type === "playtime" ? "Temps de jeu" : v.challenge_type === "launches" ? "Lancements" : "Streak"}</span>
@@ -7550,7 +7550,7 @@ export default function App() {
                             const opponent = isChallenger ? v.opponent_profile : v.challenger_profile;
                             const total = myProgress + theirProgress || 1;
                             return (
-                              <div key={v.id} className="discover-versus__card gamepad-nav-item">
+                              <div key={v.id} className="discover-versus__card gamepad-nav-item" tabIndex={0}>
                                 <div className="discover-versus__title">{v.goal_description}</div>
                                 <div className="discover-versus__bar">
                                   <div className="discover-versus__bar-me" style={{ width: `${(myProgress / total) * 100}%` }} />
@@ -8021,7 +8021,7 @@ export default function App() {
             <h2><Swords size={20} /> Défier {versusModal.friendName}</h2>
             <div className="versus-modal__field">
               <label>{t("versus.type")}</label>
-              <select value={versusForm.type} onChange={(e) => setVersusForm({ ...versusForm, type: e.target.value })} className="versus-modal__select gamepad-nav-item">
+              <select value={versusForm.type} onChange={(e) => setVersusForm({ ...versusForm, type: e.target.value })} className="versus-modal__select gamepad-nav-item" tabIndex={0}>
                 <option value="playtime">{t("versus.playtime")}</option>
                 <option value="launches">{t("versus.launches")}</option>
                 <option value="streak">{t("versus.streak")}</option>
@@ -8029,11 +8029,11 @@ export default function App() {
             </div>
             <div className="versus-modal__field">
               <label>{t("versus.specificGame")}</label>
-              <input className="versus-modal__input gamepad-nav-item" placeholder="Tous les jeux..." value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
+              <input className="versus-modal__input gamepad-nav-item" tabIndex={0} placeholder="Tous les jeux..." value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
             </div>
             <div className="versus-modal__field">
               <label>{t("versus.duration")}</label>
-              <select value={versusForm.days} onChange={(e) => setVersusForm({ ...versusForm, days: parseInt(e.target.value) })} className="versus-modal__select gamepad-nav-item">
+              <select value={versusForm.days} onChange={(e) => setVersusForm({ ...versusForm, days: parseInt(e.target.value) })} className="versus-modal__select gamepad-nav-item" tabIndex={0}>
                 <option value={3}>3 jours</option>
                 <option value={7}>7 jours</option>
                 <option value={14}>14 jours</option>
@@ -8070,7 +8070,7 @@ export default function App() {
           </div>
           <div className="lobby-panel__actions">
             {currentLobby.host_id === user?.id && friends.length > 0 && (
-              <select className="lobby-panel__invite-select" onChange={(e) => { if (e.target.value) handleInviteToLobby(e.target.value); e.target.value = ""; }}>
+              <select className="lobby-panel__invite-select gamepad-nav-item" onChange={(e) => { if (e.target.value) handleInviteToLobby(e.target.value); e.target.value = ""; }}>
                 <option value="">{t("lobby.inviteFriend")}</option>
                 {friends.map(f => {
                   const friendId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
