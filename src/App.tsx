@@ -3738,6 +3738,11 @@ export default function App() {
 
   const handleReadyLobby = useCallback(async () => {
     if (!currentLobby || !user) return;
+    const hasRom = roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
+    if (!hasRom) {
+      showToast(`Tu n'as pas "${currentLobby.game_name}" dans ta bibliothèque. Télécharge-le d'abord !`, "error");
+      return;
+    }
     await supabase.from("lobby_members").update({ is_ready: true }).eq("lobby_id", currentLobby.id).eq("user_id", user.id);
     const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
     setCurrentLobby({ ...currentLobby, members: members || [] });
