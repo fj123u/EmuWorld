@@ -30,23 +30,31 @@ pub struct EmulatorInfo {
     pub setup_files: Vec<SetupFile>,
 }
 
-/// Returns (github_repo, current_version) for emulators that support auto-update
-pub fn update_info(id: &str) -> Option<(&'static str, &'static str)> {
+/// Source type for update checks
+pub enum UpdateSource {
+    GitHub(&'static str, &'static str),          // (owner/repo, current_version)
+    Forgejo(&'static str, &'static str),         // (api_base_url, current_version)
+    DolphinEmu(&'static str),                    // current_version
+}
+
+/// Returns update source info for emulators that support auto-update
+pub fn update_info(id: &str) -> Option<UpdateSource> {
     match id {
-        "mesen" => Some(("SourMesen/Mesen2", "2.1.1")),
-        "mgba" => Some(("mgba-emu/mgba", "0.10.5")),
-        "snes9x" => Some(("snes9xgit/snes9x", "1.63")),
-        "dolphin" => None, // custom URL, not standard GitHub releases
-        "melonds" => Some(("melonDS-emu/melonDS", "1.1")),
-        "azahar" => Some(("azahar-emu/azahar", "2125.1.2")),
-        "cemu" => Some(("cemu-project/Cemu", "2.6")),
-        "duckstation" => Some(("stenzek/duckstation", "latest")),
-        "pcsx2" => Some(("PCSX2/pcsx2", "2.6.3")),
-        "ppsspp" => Some(("hrydgard/ppsspp", "1.20.3")),
-        "flycast" => Some(("flyinghead/flycast", "2.6")),
-        "xemu" => Some(("xemu-project/xemu", "0.8.135")),
-        "xenia" => Some(("xenia-canary/xenia-canary", "29311dd")),
-        "project64" => Some(("pj64team/Project64-Legacy", "1.6.4")),
+        "mesen" => Some(UpdateSource::GitHub("SourMesen/Mesen2", "2.1.1")),
+        "mgba" => Some(UpdateSource::GitHub("mgba-emu/mgba", "0.10.5")),
+        "snes9x" => Some(UpdateSource::GitHub("snes9xgit/snes9x", "1.63")),
+        "dolphin" => Some(UpdateSource::DolphinEmu("2412")),
+        "melonds" => Some(UpdateSource::GitHub("melonDS-emu/melonDS", "1.1")),
+        "azahar" => Some(UpdateSource::GitHub("azahar-emu/azahar", "2125.1.2")),
+        "cemu" => Some(UpdateSource::GitHub("cemu-project/Cemu", "2.6")),
+        "duckstation" => Some(UpdateSource::GitHub("stenzek/duckstation", "latest")),
+        "pcsx2" => Some(UpdateSource::GitHub("PCSX2/pcsx2", "2.6.3")),
+        "ppsspp" => Some(UpdateSource::GitHub("hrydgard/ppsspp", "1.20.3")),
+        "flycast" => Some(UpdateSource::GitHub("flyinghead/flycast", "2.6")),
+        "xemu" => Some(UpdateSource::GitHub("xemu-project/xemu", "0.8.135")),
+        "xenia" => Some(UpdateSource::GitHub("xenia-canary/xenia-canary", "29311dd")),
+        "project64" => Some(UpdateSource::GitHub("pj64team/Project64-Legacy", "1.6.4")),
+        "ryubing" => Some(UpdateSource::Forgejo("https://git.ryujinx.app/api/v1/repos/projects/Ryubing/releases?limit=1", "1.3.3")),
         _ => None,
     }
 }

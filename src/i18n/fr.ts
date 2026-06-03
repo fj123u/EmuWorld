@@ -413,6 +413,14 @@ const fr = {
     noReviews: "Aucun avis pour ce jeu.",
   },
 
+  // Logs
+  logs: {
+    title: "Fichiers de logs",
+    description: "Les logs sont sauvegardés dans des fichiers quotidiens (auto-suppression après 7 jours).",
+    openFolder: "Ouvrir le dossier",
+    openCurrent: "Ouvrir le log du jour",
+  },
+
   // Updates
   updates: {
     checkButton: "Vérifier les mises à jour",

@@ -415,6 +415,14 @@ const en: Translations = {
     noReviews: "No reviews for this game.",
   },
 
+  // Logs
+  logs: {
+    title: "Log files",
+    description: "Logs are saved to daily files (auto-deleted after 7 days).",
+    openFolder: "Open folder",
+    openCurrent: "Open today's log",
+  },
+
   // Updates
   updates: {
     checkButton: "Check for updates",

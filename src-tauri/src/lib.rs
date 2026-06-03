@@ -71,12 +71,45 @@ fn app_logs() -> &'static Mutex<Vec<String>> {
     APP_LOGS.get_or_init(|| Mutex::new(Vec::new()))
 }
 
+fn log_file_path() -> PathBuf {
+    let logs_dir = emuworld_base_dir().join("logs");
+    fs::create_dir_all(&logs_dir).ok();
+    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    logs_dir.join(format!("emuworld_{}.log", date))
+}
+
 fn push_log(level: &str, msg: &str) {
-    let timestamp = chrono::Local::now().format("%H:%M:%S").to_string();
+    let now = chrono::Local::now();
+    let timestamp = now.format("%H:%M:%S").to_string();
     let entry = format!("[{}] {} — {}", level, timestamp, msg);
+    println!("[LOG] {}", entry);
+
+    // In-memory logs for UI
     if let Ok(mut logs) = app_logs().lock() {
-        logs.push(entry);
+        logs.push(entry.clone());
         if logs.len() > 500 { logs.drain(0..100); }
+    }
+
+    // Write to file
+    let log_path = log_file_path();
+    let file_entry = format!("[{}] [{}] {}\n", now.format("%Y-%m-%d %H:%M:%S"), level, msg);
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+        let _ = file.write_all(file_entry.as_bytes());
+    }
+
+    // Auto-cleanup: delete log files older than 7 days
+    if let Ok(entries) = fs::read_dir(emuworld_base_dir().join("logs")) {
+        let cutoff = now - chrono::Duration::days(7);
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if let Ok(modified) = meta.modified() {
+                    let modified_dt: chrono::DateTime<chrono::Local> = modified.into();
+                    if modified_dt < cutoff {
+                        fs::remove_file(entry.path()).ok();
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -4773,6 +4806,16 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
+#[tauri::command]
+fn get_log_file_path() -> String {
+    log_file_path().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn get_logs_directory() -> String {
+    emuworld_base_dir().join("logs").to_string_lossy().to_string()
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct RomHealthIssue {
     name: String,
@@ -4872,32 +4915,64 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
 
     for emu in &catalog {
         if !installed.contains(&emu.id) { continue; }
-        if let Some((repo, current)) = emulators::update_info(&emu.id) {
-            let api_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
-            if let Ok(resp) = client.get(&api_url)
-                .header("User-Agent", "EmuWorld/2.0")
-                .send().await
-            {
-                if let Ok(json) = resp.json::<serde_json::Value>().await {
-                    if let Some(tag) = json["tag_name"].as_str() {
-                        let latest = tag.trim_start_matches('v').trim_start_matches("release-");
-                        if latest != current && !latest.is_empty() {
-                            let dl_url = json["assets"].as_array()
-                                .and_then(|assets| assets.iter().find(|a| {
-                                    let name = a["name"].as_str().unwrap_or("").to_lowercase();
-                                    name.contains("win") && (name.contains("x64") || name.contains("x86_64")) && !name.contains("pdb") && !name.contains("dbg")
-                                }))
-                                .and_then(|a| a["browser_download_url"].as_str())
-                                .unwrap_or("")
-                                .to_string();
+        let source = match emulators::update_info(&emu.id) {
+            Some(s) => s,
+            None => continue,
+        };
 
-                            updates.push(EmulatorUpdate {
-                                id: emu.id.clone(),
-                                name: emu.name.clone(),
-                                current_version: current.to_string(),
-                                latest_version: latest.to_string(),
-                                download_url: dl_url,
-                            });
+        match source {
+            emulators::UpdateSource::GitHub(repo, current) => {
+                let api_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+                if let Ok(resp) = client.get(&api_url).header("User-Agent", "EmuWorld/2.0").send().await {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        if let Some(tag) = json["tag_name"].as_str() {
+                            let latest = tag.trim_start_matches('v').trim_start_matches("release-");
+                            if latest != current && !latest.is_empty() {
+                                let dl_url = json["assets"].as_array()
+                                    .and_then(|assets| assets.iter().find(|a| {
+                                        let name = a["name"].as_str().unwrap_or("").to_lowercase();
+                                        name.contains("win") && (name.contains("x64") || name.contains("x86_64")) && !name.contains("pdb") && !name.contains("dbg")
+                                    }))
+                                    .and_then(|a| a["browser_download_url"].as_str())
+                                    .unwrap_or("")
+                                    .to_string();
+                                updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url });
+                            }
+                        }
+                    }
+                }
+            }
+            emulators::UpdateSource::Forgejo(api_url, current) => {
+                if let Ok(resp) = client.get(api_url).header("User-Agent", "EmuWorld/2.0").send().await {
+                    if let Ok(json) = resp.json::<serde_json::Value>().await {
+                        let releases = if json.is_array() { json.as_array().cloned().unwrap_or_default() } else { vec![json] };
+                        if let Some(release) = releases.first() {
+                            if let Some(tag) = release["tag_name"].as_str() {
+                                if tag != current {
+                                    let dl_url = release["assets"].as_array()
+                                        .and_then(|assets| assets.iter().find(|a| {
+                                            let name = a["name"].as_str().unwrap_or("").to_lowercase();
+                                            name.contains("win") && name.contains("x64") && !name.contains("pdb")
+                                        }))
+                                        .and_then(|a| a["browser_download_url"].as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: tag.to_string(), download_url: dl_url });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            emulators::UpdateSource::DolphinEmu(current) => {
+                if let Ok(resp) = client.get("https://dolphin-emu.org/download/list/master/1/").header("User-Agent", "EmuWorld/2.0").send().await {
+                    if let Ok(text) = resp.text().await {
+                        if let Some(cap) = regex::Regex::new(r"Dolphin (\d+)").ok().and_then(|re| re.captures(&text)) {
+                            let latest = cap.get(1).map(|m| m.as_str()).unwrap_or("");
+                            if !latest.is_empty() && latest != current {
+                                let dl_url = format!("https://dl.dolphin-emu.org/releases/{}/dolphin-{}-x64.7z", latest, latest);
+                                updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url });
+                            }
                         }
                     }
                 }
@@ -5267,6 +5342,8 @@ pub fn run() {
             check_roms_health,
             delete_unhealthy_roms,
             check_emulator_updates,
+            get_log_file_path,
+            get_logs_directory,
             launch_netplay,
             start_oauth_server,
             create_overlay_window,

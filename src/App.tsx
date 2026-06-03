@@ -6297,6 +6297,25 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
+                    <div className="settings__group-title"><FileText size={16} /> {t("logs.title")}</div>
+                    <p className="settings__field-desc">{t("logs.description")}</p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
+                        const dir: string = await invoke("get_logs_directory");
+                        openUrl(dir);
+                      }}>
+                        <FolderOpen size={12} /> {t("logs.openFolder")}
+                      </button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
+                        const path: string = await invoke("get_log_file_path");
+                        openUrl(path);
+                      }}>
+                        <FileText size={12} /> {t("logs.openCurrent")}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
                     <div className="settings__group-title"><Activity size={16} /> {t("settings.boxartLogs")}</div>
                     <div className="settings__logs">
                       {boxartLogs.length === 0 ? (
