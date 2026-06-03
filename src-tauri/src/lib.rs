@@ -4773,6 +4773,83 @@ fn clear_logs() {
     if let Ok(mut logs) = app_logs().lock() { logs.clear(); }
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct RomHealthIssue {
+    name: String,
+    path: String,
+    console: String,
+    issue: String,
+    size: u64,
+}
+
+#[tauri::command]
+fn check_roms_health() -> Vec<RomHealthIssue> {
+    let config = get_config();
+    let roms = scan_roms(config.roms_directory.clone());
+    let mut issues = Vec::new();
+
+    for rom in &roms {
+        let path = PathBuf::from(&rom.path);
+        if !path.exists() {
+            issues.push(RomHealthIssue {
+                name: rom.name.clone(),
+                path: rom.path.clone(),
+                console: rom.console.clone(),
+                issue: "Fichier introuvable".to_string(),
+                size: 0,
+            });
+            continue;
+        }
+        let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        if size == 0 {
+            issues.push(RomHealthIssue {
+                name: rom.name.clone(),
+                path: rom.path.clone(),
+                console: rom.console.clone(),
+                issue: "Fichier vide (0 octets)".to_string(),
+                size,
+            });
+        } else if size < 100 && rom.extension != "a26" {
+            issues.push(RomHealthIssue {
+                name: rom.name.clone(),
+                path: rom.path.clone(),
+                console: rom.console.clone(),
+                issue: format!("Fichier suspect ({} octets)", size),
+                size,
+            });
+        } else if rom.extension == "zip" || rom.extension == "7z" {
+            if rom.extension == "zip" {
+                if let Ok(f) = std::fs::File::open(&path) {
+                    if zip::ZipArchive::new(f).is_err() {
+                        issues.push(RomHealthIssue {
+                            name: rom.name.clone(),
+                            path: rom.path.clone(),
+                            console: rom.console.clone(),
+                            issue: "Archive ZIP corrompue".to_string(),
+                            size,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    push_log("INFO", &format!("ROM health check: {} problème(s) détecté(s) sur {} ROMs", issues.len(), roms.len()));
+    issues
+}
+
+#[tauri::command]
+fn delete_unhealthy_roms(paths: Vec<String>) -> Result<String, String> {
+    let mut deleted = 0;
+    for p in &paths {
+        let path = PathBuf::from(p);
+        if path.exists() {
+            fs::remove_file(&path).ok();
+            deleted += 1;
+        }
+    }
+    Ok(format!("{} fichier(s) supprimé(s)", deleted))
+}
+
 #[tauri::command]
 fn get_cover_url(game_name: String, console: String) -> Option<String> {
     let key = format!("{}::{}", console, game_name);
@@ -5129,6 +5206,8 @@ pub fn run() {
             get_logs,
             clear_logs,
             get_cover_url,
+            check_roms_health,
+            delete_unhealthy_roms,
             launch_netplay,
             start_oauth_server,
             create_overlay_window,

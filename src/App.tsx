@@ -6247,6 +6247,27 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
+                    <div className="settings__group-title"><ShieldCheck size={16} /> Intégrité des ROMs</div>
+                    <p className="settings__field-desc">Vérifie que toutes tes ROMs sont valides (pas vides, pas corrompues).</p>
+                    <button className="btn btn--primary btn--sm" onClick={async () => {
+                      showToast("Scan en cours...", "success");
+                      const issues: any[] = await invoke("check_roms_health");
+                      if (issues.length === 0) {
+                        showToast("Toutes les ROMs sont OK !", "success");
+                      } else {
+                        const msg = issues.slice(0, 5).map((i: any) => `${i.name} (${i.console}): ${i.issue}`).join("\n");
+                        const doDelete = confirm(`${issues.length} problème(s) trouvé(s):\n\n${msg}${issues.length > 5 ? `\n...et ${issues.length - 5} autres` : ""}\n\nSupprimer les fichiers corrompus ?`);
+                        if (doDelete) {
+                          await invoke("delete_unhealthy_roms", { paths: issues.map((i: any) => i.path) });
+                          showToast(`${issues.length} fichier(s) supprimé(s)`, "success");
+                        }
+                      }
+                    }}>
+                      <ShieldCheck size={12} /> Vérifier l'intégrité
+                    </button>
+                  </div>
+
+                  <div className="settings__group">
                     <div className="settings__group-title"><Activity size={16} /> {t("settings.boxartLogs")}</div>
                     <div className="settings__logs">
                       {boxartLogs.length === 0 ? (
