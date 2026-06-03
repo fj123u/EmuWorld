@@ -1373,6 +1373,18 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.2.0", date: "2026-06-02", changes: [
+      "🎮 Lobby multijoueur: créer un lobby, inviter un ami, lancement netplay automatique",
+      "🌐 Netplay RetroArch (relay MITM), Dolphin (traversal server) et PPSSPP (adhoc)",
+      "⚔️ Mode Versus: défier un ami sur temps de jeu / lancements / streak pendant 7 jours",
+      "📊 Défis Versus affichés sur la page Discover avec barre de progression",
+      "🏪 Marketplace de thèmes: publier et télécharger des thèmes communautaires",
+      "🎵 Discord Rich Presence avec cover du jeu en cours + nom de la console",
+      "🔐 Fix OAuth IUT: redirect via page bounce alwaysdata + deep-link + fallback localhost",
+      "🎮 Fix Ryubing: URL de téléchargement mise à jour (Forgejo)",
+      "🏆 Fix achievements 200%: cappé à 100% max",
+      "📥 Lobby: vérification ROM + bouton 'Télécharger le jeu' si manquante",
+    ] },
     { version: "2.1.1", date: "2026-06-01", changes: [
       "🐛 Fix lancement 3DS: Azahar ne supporte pas --fullscreen en CLI, le jeu se lance correctement maintenant",
     ] },
