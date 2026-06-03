@@ -107,6 +107,11 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
 - Les covers sont sauvegardées en WebP (quality 85) pour réduire l'espace disque (~80% vs PNG).
 - Le backend Rust utilise `reqwest` pour HTTP, `zip`/`sevenz-rust` pour l'extraction, `scraper` pour le parsing HTML, `walkdir` pour les scans FS récursifs, `image`/`webp` pour la conversion d'images.
 
+## Mandatory Rules
+
+- **i18n** : Every visible text string MUST use `t("section.key")` — never hardcode French or English. Add keys to both `src/i18n/fr.ts` and `src/i18n/en.ts`.
+- **Gamepad** : Every new interactive element (button, input, select, card) MUST have the CSS class `gamepad-nav-item` or be a `.btn` for controller navigation.
+
 ## Workflow After Each Feature/Fix
 
 1. **Commit + push** immediately after implementing

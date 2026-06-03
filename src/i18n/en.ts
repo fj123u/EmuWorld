@@ -421,6 +421,51 @@ const en: Translations = {
     active: "active challenges",
     leaderboard: "Leaderboard",
     progress: "Progress",
+    joined: "You joined the challenge!",
+    noneActive: "No active challenges this week.",
+  },
+
+  // Library
+  library: {
+    sortPlaytime: "Playtime",
+    sortRating: "Rating",
+    sortLastPlayed: "Last played",
+    sortLaunches: "Launches",
+    filterAll: "All",
+    filterFavorites: "Favorites",
+    filterUnplayed: "Unplayed",
+    filterRated: "Rated",
+    collections: "Collections",
+    noGames: "No games in your library",
+    noGamesDesc: "Add ROMs from the Store or scan a folder to get started!",
+    noScreenshots: "No screenshots yet. Press Ctrl+F12 while playing to capture.",
+  },
+
+  // Wrap
+  wrap: {
+    noData: "No data yet this month. Play some games and come back!",
+  },
+
+  // Marketplace extra
+  marketplaceEmpty: {
+    noThemes: "No shared themes yet.",
+    beFirst: "Be the first to publish your theme!",
+  },
+
+  // Session
+  session: {
+    ended: "Session ended",
+  },
+
+  // RetroAchievements
+  ra: {
+    searching: "Searching on RetroAchievements...",
+    notFound: "Could not find this game on RetroAchievements.",
+  },
+
+  // Guides extra
+  guidesExtra: {
+    noInSection: "No guides in this section.",
   },
 };
 

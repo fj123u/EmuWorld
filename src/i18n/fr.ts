@@ -419,6 +419,51 @@ const fr = {
     active: "challenges actifs",
     leaderboard: "Classement",
     progress: "Progression",
+    joined: "Tu participes au challenge !",
+    noneActive: "Aucun challenge actif cette semaine.",
+  },
+
+  // Library
+  library: {
+    sortPlaytime: "Temps joué",
+    sortRating: "Note",
+    sortLastPlayed: "Dernier joué",
+    sortLaunches: "Nb launches",
+    filterAll: "Tous",
+    filterFavorites: "Favoris",
+    filterUnplayed: "Non joués",
+    filterRated: "Notés",
+    collections: "Collections",
+    noGames: "Aucun jeu dans la bibliothèque",
+    noGamesDesc: "Ajoute des ROMs depuis le Store ou scanne un dossier pour commencer !",
+    noScreenshots: "Pas de screenshots. Appuie sur Ctrl+F12 en jeu pour capturer.",
+  },
+
+  // Wrap
+  wrap: {
+    noData: "Pas encore de données ce mois-ci. Joue un peu et reviens !",
+  },
+
+  // Marketplace extra
+  marketplaceEmpty: {
+    noThemes: "Aucun thème partagé pour le moment.",
+    beFirst: "Sois le premier à publier ton thème !",
+  },
+
+  // Session
+  session: {
+    ended: "Session terminée",
+  },
+
+  // RetroAchievements
+  ra: {
+    searching: "Recherche sur RetroAchievements...",
+    notFound: "Impossible de trouver ce jeu sur RetroAchievements.",
+  },
+
+  // Guides extra
+  guidesExtra: {
+    noInSection: "Aucun guide dans cette section.",
   },
 };
 

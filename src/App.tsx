@@ -5152,16 +5152,16 @@ export default function App() {
                       </button>
                       <select className="library-sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
                         <option value="name">A-Z</option>
-                        <option value="playtime">Temps joué</option>
-                        <option value="rating">Note</option>
-                        <option value="last_played">Dernier joué</option>
-                        <option value="launches">Nb launches</option>
+                        <option value="playtime">{t("library.sortPlaytime")}</option>
+                        <option value="rating">{t("library.sortRating")}</option>
+                        <option value="last_played">{t("library.sortLastPlayed")}</option>
+                        <option value="launches">{t("library.sortLaunches")}</option>
                       </select>
                       <select className="library-sort-select" value={filterMode} onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}>
-                        <option value="all">Tous</option>
-                        <option value="favorites">Favoris</option>
-                        <option value="unplayed">Non joués</option>
-                        <option value="rated">Notés</option>
+                        <option value="all">{t("library.filterAll")}</option>
+                        <option value="favorites">{t("library.filterFavorites")}</option>
+                        <option value="unplayed">{t("library.filterUnplayed")}</option>
+                        <option value="rated">{t("library.filterRated")}</option>
                       </select>
                       <select className="library-sort-select" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
                         <option value="">Collections</option>
@@ -7090,7 +7090,7 @@ export default function App() {
                     {challenges.length === 0 ? (
                       <div className="challenges-page__empty">
                         <Flame size={48} style={{ opacity: 0.3 }} />
-                        <p>Aucun challenge actif cette semaine.</p>
+                        <p>{t("challenges.noneActive")}</p>
                         <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Reviens bientôt !</p>
                       </div>
                     ) : (
@@ -7200,7 +7200,7 @@ export default function App() {
                     </div>
                     {totalSeconds === 0 ? (
                       <div className="wrap-page__empty">
-                        <p>Pas encore de données ce mois-ci. Joue un peu et reviens !</p>
+                        <p>{t("wrap.noData")}</p>
                       </div>
                     ) : (
                       <>
@@ -7661,8 +7661,8 @@ export default function App() {
                     {roms.length === 0 && (
                       <div className="discover-empty">
                         <Compass size={48} />
-                        <h3>Aucun jeu dans la bibliothèque</h3>
-                        <p>Ajoute des ROMs depuis le Store ou scanne un dossier pour commencer !</p>
+                        <h3>{t("library.noGames")}</h3>
+                        <p>{t("library.noGamesDesc")}</p>
                         <button className="btn btn--primary" onClick={() => setPage("store")}>Ouvrir le Store</button>
                       </div>
                     )}
@@ -7740,8 +7740,8 @@ export default function App() {
                       {marketplaceThemes.length === 0 && !marketplaceLoading && (
                         <div className="marketplace__empty">
                           <Palette size={48} />
-                          <p>Aucun thème partagé pour le moment.</p>
-                          <p>Sois le premier à publier ton thème !</p>
+                          <p>{t("marketplaceEmpty.noThemes")}</p>
+                          <p>{t("marketplaceEmpty.beFirst")}</p>
                         </div>
                       )}
                     </div>
@@ -8020,7 +8020,7 @@ export default function App() {
           <motion.div className="versus-modal" onClick={(e) => e.stopPropagation()} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
             <h2><Swords size={20} /> Défier {versusModal.friendName}</h2>
             <div className="versus-modal__field">
-              <label>Type de défi</label>
+              <label>{t("versus.type")}</label>
               <select value={versusForm.type} onChange={(e) => setVersusForm({ ...versusForm, type: e.target.value })} className="versus-modal__select gamepad-nav-item">
                 <option value="playtime">{t("versus.playtime")}</option>
                 <option value="launches">{t("versus.launches")}</option>
@@ -8028,11 +8028,11 @@ export default function App() {
               </select>
             </div>
             <div className="versus-modal__field">
-              <label>Jeu spécifique (optionnel)</label>
+              <label>{t("versus.specificGame")}</label>
               <input className="versus-modal__input gamepad-nav-item" placeholder="Tous les jeux..." value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
             </div>
             <div className="versus-modal__field">
-              <label>Durée</label>
+              <label>{t("versus.duration")}</label>
               <select value={versusForm.days} onChange={(e) => setVersusForm({ ...versusForm, days: parseInt(e.target.value) })} className="versus-modal__select gamepad-nav-item">
                 <option value={3}>3 jours</option>
                 <option value={7}>7 jours</option>
@@ -8051,7 +8051,7 @@ export default function App() {
       {currentLobby && (
         <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
           <div className="lobby-panel__header">
-            <h3>Lobby</h3>
+            <h3>{t("lobby.title")}</h3>
             <button className="btn btn--danger btn--sm" onClick={handleLeaveLobby}>
               {currentLobby.host_id === user?.id ? t("lobby.dissolve") : t("lobby.leave")}
             </button>
@@ -8499,7 +8499,7 @@ export default function App() {
                       )}
                       {filtered.length === 0 && !guideModal.writing && !hasScrapedContent ? (
                         <div className="guide-modal__empty">
-                          <p>Aucun guide dans cette section.</p>
+                          <p>{t("guidesExtra.noInSection")}</p>
                           {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> Écrire le premier</button>}
                         </div>
                       ) : (
@@ -8624,7 +8624,7 @@ export default function App() {
           >
             <div className="session-recap__header">
               <Gamepad2 size={20} />
-              <span>Session terminée</span>
+              <span>{t("session.ended")}</span>
             </div>
             <div className="session-recap__game">{sessionRecap.gameName}</div>
             <div className="session-recap__console">{sessionRecap.console}</div>
@@ -8909,7 +8909,7 @@ export default function App() {
               {raLoading ? (
                 <div className="ra-modal__loading">
                   <RefreshCw size={32} className="animate-spin" />
-                  <p>Recherche sur RetroAchievements...</p>
+                  <p>{t("ra.searching")}</p>
                 </div>
               ) : raGameInfo ? (
                 <>
@@ -8971,7 +8971,7 @@ export default function App() {
                 </>
               ) : (
                 <div className="ra-modal__empty">
-                  <p>Impossible de trouver ce jeu sur RetroAchievements.</p>
+                  <p>{t("ra.notFound")}</p>
                   <p className="ra-modal__hint">Vérifiez que vos identifiants sont configurés dans les Settings.</p>
                 </div>
               )}
