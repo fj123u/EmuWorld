@@ -313,6 +313,113 @@ const fr = {
     friendRequestAccepted: "Demande acceptée !",
     friendRemoved: "Ami supprimé",
   },
+
+  // Lobby
+  lobby: {
+    title: "Lobby",
+    created: "Lobby créé ! Invite un ami.",
+    inviteSent: "Invitation envoyée !",
+    dissolved: "Lobby dissous",
+    left: "Tu as quitté le lobby",
+    allReady: "Tous les joueurs sont prêts ! Lancement du netplay...",
+    noRom: "Tu n'as pas \"{game}\" dans ta bibliothèque. Télécharge-le d'abord !",
+    downloadGame: "Télécharger le jeu",
+    ready: "Je suis prêt !",
+    waiting: "En attente...",
+    dissolve: "Dissoudre",
+    leave: "Quitter",
+    inviteFriend: "Inviter un ami...",
+    createLobby: "Créer un lobby",
+    you: "Toi",
+  },
+
+  // Versus
+  versus: {
+    title: "Défis en cours",
+    challengeSent: "Défi envoyé à {name} !",
+    accepted: "Défi accepté ! C'est parti !",
+    declined: "Défi refusé",
+    challenge: "Défier {name}",
+    type: "Type de défi",
+    playtime: "Temps de jeu",
+    launches: "Nombre de lancements",
+    streak: "Plus long streak",
+    specificGame: "Jeu spécifique (optionnel)",
+    allGames: "Tous les jeux...",
+    duration: "Durée",
+    days3: "3 jours",
+    days7: "7 jours",
+    days14: "14 jours",
+    days30: "30 jours",
+    cancel: "Annuler",
+    sendChallenge: "Envoyer le défi",
+    accept: "Accepter",
+    decline: "Refuser",
+    vs: "VS",
+    endsAt: "Fin : {date}",
+    whoPlaysMore: "Qui joue le plus en {days} jours ?",
+    whoLaunchesMore: "Qui lance le plus de jeux en {days} jours ?",
+    whoStreaks: "Qui maintient le plus long streak ?",
+  },
+
+  // Marketplace
+  marketplace: {
+    title: "Marketplace",
+    publish: "Partager mon thème",
+    published: "Thème publié !",
+    applied: "Thème \"{name}\" appliqué !",
+    themeName: "Nom du thème",
+    themeDesc: "Description (optionnel)",
+    downloads: "téléchargements",
+    by: "par",
+  },
+
+  // Health check
+  health: {
+    title: "Intégrité des ROMs",
+    description: "Vérifie que toutes tes ROMs sont valides (pas vides, pas corrompues).",
+    check: "Vérifier l'intégrité",
+    scanning: "Scan en cours...",
+    allOk: "Toutes les ROMs sont OK !",
+    issuesFound: "{count} problème(s) trouvé(s)",
+    confirmDelete: "Supprimer les fichiers corrompus ?",
+    deleted: "{count} fichier(s) supprimé(s)",
+    empty: "Fichier vide (0 octets)",
+    suspect: "Fichier suspect ({size} octets)",
+    corrupt: "Archive corrompue",
+    notFound: "Fichier introuvable",
+  },
+
+  // Guides
+  guides: {
+    title: "Guide",
+    presentation: "Présentation",
+    tips: "Astuces",
+    achievements: "Succès",
+    secrets: "Secrets",
+    writeGuide: "Écrire un guide",
+    publish: "Publier",
+    cancel: "Annuler",
+    titlePlaceholder: "Titre du guide...",
+    contentPlaceholder: "Écris ton guide ici... (astuces, stratégies, walkthroughs...)",
+    noGuides: "Aucun guide pour ce jeu. Sois le premier !",
+  },
+
+  // Reviews
+  reviews: {
+    title: "Avis communauté",
+    writeReview: "Ton avis",
+    submit: "Publier",
+    noReviews: "Aucun avis pour ce jeu.",
+  },
+
+  // Challenges
+  challenges: {
+    title: "Challenges",
+    active: "challenges actifs",
+    leaderboard: "Classement",
+    progress: "Progression",
+  },
 };
 
 export type Translations = typeof fr;

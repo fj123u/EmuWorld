@@ -315,6 +315,113 @@ const en: Translations = {
     friendRequestAccepted: "Request accepted!",
     friendRemoved: "Friend removed",
   },
+
+  // Lobby
+  lobby: {
+    title: "Lobby",
+    created: "Lobby created! Invite a friend.",
+    inviteSent: "Invitation sent!",
+    dissolved: "Lobby dissolved",
+    left: "You left the lobby",
+    allReady: "All players are ready! Launching netplay...",
+    noRom: "You don't have \"{game}\" in your library. Download it first!",
+    downloadGame: "Download game",
+    ready: "I'm ready!",
+    waiting: "Waiting...",
+    dissolve: "Dissolve",
+    leave: "Leave",
+    inviteFriend: "Invite a friend...",
+    createLobby: "Create a lobby",
+    you: "You",
+  },
+
+  // Versus
+  versus: {
+    title: "Active challenges",
+    challengeSent: "Challenge sent to {name}!",
+    accepted: "Challenge accepted! Let's go!",
+    declined: "Challenge declined",
+    challenge: "Challenge {name}",
+    type: "Challenge type",
+    playtime: "Playtime",
+    launches: "Number of launches",
+    streak: "Longest streak",
+    specificGame: "Specific game (optional)",
+    allGames: "All games...",
+    duration: "Duration",
+    days3: "3 days",
+    days7: "7 days",
+    days14: "14 days",
+    days30: "30 days",
+    cancel: "Cancel",
+    sendChallenge: "Send challenge",
+    accept: "Accept",
+    decline: "Decline",
+    vs: "VS",
+    endsAt: "Ends: {date}",
+    whoPlaysMore: "Who plays the most in {days} days?",
+    whoLaunchesMore: "Who launches the most games in {days} days?",
+    whoStreaks: "Who maintains the longest streak?",
+  },
+
+  // Marketplace
+  marketplace: {
+    title: "Marketplace",
+    publish: "Share my theme",
+    published: "Theme published!",
+    applied: "Theme \"{name}\" applied!",
+    themeName: "Theme name",
+    themeDesc: "Description (optional)",
+    downloads: "downloads",
+    by: "by",
+  },
+
+  // Health check
+  health: {
+    title: "ROM Integrity",
+    description: "Check that all your ROMs are valid (not empty, not corrupted).",
+    check: "Check integrity",
+    scanning: "Scanning...",
+    allOk: "All ROMs are OK!",
+    issuesFound: "{count} issue(s) found",
+    confirmDelete: "Delete corrupted files?",
+    deleted: "{count} file(s) deleted",
+    empty: "Empty file (0 bytes)",
+    suspect: "Suspicious file ({size} bytes)",
+    corrupt: "Corrupted archive",
+    notFound: "File not found",
+  },
+
+  // Guides
+  guides: {
+    title: "Guide",
+    presentation: "Overview",
+    tips: "Tips",
+    achievements: "Achievements",
+    secrets: "Secrets",
+    writeGuide: "Write a guide",
+    publish: "Publish",
+    cancel: "Cancel",
+    titlePlaceholder: "Guide title...",
+    contentPlaceholder: "Write your guide here... (tips, strategies, walkthroughs...)",
+    noGuides: "No guides for this game yet. Be the first!",
+  },
+
+  // Reviews
+  reviews: {
+    title: "Community reviews",
+    writeReview: "Your review",
+    submit: "Submit",
+    noReviews: "No reviews for this game.",
+  },
+
+  // Challenges
+  challenges: {
+    title: "Challenges",
+    active: "active challenges",
+    leaderboard: "Leaderboard",
+    progress: "Progress",
+  },
 };
 
 export default en;
