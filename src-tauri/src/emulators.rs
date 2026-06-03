@@ -30,6 +30,27 @@ pub struct EmulatorInfo {
     pub setup_files: Vec<SetupFile>,
 }
 
+/// Returns (github_repo, current_version) for emulators that support auto-update
+pub fn update_info(id: &str) -> Option<(&'static str, &'static str)> {
+    match id {
+        "mesen" => Some(("SourMesen/Mesen2", "2.1.1")),
+        "mgba" => Some(("mgba-emu/mgba", "0.10.5")),
+        "snes9x" => Some(("snes9xgit/snes9x", "1.63")),
+        "dolphin" => None, // custom URL, not standard GitHub releases
+        "melonds" => Some(("melonDS-emu/melonDS", "1.1")),
+        "azahar" => Some(("azahar-emu/azahar", "2125.1.2")),
+        "cemu" => Some(("cemu-project/Cemu", "2.6")),
+        "duckstation" => Some(("stenzek/duckstation", "latest")),
+        "pcsx2" => Some(("PCSX2/pcsx2", "2.6.3")),
+        "ppsspp" => Some(("hrydgard/ppsspp", "1.20.3")),
+        "flycast" => Some(("flyinghead/flycast", "2.6")),
+        "xemu" => Some(("xemu-project/xemu", "0.8.135")),
+        "xenia" => Some(("xenia-canary/xenia-canary", "29311dd")),
+        "project64" => Some(("pj64team/Project64-Legacy", "1.6.4")),
+        _ => None,
+    }
+}
+
 /// Returns the built-in catalog of supported emulators.
 pub fn get_catalog() -> Vec<EmulatorInfo> {
     vec![

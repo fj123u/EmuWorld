@@ -4850,6 +4850,64 @@ fn delete_unhealthy_roms(paths: Vec<String>) -> Result<String, String> {
     Ok(format!("{} fichier(s) supprimé(s)", deleted))
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+struct EmulatorUpdate {
+    id: String,
+    name: String,
+    current_version: String,
+    latest_version: String,
+    download_url: String,
+}
+
+#[tauri::command]
+async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
+    let installed = get_installed_emulators();
+    let catalog = emulators::get_catalog();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut updates = Vec::new();
+
+    for emu in &catalog {
+        if !installed.contains(&emu.id) { continue; }
+        if let Some((repo, current)) = emulators::update_info(&emu.id) {
+            let api_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
+            if let Ok(resp) = client.get(&api_url)
+                .header("User-Agent", "EmuWorld/2.0")
+                .send().await
+            {
+                if let Ok(json) = resp.json::<serde_json::Value>().await {
+                    if let Some(tag) = json["tag_name"].as_str() {
+                        let latest = tag.trim_start_matches('v').trim_start_matches("release-");
+                        if latest != current && !latest.is_empty() {
+                            let dl_url = json["assets"].as_array()
+                                .and_then(|assets| assets.iter().find(|a| {
+                                    let name = a["name"].as_str().unwrap_or("").to_lowercase();
+                                    name.contains("win") && (name.contains("x64") || name.contains("x86_64")) && !name.contains("pdb") && !name.contains("dbg")
+                                }))
+                                .and_then(|a| a["browser_download_url"].as_str())
+                                .unwrap_or("")
+                                .to_string();
+
+                            updates.push(EmulatorUpdate {
+                                id: emu.id.clone(),
+                                name: emu.name.clone(),
+                                current_version: current.to_string(),
+                                latest_version: latest.to_string(),
+                                download_url: dl_url,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    push_log("INFO", &format!("Update check: {} mise(s) à jour disponible(s)", updates.len()));
+    Ok(updates)
+}
+
 #[tauri::command]
 fn get_cover_url(game_name: String, console: String) -> Option<String> {
     let key = format!("{}::{}", console, game_name);
@@ -5208,6 +5266,7 @@ pub fn run() {
             get_cover_url,
             check_roms_health,
             delete_unhealthy_roms,
+            check_emulator_updates,
             launch_netplay,
             start_oauth_server,
             create_overlay_window,

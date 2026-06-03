@@ -413,6 +413,15 @@ const fr = {
     noReviews: "Aucun avis pour ce jeu.",
   },
 
+  // Updates
+  updates: {
+    checkButton: "Vérifier les mises à jour",
+    checking: "Vérification des mises à jour...",
+    allUpToDate: "Tous les émulateurs sont à jour !",
+    available: "{count} mise(s) à jour disponible(s)",
+    update: "Mettre à jour",
+  },
+
   // Challenges
   challenges: {
     title: "Challenges",

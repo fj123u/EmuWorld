@@ -1444,6 +1444,10 @@ body {
 .main-content::before { display: none; }
 
 /* ===== Changelogs ===== */
+/* ─── Emulator Update Badge ─── */
+.emu-card__update-badge { background: var(--neon-purple); color: #fff; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-left: auto; }
+.emu-card__update-info { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; margin: 0.4rem 0; background: rgba(99, 102, 241, 0.1); border-radius: 6px; font-size: 0.75rem; }
+
 /* ─── Discover Versus ─── */
 .discover-versus { margin-bottom: 1.5rem; }
 .discover-versus__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }

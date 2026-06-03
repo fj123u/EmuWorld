@@ -415,6 +415,15 @@ const en: Translations = {
     noReviews: "No reviews for this game.",
   },
 
+  // Updates
+  updates: {
+    checkButton: "Check for updates",
+    checking: "Checking for updates...",
+    allUpToDate: "All emulators are up to date!",
+    available: "{count} update(s) available",
+    update: "Update",
+  },
+
   // Challenges
   challenges: {
     title: "Challenges",

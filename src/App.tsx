@@ -1212,6 +1212,7 @@ export default function App() {
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string[]>([]);
+  const [emuUpdates, setEmuUpdates] = useState<any[]>([]);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sessionRecap, setSessionRecap] = useState<{
@@ -6085,8 +6086,25 @@ export default function App() {
               })()}
 
               {page === "installed" && (
-                <div className="emu-grid">
-                  {catalog.filter(e => installed.includes(e.id)).map(emu => (
+                <div>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1rem" }}>
+                    <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
+                      showToast(t("updates.checking"), "success");
+                      const updates: any[] = await invoke("check_emulator_updates");
+                      if (updates.length === 0) {
+                        showToast(t("updates.allUpToDate"), "success");
+                      } else {
+                        setEmuUpdates(updates);
+                        showToast(t("updates.available").replace("{count}", String(updates.length)), "success");
+                      }
+                    }}>
+                      <RefreshCw size={12} /> {t("updates.checkButton")}
+                    </button>
+                  </div>
+                  <div className="emu-grid">
+                  {catalog.filter(e => installed.includes(e.id)).map(emu => {
+                    const update = emuUpdates.find((u: any) => u.id === emu.id);
+                    return (
                     <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                       <div className="emu-card__header">
                         <div className="emu-card__icon">{emu.icon}</div>
@@ -6094,13 +6112,24 @@ export default function App() {
                           <div className="emu-card__name">{emu.name}</div>
                           <div className="emu-card__console">{emu.console}</div>
                         </div>
+                        {update && <span className="emu-card__update-badge">↑ {update.latest_version}</span>}
                       </div>
+                      {update && (
+                        <div className="emu-card__update-info">
+                          <span>{update.current_version} → {update.latest_version}</span>
+                          <button className="btn btn--primary btn--sm" onClick={() => { handleUninstall(emu.id); setTimeout(() => handleInstall(emu.id), 500); }}>
+                            <Download size={12} /> {t("updates.update")}
+                          </button>
+                        </div>
+                      )}
                       <div className="emu-card__actions">
                         <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
                         <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> Uninstall</button>
                       </div>
                     </motion.div>
-                  ))}
+                  );
+                  })}
+                </div>
                 </div>
               )}
 
