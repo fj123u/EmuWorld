@@ -4816,6 +4816,15 @@ fn get_logs_directory() -> String {
     emuworld_base_dir().join("logs").to_string_lossy().to_string()
 }
 
+#[tauri::command]
+fn open_path(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct RomHealthIssue {
     name: String,
@@ -5368,6 +5377,7 @@ pub fn run() {
             get_log_file_path,
             get_logs_directory,
             save_emulator_version,
+            open_path,
             launch_netplay,
             start_oauth_server,
             create_overlay_window,

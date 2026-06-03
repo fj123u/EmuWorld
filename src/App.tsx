@@ -6302,13 +6302,13 @@ export default function App() {
                     <div style={{ display: "flex", gap: 8 }}>
                       <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
                         const dir: string = await invoke("get_logs_directory");
-                        openUrl(dir);
+                        invoke("open_path", { path: dir });
                       }}>
                         <FolderOpen size={12} /> {t("logs.openFolder")}
                       </button>
                       <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
                         const path: string = await invoke("get_log_file_path");
-                        openUrl(path);
+                        invoke("open_path", { path });
                       }}>
                         <FileText size={12} /> {t("logs.openCurrent")}
                       </button>
