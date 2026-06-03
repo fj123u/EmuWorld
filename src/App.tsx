@@ -3740,7 +3740,8 @@ export default function App() {
     if (!currentLobby || !user) return;
     const hasRom = roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
     if (!hasRom) {
-      showToast(`Tu n'as pas "${currentLobby.game_name}" dans ta bibliothèque. Télécharge-le d'abord !`, "error");
+      showToast(`Tu n'as pas "${currentLobby.game_name}". Redirige vers le Store...`, "error");
+      setPage("store");
       return;
     }
     await supabase.from("lobby_members").update({ is_ready: true }).eq("lobby_id", currentLobby.id).eq("user_id", user.id);
@@ -8046,7 +8047,13 @@ export default function App() {
               </select>
             )}
             {!(currentLobby.members || []).find(m => m.user_id === user?.id)?.is_ready && (
-              <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>Je suis prêt !</button>
+              roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console) ? (
+                <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>Je suis prêt !</button>
+              ) : (
+                <button className="btn btn--primary btn--sm" onClick={() => setPage("store")}>
+                  <Download size={12} /> Télécharger le jeu
+                </button>
+              )
             )}
           </div>
         </motion.div>
