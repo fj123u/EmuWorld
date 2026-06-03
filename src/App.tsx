@@ -2183,14 +2183,14 @@ export default function App() {
       if (error.code === "23505") showToast("Demande déjà envoyée", "info");
       else showToast(`Erreur: ${error.message}`, "error");
     } else {
-      showToast("Demande d'ami envoyée !", "success");
+      showToast(t("toast.friendRequestSent"), "success");
       loadFriends();
     }
   }, [user, showToast, loadFriends]);
 
   const acceptFriendRequest = useCallback(async (friendshipId: string) => {
     await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId);
-    showToast("Ami accepté !", "success");
+    showToast(t("toast.friendRequestAccepted"), "success");
     loadFriends();
   }, [showToast, loadFriends]);
 
@@ -2202,7 +2202,7 @@ export default function App() {
 
   const removeFriend = useCallback(async (friendshipId: string) => {
     await supabase.from("friendships").delete().eq("id", friendshipId);
-    showToast("Ami supprimé", "info");
+    showToast(t("toast.friendRemoved"), "info");
     loadFriends();
   }, [showToast, loadFriends]);
 
@@ -3463,7 +3463,7 @@ export default function App() {
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,game_name,game_console" });
     if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast("Avis publié !", "success");
+    showToast(t("reviews.submitted") || "Avis publié !", "success");
     handleOpenReviews(rom);
   }, [reviewsModal, user, reviewDraft, showToast, handleOpenReviews]);
 
@@ -3472,7 +3472,7 @@ export default function App() {
     const { rom } = reviewsModal;
     await supabase.from("game_reviews").delete().eq("user_id", user.id).eq("game_name", rom.name).eq("game_console", rom.console);
     setReviewDraft({ rating: 0, comment: "" });
-    showToast("Avis supprimé", "success");
+    showToast(t("reviews.deleted") || "Avis supprimé", "success");
     handleOpenReviews(rom);
   }, [reviewsModal, user, showToast, handleOpenReviews]);
 
@@ -3565,7 +3565,7 @@ export default function App() {
       completed: false,
     }, { onConflict: "user_id,challenge_id" });
     if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast("Tu participes au challenge !", "success");
+    showToast(t("challenges.joined") || "Tu participes au challenge !", "success");
     loadChallenges();
   }, [user, showToast, loadChallenges]);
 
@@ -3622,7 +3622,7 @@ export default function App() {
       content: guideDraft.content.trim(),
     });
     if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast("Guide publié !", "success");
+    showToast(t("guides.published") || "Guide publié !", "success");
     setGuideDraft({ title: "", content: "" });
     handleOpenGuide(rom);
   }, [guideModal, user, guideDraft, showToast, handleOpenGuide]);
@@ -3643,7 +3643,7 @@ export default function App() {
   const handleDeleteGuide = useCallback(async (guideId: string) => {
     if (!user?.id) return;
     await supabase.from("game_guides").delete().eq("id", guideId).eq("user_id", user.id);
-    showToast("Guide supprimé", "success");
+    showToast(t("guides.deleted") || "Guide supprimé", "success");
     if (guideModal) handleOpenGuide(guideModal.rom);
   }, [user, guideModal, showToast, handleOpenGuide]);
 
@@ -3687,13 +3687,13 @@ export default function App() {
 
   const handleAcceptVersus = useCallback(async (id: string) => {
     await supabase.from("versus_challenges").update({ status: "active" }).eq("id", id);
-    showToast("Défi accepté ! C'est parti !", "success");
+    showToast(t("versus.accepted"), "success");
     loadVersusChallenges();
   }, [showToast, loadVersusChallenges]);
 
   const handleDeclineVersus = useCallback(async (id: string) => {
     await supabase.from("versus_challenges").update({ status: "declined" }).eq("id", id);
-    showToast("Défi refusé", "success");
+    showToast(t("versus.declined"), "success");
     loadVersusChallenges();
   }, [showToast, loadVersusChallenges]);
 
@@ -3730,14 +3730,14 @@ export default function App() {
     if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
     await supabase.from("lobby_members").insert({ lobby_id: data.id, user_id: user.id, is_ready: true });
     setCurrentLobby({ ...data, members: [{ id: "", lobby_id: data.id, user_id: user.id, is_ready: true }] });
-    showToast("Lobby créé ! Invite un ami.", "success");
+    showToast(t("lobby.created"), "success");
   }, [user, showToast]);
 
   const handleInviteToLobby = useCallback(async (friendId: string) => {
     if (!currentLobby) return;
     const { error } = await supabase.from("lobby_members").insert({ lobby_id: currentLobby.id, user_id: friendId });
     if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
-    showToast("Invitation envoyée !", "success");
+    showToast(t("lobby.inviteSent"), "success");
   }, [currentLobby, showToast]);
 
   const handleJoinLobby = useCallback(async (lobbyId: string) => {
@@ -3762,7 +3762,7 @@ export default function App() {
     const allReady = (members || []).every((m: any) => m.is_ready);
     if (allReady && (members || []).length >= 2) {
       await supabase.from("lobbies").update({ status: "ready" }).eq("id", currentLobby.id);
-      showToast("Tous les joueurs sont prêts ! Lancement du netplay...", "success");
+      showToast(t("lobby.allReady"), "success");
       const isHost = currentLobby.host_id === user.id;
       const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
       if (rom) {
@@ -3777,10 +3777,10 @@ export default function App() {
     if (currentLobby.host_id === user.id) {
       await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id);
       await supabase.from("lobbies").delete().eq("id", currentLobby.id);
-      showToast("Lobby dissous", "success");
+      showToast(t("lobby.dissolved"), "success");
     } else {
       await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id).eq("user_id", user.id);
-      showToast("Tu as quitté le lobby", "success");
+      showToast(t("lobby.left"), "success");
     }
     setCurrentLobby(null);
   }, [currentLobby, user, showToast]);
@@ -3819,7 +3819,7 @@ export default function App() {
     };
     const { error } = await supabase.from("community_themes").insert(themeData);
     if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
-    showToast("Thème publié !", "success");
+    showToast(t("marketplace.published"), "success");
     setPublishingTheme(false);
     setNewThemeName("");
     setNewThemeDesc("");
@@ -6247,13 +6247,13 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><ShieldCheck size={16} /> Intégrité des ROMs</div>
-                    <p className="settings__field-desc">Vérifie que toutes tes ROMs sont valides (pas vides, pas corrompues).</p>
+                    <div className="settings__group-title"><ShieldCheck size={16} /> {t("health.title")}</div>
+                    <p className="settings__field-desc">{t("health.description")}</p>
                     <button className="btn btn--primary btn--sm" onClick={async () => {
-                      showToast("Scan en cours...", "success");
+                      showToast(t("health.scanning"), "success");
                       const issues: any[] = await invoke("check_roms_health");
                       if (issues.length === 0) {
-                        showToast("Toutes les ROMs sont OK !", "success");
+                        showToast(t("health.allOk"), "success");
                       } else {
                         const msg = issues.slice(0, 5).map((i: any) => `${i.name} (${i.console}): ${i.issue}`).join("\n");
                         const doDelete = confirm(`${issues.length} problème(s) trouvé(s):\n\n${msg}${issues.length > 5 ? `\n...et ${issues.length - 5} autres` : ""}\n\nSupprimer les fichiers corrompus ?`);
@@ -6263,7 +6263,7 @@ export default function App() {
                         }
                       }
                     }}>
-                      <ShieldCheck size={12} /> Vérifier l'intégrité
+                      <ShieldCheck size={12} /> {t("health.check")}
                     </button>
                   </div>
 
@@ -6679,7 +6679,7 @@ export default function App() {
                       {/* Versus Challenges */}
                       {versusChallenges.length > 0 && (
                         <div className="settings__group">
-                          <div className="settings__group-title"><Swords size={16} /> Défis en cours</div>
+                          <div className="settings__group-title"><Swords size={16} /> {t("versus.title")}</div>
                           <div className="versus-list">
                             {versusChallenges.map(v => {
                               const isChallenger = v.challenger_id === user?.id;
@@ -6708,8 +6708,8 @@ export default function App() {
                                   </div>
                                   {isPending && (
                                     <div className="versus-card__actions">
-                                      <button className="btn btn--success btn--sm" onClick={() => handleAcceptVersus(v.id)}>Accepter</button>
-                                      <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>Refuser</button>
+                                      <button className="btn btn--success btn--sm" onClick={() => handleAcceptVersus(v.id)}>{t("versus.accept")}</button>
+                                      <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>{t("versus.decline")}</button>
                                     </div>
                                   )}
                                   {v.ends_at && <div className="versus-card__timer">Fin : {new Date(v.ends_at).toLocaleDateString("fr-FR")}</div>}
@@ -7541,7 +7541,7 @@ export default function App() {
                   <div className="discover-page">
                     {versusChallenges.filter(v => v.status === "active").length > 0 && (
                       <div className="discover-versus">
-                        <h3 className="discover-section-title"><Swords size={16} /> Défis en cours</h3>
+                        <h3 className="discover-section-title"><Swords size={16} /> {t("versus.title")}</h3>
                         <div className="discover-versus__grid">
                           {versusChallenges.filter(v => v.status === "active").map(v => {
                             const isChallenger = v.challenger_id === user?.id;
@@ -8022,9 +8022,9 @@ export default function App() {
             <div className="versus-modal__field">
               <label>Type de défi</label>
               <select value={versusForm.type} onChange={(e) => setVersusForm({ ...versusForm, type: e.target.value })} className="versus-modal__select gamepad-nav-item">
-                <option value="playtime">Temps de jeu</option>
-                <option value="launches">Nombre de lancements</option>
-                <option value="streak">Plus long streak</option>
+                <option value="playtime">{t("versus.playtime")}</option>
+                <option value="launches">{t("versus.launches")}</option>
+                <option value="streak">{t("versus.streak")}</option>
               </select>
             </div>
             <div className="versus-modal__field">
@@ -8042,7 +8042,7 @@ export default function App() {
             </div>
             <div className="versus-modal__actions">
               <button className="btn btn--ghost" onClick={() => setVersusModal(null)}>Annuler</button>
-              <button className="btn btn--primary" onClick={handleCreateVersus}><Swords size={14} /> Envoyer le défi</button>
+              <button className="btn btn--primary" onClick={handleCreateVersus}><Swords size={14} /> {t("versus.sendChallenge")}</button>
             </div>
           </motion.div>
         </div>
@@ -8053,7 +8053,7 @@ export default function App() {
           <div className="lobby-panel__header">
             <h3>Lobby</h3>
             <button className="btn btn--danger btn--sm" onClick={handleLeaveLobby}>
-              {currentLobby.host_id === user?.id ? "Dissoudre" : "Quitter"}
+              {currentLobby.host_id === user?.id ? t("lobby.dissolve") : t("lobby.leave")}
             </button>
           </div>
           <div className="lobby-panel__game">
@@ -8071,7 +8071,7 @@ export default function App() {
           <div className="lobby-panel__actions">
             {currentLobby.host_id === user?.id && friends.length > 0 && (
               <select className="lobby-panel__invite-select" onChange={(e) => { if (e.target.value) handleInviteToLobby(e.target.value); e.target.value = ""; }}>
-                <option value="">Inviter un ami...</option>
+                <option value="">{t("lobby.inviteFriend")}</option>
                 {friends.map(f => {
                   const friendId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
                   if ((currentLobby.members || []).some(m => m.user_id === friendId)) return null;
@@ -8081,10 +8081,10 @@ export default function App() {
             )}
             {!(currentLobby.members || []).find(m => m.user_id === user?.id)?.is_ready && (
               roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console) ? (
-                <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>Je suis prêt !</button>
+                <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>{t("lobby.ready")}</button>
               ) : (
                 <button className="btn btn--primary btn--sm" onClick={() => setPage("store")}>
-                  <Download size={12} /> Télécharger le jeu
+                  <Download size={12} /> {t("lobby.downloadGame")}
                 </button>
               )
             )}
@@ -8139,7 +8139,7 @@ export default function App() {
             </button>
             {user && (
               <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleCreateLobby(romContextMenu.rom); }}>
-                <Users size={14} /> Créer un lobby
+                <Users size={14} /> {t("lobby.createLobby")}
               </button>
             )}
             <div className="rom-context-menu__sep" />
