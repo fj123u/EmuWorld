@@ -4921,7 +4921,9 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
         };
 
         match source {
-            emulators::UpdateSource::GitHub(repo, current) => {
+            emulators::UpdateSource::GitHub(repo, catalog_ver) => {
+                let current = get_installed_version(&emu.id).unwrap_or_else(|| catalog_ver.to_string());
+                let current = current.as_str();
                 let api_url = format!("https://api.github.com/repos/{}/releases/latest", repo);
                 if let Ok(resp) = client.get(&api_url).header("User-Agent", "EmuWorld/2.0").send().await {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
@@ -4942,7 +4944,8 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                     }
                 }
             }
-            emulators::UpdateSource::Forgejo(api_url, current) => {
+            emulators::UpdateSource::Forgejo(api_url, catalog_ver) => {
+                let current = get_installed_version(&emu.id).unwrap_or_else(|| catalog_ver.to_string());
                 if let Ok(resp) = client.get(api_url).header("User-Agent", "EmuWorld/2.0").send().await {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
                         let releases = if json.is_array() { json.as_array().cloned().unwrap_or_default() } else { vec![json] };
@@ -4964,7 +4967,8 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                     }
                 }
             }
-            emulators::UpdateSource::DolphinEmu(current) => {
+            emulators::UpdateSource::DolphinEmu(catalog_ver) => {
+                let current = get_installed_version(&emu.id).unwrap_or_else(|| catalog_ver.to_string());
                 if let Ok(resp) = client.get("https://dolphin-emu.org/download/list/master/1/").header("User-Agent", "EmuWorld/2.0").send().await {
                     if let Ok(text) = resp.text().await {
                         if let Some(cap) = regex::Regex::new(r"Dolphin (\d+)").ok().and_then(|re| re.captures(&text)) {
@@ -4981,6 +4985,25 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
     }
     push_log("INFO", &format!("Update check: {} mise(s) à jour disponible(s)", updates.len()));
     Ok(updates)
+}
+
+#[tauri::command]
+fn save_emulator_version(emulator_id: String, version: String) -> Result<(), String> {
+    let path = emuworld_base_dir().join("emulator_versions.json");
+    let mut versions: std::collections::HashMap<String, String> = if let Ok(data) = fs::read_to_string(&path) {
+        serde_json::from_str(&data).unwrap_or_default()
+    } else {
+        std::collections::HashMap::new()
+    };
+    versions.insert(emulator_id, version);
+    fs::write(&path, serde_json::to_string(&versions).unwrap_or_default()).map_err(|e| e.to_string())
+}
+
+fn get_installed_version(id: &str) -> Option<String> {
+    let path = emuworld_base_dir().join("emulator_versions.json");
+    let data = fs::read_to_string(&path).ok()?;
+    let versions: std::collections::HashMap<String, String> = serde_json::from_str(&data).ok()?;
+    versions.get(id).cloned()
 }
 
 #[tauri::command]
@@ -5344,6 +5367,7 @@ pub fn run() {
             check_emulator_updates,
             get_log_file_path,
             get_logs_directory,
+            save_emulator_version,
             launch_netplay,
             start_oauth_server,
             create_overlay_window,

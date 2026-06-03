@@ -6117,7 +6117,7 @@ export default function App() {
                       {update && (
                         <div className="emu-card__update-info">
                           <span>{update.current_version} → {update.latest_version}</span>
-                          <button className="btn btn--primary btn--sm" onClick={() => { handleUninstall(emu.id); setTimeout(() => handleInstall(emu.id), 500); }}>
+                          <button className="btn btn--primary btn--sm" onClick={async () => { handleUninstall(emu.id); setTimeout(() => handleInstall(emu.id), 500); await invoke("save_emulator_version", { emulatorId: emu.id, version: update.latest_version }); setEmuUpdates(prev => prev.filter(u => u.id !== emu.id)); }}>
                             <Download size={12} /> {t("updates.update")}
                           </button>
                         </div>
