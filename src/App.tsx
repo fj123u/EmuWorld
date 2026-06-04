@@ -6290,6 +6290,17 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
+                    <div className="settings__group-title"><Compass size={16} /> Tutoriel</div>
+                    <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => {
+                      localStorage.removeItem("emuworld_onboarding_done");
+                      setOnboardingStep(0);
+                      setShowOnboarding(true);
+                    }}>
+                      <RefreshCw size={12} /> Relancer le tutoriel de démarrage
+                    </button>
+                  </div>
+
+                  <div className="settings__group">
                     <div className="settings__group-title"><ShieldCheck size={16} /> {t("health.title")}</div>
                     <p className="settings__field-desc">{t("health.description")}</p>
                     <button className="btn btn--primary btn--sm" onClick={async () => {
