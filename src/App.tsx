@@ -9175,27 +9175,25 @@ export default function App() {
           { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, vois ce qu'ils jouent, et chatte avec eux.", position: "right" as const },
         ];
         const step = steps[tourStep];
+        if (step.action) step.action();
         const el = document.querySelector<HTMLElement>(step.selector);
         const rect = el?.getBoundingClientRect();
-        if (step.action && el) step.action();
         return (
           <div className="tour-overlay" onClick={() => setTourStep(null)}>
-            {rect && (
-              <>
-                <div className="tour-highlight" style={{ top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8 }} />
-                <div
-                  className={`tour-tooltip tour-tooltip--${step.position}`}
-                  style={{
-                    top: step.position === "top" ? rect.top - 120 : rect.top + rect.height / 2 - 40,
-                    left: step.position === "right" ? rect.right + 16 : rect.left + rect.width / 2 - 140,
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <h3 className="tour-tooltip__title">{step.title}</h3>
-                  <p className="tour-tooltip__desc">{step.desc}</p>
-                  <div className="tour-tooltip__nav">
-                    {tourStep > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setTourStep(tourStep - 1)}>Précédent</button>}
-                    {tourStep < steps.length - 1 ? (
+            {rect && <div className="tour-highlight" style={{ top: rect.top - 4, left: rect.left - 4, width: rect.width + 8, height: rect.height + 8 }} />}
+            <div
+              className={`tour-tooltip tour-tooltip--${step.position}`}
+              style={rect ? {
+                top: step.position === "top" ? rect.top - 120 : rect.top + rect.height / 2 - 40,
+                left: step.position === "right" ? rect.right + 16 : rect.left + rect.width / 2 - 140,
+              } : { top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="tour-tooltip__title">{step.title}</h3>
+              <p className="tour-tooltip__desc">{step.desc}</p>
+              <div className="tour-tooltip__nav">
+                {tourStep > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setTourStep(tourStep - 1)}>Précédent</button>}
+                {tourStep < steps.length - 1 ? (
                       <button className="btn btn--primary btn--sm" onClick={() => setTourStep(tourStep + 1)}>Suivant</button>
                     ) : (
                       <button className="btn btn--primary btn--sm" onClick={() => setTourStep(null)}>Terminer</button>
@@ -9203,22 +9201,6 @@ export default function App() {
                   </div>
                   <span className="tour-tooltip__count">{tourStep + 1}/{steps.length}</span>
                 </div>
-              </>
-            )}
-            {!rect && (
-              <div className="tour-tooltip" style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }} onClick={(e) => e.stopPropagation()}>
-                <h3 className="tour-tooltip__title">{step.title}</h3>
-                <p className="tour-tooltip__desc">{step.desc}</p>
-                <div className="tour-tooltip__nav">
-                  {tourStep > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setTourStep(tourStep - 1)}>Précédent</button>}
-                  {tourStep < steps.length - 1 ? (
-                    <button className="btn btn--primary btn--sm" onClick={() => setTourStep(tourStep + 1)}>Suivant</button>
-                  ) : (
-                    <button className="btn btn--primary btn--sm" onClick={() => setTourStep(null)}>Terminer</button>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
         );
       })()}
