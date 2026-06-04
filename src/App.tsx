@@ -6290,13 +6290,13 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><Compass size={16} /> Tutoriel</div>
+                    <div className="settings__group-title"><Compass size={16} /> {t("tutorial.title")}</div>
                     <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => {
                       localStorage.removeItem("emuworld_onboarding_done");
                       setOnboardingStep(0);
                       setShowOnboarding(true);
                     }}>
-                      <RefreshCw size={12} /> Relancer le tutoriel de démarrage
+                      <RefreshCw size={12} /> {t("tutorial.restart")}
                     </button>
                   </div>
 
@@ -9179,14 +9179,14 @@ export default function App() {
       {/* ===== GUIDED TOUR ===== */}
       {tourStep !== null && (() => {
         const steps = [
-          { selector: "[data-tour='store']", title: "1. Télécharge un jeu", desc: "Va dans le Store pour télécharger des ROMs à l'unité.", position: "right" as const, action: () => setPage("store") },
-          { selector: "[data-tour='emulators']", title: "2. Installe un émulateur", desc: "Installe l'émulateur correspondant à ta console en un clic.", position: "right" as const, action: () => setPage("catalog") },
-          { selector: "[data-tour='library']", title: "3. Ta bibliothèque", desc: "Tous tes jeux apparaissent ici avec leurs covers.", position: "right" as const, action: () => setPage("library") },
-          { selector: "[data-tour='play']", title: "4. Joue !", desc: "Clique sur un jeu pour le lancer. L'émulateur s'ouvre automatiquement.", position: "top" as const },
-          { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, vois ce qu'ils jouent, et chatte avec eux.", position: "right" as const },
+          { selector: "[data-tour='store']", title: "1. Télécharge un jeu", desc: "Va dans le Store pour télécharger des ROMs à l'unité.", position: "right" as const, page: "store" as Page },
+          { selector: "[data-tour='emulators']", title: "2. Installe un émulateur", desc: "Installe l'émulateur correspondant à ta console en un clic.", position: "right" as const, page: "catalog" as Page },
+          { selector: "[data-tour='library']", title: "3. Ta bibliothèque", desc: "Tous tes jeux apparaissent ici avec leurs covers.", position: "right" as const, page: "library" as Page },
+          { selector: "[data-tour='play']", title: "4. Joue !", desc: "Clique sur un jeu pour le lancer. L'émulateur s'ouvre automatiquement.", position: "top" as const, page: "library" as Page },
+          { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, vois ce qu'ils jouent, et chatte avec eux.", position: "right" as const, page: "friends" as Page },
         ];
         const step = steps[tourStep];
-        if (step.action) step.action();
+        if (step.page && page !== step.page) setPage(step.page);
         const el = document.querySelector<HTMLElement>(step.selector);
         const rect = el?.getBoundingClientRect();
         return (

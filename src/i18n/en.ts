@@ -415,6 +415,12 @@ const en: Translations = {
     noReviews: "No reviews for this game.",
   },
 
+  // Tutorial
+  tutorial: {
+    title: "Tutorial",
+    restart: "Restart the getting started tutorial",
+  },
+
   // Logs
   logs: {
     title: "Log files",

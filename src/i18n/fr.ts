@@ -413,6 +413,12 @@ const fr = {
     noReviews: "Aucun avis pour ce jeu.",
   },
 
+  // Tutorial
+  tutorial: {
+    title: "Tutoriel",
+    restart: "Relancer le tutoriel de démarrage",
+  },
+
   // Logs
   logs: {
     title: "Fichiers de logs",
