@@ -3711,12 +3711,14 @@ export default function App() {
     const { data } = await supabase.from("lobby_members").select("lobby_id").eq("user_id", user.id);
     if (data && data.length > 0) {
       const lobbyIds = data.map((m: any) => m.lobby_id);
-      const { data: lobbies } = await supabase.from("lobbies").select("*").in("id", lobbyIds).eq("status", "waiting");
+      const { data: lobbies } = await supabase.from("lobbies").select("*").in("id", lobbyIds).eq("status", "waiting").neq("host_id", user.id);
       if (lobbies && lobbies.length > 0) {
         const hostIds = [...new Set(lobbies.map((l: any) => l.host_id))];
         const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", hostIds);
         const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-        setLobbyInvites(lobbies.map((l: any) => ({ ...l, host_profile: profileMap.get(l.host_id) })));
+        setLobbyInvites(lobbies.filter((l: any) => l.host_id !== user.id).map((l: any) => ({ ...l, host_profile: profileMap.get(l.host_id) })));
+      } else {
+        setLobbyInvites([]);
       }
     }
   }, [user]);
@@ -3787,6 +3789,18 @@ export default function App() {
   }, [currentLobby, user, showToast]);
 
   useEffect(() => { if (user) loadLobbyInvites(); }, [user, loadLobbyInvites]);
+
+  // Realtime: listen for lobby invites
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase.channel("lobby-invites")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "lobby_members", filter: `user_id=eq.${user.id}` }, (payload: any) => {
+        loadLobbyInvites();
+        showToast("Tu as reçu une invitation à un lobby !", "success");
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, loadLobbyInvites, showToast]);
 
   // ─── Marketplace ───
   interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }
@@ -8094,6 +8108,24 @@ export default function App() {
             </div>
           </motion.div>
         </div>
+      )}
+
+      {!currentLobby && lobbyInvites.length > 0 && (
+        <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+          <div className="lobby-panel__header">
+            <h3>🎮 {t("lobby.title")}</h3>
+          </div>
+          {lobbyInvites.map(inv => (
+            <div key={inv.id} className="lobby-panel__game" style={{ marginBottom: 8 }}>
+              <strong>{inv.host_profile?.username || "?"}</strong> {t("lobby.inviteSent").replace("!", "")}
+              <div><small>{inv.game_name} ({inv.game_console})</small></div>
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                <button className="btn btn--success btn--sm" onClick={() => handleJoinLobby(inv.id)}>{t("versus.accept")}</button>
+                <button className="btn btn--ghost btn--sm" onClick={async () => { await supabase.from("lobby_members").delete().eq("lobby_id", inv.id).eq("user_id", user?.id); loadLobbyInvites(); }}>{t("versus.decline")}</button>
+              </div>
+            </div>
+          ))}
+        </motion.div>
       )}
 
       {currentLobby && (

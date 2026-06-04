@@ -3609,10 +3609,15 @@ async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGam
 
     let mut games = Vec::new();
     for row in document.select(&row_selector) {
-        // Find the first <a> whose href matches /vault/<numeric-id>
+        // Find an <a> whose href matches /vault/<numeric-id> that is NOT 999999 and has text
         let game_link = row.select(&link_selector).find(|a| {
             let href = a.value().attr("href").unwrap_or("");
-            id_re.is_match(href)
+            if let Some(caps) = id_re.captures(href) {
+                let id = &caps[1];
+                id != "999999" && !a.text().collect::<String>().trim().is_empty()
+            } else {
+                false
+            }
         });
         let Some(link) = game_link else { continue };
         let href = link.value().attr("href").unwrap_or("");
@@ -3681,7 +3686,12 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
     for row in document.select(&row_selector) {
         let game_link = row.select(&link_selector).find(|a| {
             let href = a.value().attr("href").unwrap_or("");
-            id_re.is_match(href)
+            if let Some(caps) = id_re.captures(href) {
+                let id = &caps[1];
+                id != "999999" && !a.text().collect::<String>().trim().is_empty()
+            } else {
+                false
+            }
         });
         let Some(link) = game_link else { continue };
         let href = link.value().attr("href").unwrap_or("");
