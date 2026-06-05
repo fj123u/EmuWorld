@@ -1374,6 +1374,16 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.3.0", date: "2026-06-05", changes: [
+      "🔄 Auto-update émulateurs: détection des nouvelles versions via GitHub/Forgejo/Dolphin-emu",
+      "📋 Système de logs fichier: logs quotidiens avec auto-suppression après 7 jours",
+      "🩺 ROM health check: détection fichiers vides/corrompus + suppression en un clic",
+      "🌐 i18n complet: toutes les nouvelles features traduites FR/EN",
+      "🎮 Gamepad: navigation manette étendue aux selects, versus, lobby",
+      "🔧 Fix Vimm's Lair: adaptation au nouveau format du site (liens 999999)",
+      "🔧 Fix tutoriel: plus d'écran noir (boucle de rendu infinie corrigée)",
+      "🔧 Fix lobby: invitations en temps réel via Supabase Realtime + notifications",
+    ] },
     { version: "2.2.0", date: "2026-06-02", changes: [
       "🎮 Lobby multijoueur: créer un lobby, inviter un ami, lancement netplay automatique",
       "🌐 Netplay RetroArch (relay MITM), Dolphin (traversal server) et PPSSPP (adhoc)",
@@ -9183,7 +9193,7 @@ export default function App() {
           { selector: "[data-tour='emulators']", title: "2. Installe un émulateur", desc: "Installe l'émulateur correspondant à ta console en un clic.", position: "right" as const, page: "catalog" as Page },
           { selector: "[data-tour='library']", title: "3. Ta bibliothèque", desc: "Tous tes jeux apparaissent ici avec leurs covers.", position: "right" as const, page: "library" as Page },
           { selector: "[data-tour='play']", title: "4. Joue !", desc: "Clique sur un jeu pour le lancer. L'émulateur s'ouvre automatiquement.", position: "top" as const, page: "library" as Page },
-          { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, vois ce qu'ils jouent, et chatte avec eux.", position: "right" as const, page: "friends" as Page },
+          { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, regarde ce à quoi ils jouent et discute avec eux.", position: "right" as const, page: "friends" as Page },
         ];
         const step = steps[tourStep];
         if (step.page && page !== step.page) setPage(step.page);
