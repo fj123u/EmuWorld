@@ -37,7 +37,11 @@ CREATE POLICY "Host deletes lobby" ON lobbies FOR DELETE USING (auth.uid() = hos
 
 -- Members
 CREATE POLICY "Members are public" ON lobby_members FOR SELECT USING (true);
-CREATE POLICY "Users join lobbies" ON lobby_members FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users join lobbies" ON lobby_members FOR INSERT WITH CHECK (
+  auth.uid() = user_id
+  OR
+  EXISTS (SELECT 1 FROM lobbies WHERE id = lobby_id AND host_id = auth.uid())
+);
 CREATE POLICY "Users leave lobbies" ON lobby_members FOR DELETE USING (auth.uid() = user_id);
 CREATE POLICY "Users update own ready" ON lobby_members FOR UPDATE USING (auth.uid() = user_id);
 
