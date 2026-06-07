@@ -1374,6 +1374,9 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.3.1", date: "2026-06-07", changes: [
+      "🔧 Fix lobby multijoueur: le host peut maintenant inviter des amis (policy RLS corrigée)",
+    ] },
     { version: "2.3.0", date: "2026-06-05", changes: [
       "🔄 Auto-update émulateurs: détection des nouvelles versions via GitHub/Forgejo/Dolphin-emu",
       "📋 Système de logs fichier: logs quotidiens avec auto-suppression après 7 jours",
