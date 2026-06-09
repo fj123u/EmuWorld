@@ -1374,6 +1374,13 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.3.2", date: "2026-06-10", changes: [
+      "🔧 Fix connexion OAuth Google/Discord: le serveur local utilise maintenant des ports fixes pour que la page callback puisse toujours communiquer avec l'app",
+      "🎮 RetroArch: les cores se téléchargent automatiquement au lancement même sans RetroAchievements lié",
+      "👥 Lobby: le host voit maintenant les joueurs rejoindre en temps réel (Supabase Realtime)",
+      "🖱️ Fix scroll sidebar: la navigation manette ne perturbe plus le scroll souris",
+      "🎮 Fix manette via logiciels tiers (WiiUPro, DS4Windows): deadzone augmentée pour filtrer le bruit",
+    ] },
     { version: "2.3.1", date: "2026-06-07", changes: [
       "🔧 Fix lobby multijoueur: le host peut maintenant inviter des amis (policy RLS corrigée)",
     ] },
