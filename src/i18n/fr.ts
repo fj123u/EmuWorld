@@ -319,6 +319,7 @@ const fr = {
     title: "Lobby",
     created: "Lobby créé ! Invite un ami.",
     inviteSent: "Invitation envoyée !",
+    inviteReceived: "Tu as reçu une invitation à un lobby !",
     dissolved: "Lobby dissous",
     left: "Tu as quitté le lobby",
     allReady: "Tous les joueurs sont prêts ! Lancement du netplay...",

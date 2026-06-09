@@ -321,6 +321,7 @@ const en: Translations = {
     title: "Lobby",
     created: "Lobby created! Invite a friend.",
     inviteSent: "Invitation sent!",
+    inviteReceived: "You received a lobby invitation!",
     dissolved: "Lobby dissolved",
     left: "You left the lobby",
     allReady: "All players are ready! Launching netplay...",

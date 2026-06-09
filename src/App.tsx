@@ -1526,7 +1526,7 @@ export default function App() {
   // ---- Gamepad / Controller state ----
   const [gamepadConfig, setGamepadConfig] = useState<GamepadConfig>({
     selectedIndex: 0,
-    deadzone: 0.15,
+    deadzone: 0.2,
     mappings: [...DEFAULT_GAMEPAD_MAPPINGS],
   });
   const [gamepadActive, setGamepadActive] = useState(false);
@@ -3049,6 +3049,7 @@ export default function App() {
   focusIndexRef.current = focusIndex;
   useEffect(() => {
     const applyFocus = () => {
+      if (!gamepadActiveRef.current) return;
       const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
       const contentItems = document.querySelectorAll<HTMLElement>(".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item");
       const allItems = [...sidebarItems, ...contentItems];
@@ -3809,11 +3810,23 @@ export default function App() {
     const channel = supabase.channel("lobby-invites")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "lobby_members", filter: `user_id=eq.${user.id}` }, (payload: any) => {
         loadLobbyInvites();
-        showToast("Tu as reçu une invitation à un lobby !", "success");
+        showToast(t("lobby.inviteReceived"), "success");
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user, loadLobbyInvites, showToast]);
+
+  // Realtime: host sees new members joining their lobby
+  useEffect(() => {
+    if (!user || !currentLobby || currentLobby.host_id !== user.id) return;
+    const channel = supabase.channel(`lobby-members-${currentLobby.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lobby_members", filter: `lobby_id=eq.${currentLobby.id}` }, async () => {
+        const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
+        if (members) setCurrentLobby(prev => prev ? { ...prev, members } : prev);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, currentLobby?.id, currentLobby?.host_id]);
 
   // ─── Marketplace ───
   interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }

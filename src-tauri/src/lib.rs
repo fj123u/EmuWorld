@@ -697,6 +697,31 @@ async fn launch_emulator(
         let dir = if emu.id.starts_with("retroarch-") {
             let shared_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
             if find_executable(&shared_dir, &emu.executable_name).is_some() {
+                // Auto-download missing core for retroarch-* emulators (even without RA linked)
+                if let Some(core_name) = &emu.core_name {
+                    let cores_dir = shared_dir.join("cores");
+                    fs::create_dir_all(&cores_dir).ok();
+                    if !cores_dir.join(core_name).exists() {
+                        println!("[Launch] Core '{}' missing for {} — downloading...", core_name, emu.id);
+                        push_log("INFO", &format!("Téléchargement du core {} en cours...", core_name));
+                        let core_url = format!("https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip", core_name);
+                        if let Ok(dl_client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
+                            if let Ok(resp) = dl_client.get(&core_url).send().await {
+                                if resp.status().is_success() {
+                                    if let Ok(data) = resp.bytes().await {
+                                        let tmp = shared_dir.join("_core_tmp.zip");
+                                        if fs::write(&tmp, &data).is_ok() {
+                                            let _ = extract_zip(&tmp, &cores_dir);
+                                            fs::remove_file(&tmp).ok();
+                                            println!("[Launch] Core '{}' installed for {}", core_name, emu.id);
+                                            push_log("INFO", &format!("Core {} installé", core_name));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 shared_dir
             } else {
                 PathBuf::from(&config.emulators_directory).join(&emu.id)

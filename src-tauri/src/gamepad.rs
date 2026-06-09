@@ -85,11 +85,15 @@ pub fn start_gamepad_thread(app_handle: AppHandle) {
                 ];
 
                 // Axes: left stick X/Y, right stick X/Y
+                // Apply a small hardware deadzone to filter noise from virtual controllers
+                // (e.g. WiiUPro via WiinUPro, DS4Windows, etc.)
+                let hw_deadzone = 0.08;
+                let filter = |v: f32| if v.abs() < hw_deadzone { 0.0 } else { v };
                 state.axes = vec![
-                    gamepad.value(Axis::LeftStickX),
-                    -gamepad.value(Axis::LeftStickY), // invert Y (up = negative)
-                    gamepad.value(Axis::RightStickX),
-                    -gamepad.value(Axis::RightStickY),
+                    filter(gamepad.value(Axis::LeftStickX)),
+                    filter(-gamepad.value(Axis::LeftStickY)),
+                    filter(gamepad.value(Axis::RightStickX)),
+                    filter(-gamepad.value(Axis::RightStickY)),
                 ];
             } else {
                 if state.connected {
