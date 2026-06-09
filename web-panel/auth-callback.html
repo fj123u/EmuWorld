@@ -113,33 +113,38 @@
   }
 
   function tryLocalhost() {
-    // Try common ports used by EmuWorld's OAuth server
+    // Try the fixed ports used by EmuWorld's OAuth server
     const tokens = getTokens();
-    const ports = [19847, 19848, 19849, 19850];
-    for (let i = 14000; i < 14020; i++) ports.push(i);
-
-    // Also try to extract port from localStorage if available
-    const img = new Image();
-    let tried = 0;
+    const ports = [17643, 17644, 17645, 17646, 17647];
+    let connected = false;
 
     ports.forEach(port => {
-      fetch(`http://127.0.0.1:${port}/callback${tokens}`, { mode: 'no-cors' }).catch(() => {});
+      fetch(`http://127.0.0.1:${port}/callback${tokens}`, { mode: 'no-cors' })
+        .then(() => {
+          if (!connected) {
+            connected = true;
+            document.getElementById('status').innerHTML = '✅ Connecté ! Tu peux fermer cet onglet.';
+            setTimeout(() => window.close(), 1500);
+          }
+        })
+        .catch(() => {});
     });
   }
 
   function jump() {
+    // Primary: try localhost HTTP server (most reliable on Windows)
+    tryLocalhost();
+
+    // Secondary: try deep-link protocol
     const url = buildDeepLink();
     const iframe = document.createElement('iframe');
     iframe.style.display = 'none';
     iframe.src = url;
     document.body.appendChild(iframe);
 
-    setTimeout(() => {
-      window.open(url, '_self');
-    }, 300);
-
-    // Also try localhost as fallback
-    tryLocalhost();
+    // Retry localhost after a short delay in case server was slow to start
+    setTimeout(tryLocalhost, 1000);
+    setTimeout(tryLocalhost, 3000);
 
     setTimeout(() => {
       document.getElementById('status').innerHTML =
@@ -147,7 +152,7 @@
       document.getElementById('retry').style.display = 'inline-flex';
       document.getElementById('manual').style.display = 'block';
       window.close();
-    }, 2000);
+    }, 5000);
   }
 
   function copyToken() {

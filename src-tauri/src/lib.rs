@@ -5104,8 +5104,13 @@ async fn start_oauth_server(app_handle: tauri::AppHandle) -> Result<u16, String>
     use std::net::TcpListener;
     use tauri::Emitter;
 
-    // Bind to a random available port
-    let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
+    // Try to bind to a known fixed port first (so the callback page can reach us reliably)
+    // Fall back to nearby ports if occupied
+    let fixed_ports = [17643, 17644, 17645, 17646, 17647];
+    let listener = fixed_ports.iter()
+        .find_map(|p| TcpListener::bind(format!("127.0.0.1:{}", p)).ok())
+        .or_else(|| TcpListener::bind("127.0.0.1:0").ok())
+        .ok_or_else(|| "Failed to bind OAuth server".to_string())?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     *oauth_port().lock().unwrap() = port;
     push_log("INFO", &format!("OAuth HTTP server started on port {}", port));
