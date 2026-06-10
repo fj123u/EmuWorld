@@ -112,6 +112,10 @@ EmuWorld/
 └── CLAUDE.md                     # Instructions pour Claude Code
 ```
 
+## Disclaimer
+
+EmuWorld is a launcher and does **not** include or distribute any copyrighted game files (ROMs, ISOs). Users are solely responsible for ensuring they own the original copies of any games they use with this software. The integrated store feature is a technical proof of concept; downloading copyrighted material without owning the original game is illegal in most jurisdictions. The developers of EmuWorld do not condone or encourage piracy.
+
 ## Licence
 
 MIT
