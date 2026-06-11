@@ -1374,6 +1374,10 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.3.3", date: "2026-06-11", changes: [
+      "📦 Fix store Switch: les archives .7z (XCI/NSP) sont maintenant extraites automatiquement après téléchargement",
+      "🔐 Fix OAuth Google/Discord: page callback déployée avec les bons ports — la connexion ne charge plus dans le vide",
+    ] },
     { version: "2.3.2", date: "2026-06-10", changes: [
       "🔧 Fix connexion OAuth Google/Discord: le serveur local utilise maintenant des ports fixes pour que la page callback puisse toujours communiquer avec l'app",
       "🎮 RetroArch: les cores se téléchargent automatiquement au lancement même sans RetroAchievements lié",
