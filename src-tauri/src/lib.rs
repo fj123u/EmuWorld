@@ -2920,12 +2920,14 @@ async fn download_rom(
         || final_file_name.to_lowercase().ends_with(".zip")
         || is_zip_file(&dest);
     
+    let is_7z = final_file_name.to_lowercase().ends_with(".7z")
+        || final_url.to_lowercase().ends_with(".7z");
+
     if is_zip {
         println!("[Download] Detected ZIP archive, extracting...");
         match extract_rom_zip(&dest, &dest_dir) {
             Ok(extracted_files) => {
                 println!("[Download] Extracted {} files: {:?}", extracted_files.len(), extracted_files);
-                // Delete the zip after successful extraction
                 let _ = fs::remove_file(&dest);
                 println!("[Download] Deleted ZIP archive: {}", dest.display());
             }
@@ -2933,8 +2935,35 @@ async fn download_rom(
                 println!("[Download] ZIP extraction failed: {} — keeping raw file", e);
             }
         }
+    } else if is_7z {
+        println!("[Download] Detected 7z archive, extracting...");
+        let dest_clone = dest.clone();
+        let dest_dir_clone = dest_dir.clone();
+        let handle = app_handle.clone();
+        let file_name_clone = final_file_name.clone();
+        tokio::task::spawn_blocking(move || {
+            use tauri::Emitter;
+            match extract_7z(&dest_clone, &dest_dir_clone) {
+                Ok(()) => {
+                    println!("[Download] Extracted 7z successfully: {}", file_name_clone);
+                    let _ = fs::remove_file(&dest_clone);
+                    let _ = handle.emit("import-extract-done", serde_json::json!({
+                        "file": file_name_clone,
+                        "status": "success"
+                    }));
+                }
+                Err(e) => {
+                    println!("[Download] 7z extraction failed: {} — keeping raw file", e);
+                    let _ = handle.emit("import-extract-done", serde_json::json!({
+                        "file": file_name_clone,
+                        "status": "error",
+                        "message": e
+                    }));
+                }
+            }
+        });
     } else {
-        println!("[Download] File is not a ZIP, keeping as-is");
+        println!("[Download] File is not an archive, keeping as-is");
     }
     
     let _ = app_handle.emit("rom-download-progress", serde_json::json!({
