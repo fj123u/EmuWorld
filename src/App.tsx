@@ -1212,6 +1212,7 @@ export default function App() {
   const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string[]>([]);
+  const [installChoiceModal, setInstallChoiceModal] = useState<{ standalone: string; retroarch: string } | null>(null);
   const [emuUpdates, setEmuUpdates] = useState<any[]>([]);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -3827,17 +3828,31 @@ export default function App() {
     return () => { supabase.removeChannel(channel); };
   }, [user, loadLobbyInvites, showToast]);
 
-  // Realtime: host sees new members joining their lobby
+  // Realtime: ALL players in a lobby see member changes + auto-launch when allReady
   useEffect(() => {
-    if (!user || !currentLobby || currentLobby.host_id !== user.id) return;
+    if (!user || !currentLobby) return;
     const channel = supabase.channel(`lobby-members-${currentLobby.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "lobby_members", filter: `lobby_id=eq.${currentLobby.id}` }, async () => {
         const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
-        if (members) setCurrentLobby(prev => prev ? { ...prev, members } : prev);
+        if (members) {
+          setCurrentLobby(prev => prev ? { ...prev, members } : prev);
+          const allReady = members.every((m: any) => m.is_ready);
+          if (allReady && members.length >= 2) {
+            const isHost = currentLobby.host_id === user.id;
+            const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
+            if (rom) {
+              const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
+              if (emu) {
+                showToast(t("lobby.allReady"), "success");
+                invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost, lobbyId: currentLobby.id }).catch(() => {});
+              }
+            }
+          }
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, currentLobby?.id, currentLobby?.host_id]);
+  }, [user, currentLobby?.id, currentLobby?.host_id, roms, catalog, installed, showToast]);
 
   // ─── Marketplace ───
   interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }
@@ -4420,9 +4435,30 @@ export default function App() {
   }, [vimmSearch, selectedVimmConsole]);
 
   // ---- Actions ----
+  // Mapping: standalone emulator ID → RetroArch core ID (for install choice)
+  const RETROARCH_ALTERNATIVES: Record<string, string> = {
+    mesen: "retroarch-nes",
+    mgba: "retroarch-gba",
+    snes9x: "retroarch-snes",
+    project64: "retroarch-n64",
+    melonds: "retroarch-nds",
+    flycast: "retroarch-dc",
+  };
+
   const handleInstall = async (id: string) => {
+    // If standalone has a RetroArch alternative, show choice modal
+    const raAlt = RETROARCH_ALTERNATIVES[id];
+    if (raAlt && !installed.includes(id) && !installed.includes(raAlt)) {
+      setInstallChoiceModal({ standalone: id, retroarch: raAlt });
+      return;
+    }
+    doInstall(id);
+  };
+
+  const doInstall = async (id: string) => {
+    setInstallChoiceModal(null);
     setInstalling((prev) => [...prev, id]);
-    showToast("Downloading emulator...", "info");
+    showToast(t("emulators.downloading"), "info");
     try {
       await invoke("install_emulator", { emulatorId: id });
     } catch (err: any) {
@@ -9255,6 +9291,26 @@ export default function App() {
 
       {/* ===== LOGIN MODAL ===== */}
       <AnimatePresence>
+        {installChoiceModal && (
+          <div className="modal-backdrop" onClick={() => setInstallChoiceModal(null)}>
+            <motion.div className="install-choice-modal" onClick={e => e.stopPropagation()} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+              <h3>{t("emulators.installChoice")}</h3>
+              <p className="install-choice-modal__desc">{t("emulators.installChoiceDesc")}</p>
+              <div className="install-choice-modal__options">
+                <button className="btn btn--primary gamepad-nav-item" onClick={() => doInstall(installChoiceModal.standalone)}>
+                  <span className="install-choice-modal__label">{catalog.find((e: any) => e.id === installChoiceModal.standalone)?.name || installChoiceModal.standalone}</span>
+                  <span className="install-choice-modal__tag">{t("emulators.standalone")}</span>
+                </button>
+                <button className="btn btn--success gamepad-nav-item" onClick={() => doInstall(installChoiceModal.retroarch)}>
+                  <span className="install-choice-modal__label">RetroArch</span>
+                  <span className="install-choice-modal__tag">{t("emulators.multiSupported")}</span>
+                </button>
+              </div>
+              <button className="btn btn--ghost btn--sm" onClick={() => setInstallChoiceModal(null)}>{t("common.cancel")}</button>
+            </motion.div>
+          </div>
+        )}
+
         {showLoginModal && (
           <motion.div
             className="login-overlay"

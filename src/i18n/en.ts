@@ -210,6 +210,13 @@ const en: Translations = {
     supportedFormats: "Supported formats",
     category: "Category",
   },
+  emulators: {
+    downloading: "Downloading emulator...",
+    installChoice: "Choose emulator",
+    installChoiceDesc: "This emulator is also available via RetroArch. RetroArch enables online multiplayer (netplay). The standalone emulator is easier to configure.",
+    standalone: "Standalone",
+    multiSupported: "Multiplayer supported",
+  },
 
   // Onboarding
   onboarding: {

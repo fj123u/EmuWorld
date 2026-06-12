@@ -1463,6 +1463,15 @@ body {
 /* ─── Modal Backdrop ─── */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
 
+/* ─── Install Choice Modal ─── */
+.install-choice-modal { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; max-width: 420px; width: 90%; text-align: center; }
+.install-choice-modal h3 { margin: 0 0 0.5rem; font-size: 1.1rem; color: var(--text-primary); }
+.install-choice-modal__desc { color: var(--text-muted); font-size: 0.82rem; margin-bottom: 1.2rem; line-height: 1.4; }
+.install-choice-modal__options { display: flex; gap: 0.8rem; margin-bottom: 1rem; }
+.install-choice-modal__options .btn { flex: 1; flex-direction: column; gap: 0.3rem; padding: 1rem; height: auto; }
+.install-choice-modal__label { font-size: 0.95rem; font-weight: 700; }
+.install-choice-modal__tag { font-size: 0.7rem; opacity: 0.7; font-weight: 500; }
+
 /* ─── Versus Mode ─── */
 .versus-list { display: flex; flex-direction: column; gap: 0.8rem; }
 .versus-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }

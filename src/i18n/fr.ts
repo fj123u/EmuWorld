@@ -208,6 +208,13 @@ const fr = {
     supportedFormats: "Formats supportés",
     category: "Catégorie",
   },
+  emulators: {
+    downloading: "Téléchargement de l'émulateur...",
+    installChoice: "Choix de l'émulateur",
+    installChoiceDesc: "Cet émulateur est aussi disponible via RetroArch. RetroArch permet le multijoueur en ligne (netplay). L'émulateur standalone est plus simple à configurer.",
+    standalone: "Standalone",
+    multiSupported: "Multijoueur supporté",
+  },
 
   // Onboarding
   onboarding: {
