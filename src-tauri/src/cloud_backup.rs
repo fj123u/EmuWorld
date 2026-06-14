@@ -460,20 +460,31 @@ pub fn restore_backup_zip(zip_path: &str, emulators_dir: &str) -> Result<u32, St
     let file = fs::File::open(zip_path).map_err(|e| e.to_string())?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
     let base = PathBuf::from(emulators_dir);
+    let _ = fs::create_dir_all(&base);
+    let canonical_base = base.canonicalize().unwrap_or_else(|_| base.clone());
     let mut restored = 0u32;
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
         if entry.is_dir() { continue; }
+        if entry.size() > 512 * 1024 * 1024 {
+            return Err(format!("Entrée ZIP trop volumineuse : {} octets", entry.size()));
+        }
 
-        let name = entry.name().to_string();
-        let dest = base.join(&name);
+        let dest = match entry.enclosed_name() {
+            Some(name) => base.join(name),
+            None => continue,
+        };
         if let Some(parent) = dest.parent() {
             let _ = fs::create_dir_all(parent);
         }
+        let canonical_dest = dest.canonicalize().unwrap_or_else(|_| dest.clone());
+        if !canonical_dest.starts_with(&canonical_base) {
+            continue;
+        }
         let mut buf = Vec::new();
         entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
-        fs::write(&dest, &buf).map_err(|e| e.to_string())?;
+        fs::write(&canonical_dest, &buf).map_err(|e| e.to_string())?;
         restored += 1;
     }
 
@@ -648,6 +659,9 @@ pub async fn b2_delete_file(
     Ok(())
 }
 
-fn sha1_hash(_data: &[u8]) -> String {
-    "do_not_verify".to_string()
+fn sha1_hash(data: &[u8]) -> String {
+    use sha1::Digest;
+    let mut hasher = sha1::Sha1::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
 }

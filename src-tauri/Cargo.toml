@@ -44,3 +44,4 @@ tauri-plugin-global-shortcut = "2"
 winapi = { version = "0.3", features = ["winuser", "libloaderapi", "minwindef"] }
 image = "0.25"
 webp = "0.3"
+sha1 = "0.10"

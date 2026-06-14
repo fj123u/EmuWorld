@@ -129,7 +129,10 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
 
     static SHIFT_DOWN: AtomicBool = AtomicBool::new(false);
 
-    *overlay_app_handle().lock().unwrap() = Some(app_handle);
+    match overlay_app_handle().lock() {
+        Ok(mut guard) => *guard = Some(app_handle),
+        Err(poisoned) => *poisoned.into_inner() = Some(app_handle),
+    };
 
     unsafe extern "system" fn hook_proc(
         code: i32,
@@ -842,7 +845,7 @@ async fn launch_emulator(
             "duckstation" => { cmd.arg("-fullscreen"); },
             "pcsx2" => { cmd.arg("-fullscreen"); },
             "mgba" => { cmd.arg("-f"); },
-            "rpcs3" => { cmd.arg("--no-gui"); cmd.arg("--fullscreen"); },
+            "rpcs3" => { if rom_path.is_some() { cmd.arg("--no-gui"); cmd.arg("--fullscreen"); } },
             "ryubing" => { cmd.arg("--fullscreen"); },
             "azahar" => { /* no fullscreen flag — azahar doesn't support CLI fullscreen */ },
             "melonds" => { cmd.arg("--fullscreen"); },
@@ -1299,7 +1302,15 @@ fn delete_rom(path: String) -> Result<String, String> {
     if !p.exists() {
         return Err("File not found".to_string());
     }
-    
+
+    let config = get_config();
+    let roms_root = PathBuf::from(&config.roms_directory);
+    if let (Ok(canonical), Ok(canonical_root)) = (p.canonicalize(), roms_root.canonicalize()) {
+        if !canonical.starts_with(&canonical_root) {
+            return Err("Accès refusé : fichier hors du dossier ROMs".to_string());
+        }
+    }
+
     // Delete the ROM file
     fs::remove_file(&p).map_err(|e| format!("Failed to delete ROM: {}", e))?;
     
@@ -1311,11 +1322,13 @@ fn delete_rom(path: String) -> Result<String, String> {
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     
-    let cover_path = PathBuf::from(&config.covers_directory)
-        .join(&console_dir)
-        .join(format!("{}.png", name));
-    if cover_path.exists() {
-        let _ = fs::remove_file(cover_path);
+    for ext in &["webp", "png"] {
+        let cover_path = PathBuf::from(&config.covers_directory)
+            .join(&console_dir)
+            .join(format!("{}.{}", name, ext));
+        if cover_path.exists() {
+            let _ = fs::remove_file(&cover_path);
+        }
     }
     
     Ok(format!("Deleted {}", name))
@@ -3953,6 +3966,14 @@ async fn download_vimm_rom(
     drop(file);
 
     let lower = file_name.to_lowercase();
+    if lower.ends_with(".zip") || lower.ends_with(".7z") {
+        let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+            "game_id": game_id,
+            "status": "extracting",
+            "progress": 99
+        }));
+    }
+
     if lower.ends_with(".zip") {
         if let Ok(extracted) = extract_rom_zip(&dest, &dest_dir) {
             if !extracted.is_empty() { let _ = fs::remove_file(&dest); }
@@ -4569,8 +4590,8 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
 
     let mut base = emuworld_base_dir();
     base.push("screenshots");
-    let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
-    let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+    let safe_console = console.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '$', '(', ')', '`', '&', ';', '\''], "_");
+    let safe_name = game_name.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|', '$', '(', ')', '`', '&', ';', '\''], "_");
     base.push(&safe_console);
     base.push(&safe_name);
     let _ = fs::create_dir_all(&base);
@@ -4580,12 +4601,13 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     let filepath = base.join(&filename);
     let path_str = filepath.to_string_lossy().to_string();
 
+    let safe_path = path_str.replace('\\', "/").replace('\'', "_");
     let ps_script = format!(
-        "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save(\"{}\"); $g.Dispose(); $bmp.Dispose()",
-        path_str.replace('\\', "/")
+        "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()",
+        safe_path
     );
 
-    let mut ps_cmd = Cmd::new("powershell");
+    let mut ps_cmd = Cmd::new(r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe");
     ps_cmd.args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps_script]);
     #[cfg(target_os = "windows")]
     {
@@ -4884,6 +4906,18 @@ fn get_logs_directory() -> String {
 fn open_path(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
+        let path_lower = path.to_lowercase();
+        if path_lower.starts_with("shell:")
+            || path_lower.starts_with("\\\\")
+            || path_lower.starts_with("http")
+            || path_lower.starts_with("ftp")
+        {
+            return Err("Type de chemin non autorisé".to_string());
+        }
+        let p = PathBuf::from(&path);
+        if !p.is_dir() {
+            return Err("Ce chemin n'est pas un dossier valide".to_string());
+        }
         Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -4955,10 +4989,18 @@ fn check_roms_health() -> Vec<RomHealthIssue> {
 
 #[tauri::command]
 fn delete_unhealthy_roms(paths: Vec<String>) -> Result<String, String> {
+    let config = get_config();
+    let roms_root = PathBuf::from(&config.roms_directory);
+    let canonical_root = roms_root.canonicalize().unwrap_or_else(|_| roms_root.clone());
     let mut deleted = 0;
     for p in &paths {
         let path = PathBuf::from(p);
         if path.exists() {
+            if let Ok(canonical) = path.canonicalize() {
+                if !canonical.starts_with(&canonical_root) {
+                    continue;
+                }
+            }
             fs::remove_file(&path).ok();
             deleted += 1;
         }

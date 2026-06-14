@@ -1083,7 +1083,7 @@ function OverlayWindow() {
                     {chatMessages.map((m: any, i: number) => (
                       <div key={i} style={{ marginBottom: 6, textAlign: m.sender_id === userId ? "right" : "left" }}>
                         <span style={{ display: "inline-block", padding: "6px 12px", borderRadius: 12, background: m.sender_id === userId ? "rgba(99,102,241,0.7)" : "rgba(255,255,255,0.08)", fontSize: 13, maxWidth: "70%" }}>
-                          {m.content?.startsWith("[img]") ? <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} /> : m.content}
+                          {m.content?.startsWith("[img]") && m.content.slice(5).replace(/\[\/img\]$/, "").startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} /> : m.content?.startsWith("[img]") ? <span style={{ color: "#aaa", fontStyle: "italic" }}>[image]</span> : m.content}
                         </span>
                       </div>
                     ))}
@@ -1660,7 +1660,7 @@ export default function App() {
   // Listen for deep-link OAuth callbacks
   useEffect(() => {
     const unlistenPromise = listen<string>('oauth-callback', async (event) => {
-      console.log('[Auth] OAuth callback received:', event.payload);
+      console.log('[Auth] OAuth callback received');
       try {
         const urlStr = event.payload;
         // Robust parsing of parameters from both query string (?) and hash fragment (#)
@@ -2361,6 +2361,7 @@ export default function App() {
   const sendMessage = useCallback(async () => {
     if (!user || !chatOpen || !chatInput.trim()) return;
     const content = chatInput.trim();
+    if (content.length > 2000) { showToast(t("common.error") + " — max 2000 chars", "error"); return; }
     setChatInput("");
     const { data } = await supabase.from("messages").insert({
       sender_id: user.id,
@@ -4099,10 +4100,20 @@ export default function App() {
     }
   }, [showToast]);
 
+  const RGS_ALLOWED_DOMAINS = ["1fichier.com", "pixeldrain.com", "gofile.io", "buzzheavier.com", "datanodes.to"];
+
   const handleOpenRgsLink = useCallback(async (urlOrLien: string | RgsLien) => {
     const isString = typeof urlOrLien === "string";
     let url = isString ? urlOrLien : urlOrLien.url;
     const lien = isString ? null : urlOrLien;
+
+    if (!url.startsWith("https://")) { showToast("Lien refusé : HTTPS uniquement.", "error"); return; }
+    try {
+      const hostname = new URL(url).hostname.replace(/^www\./, "");
+      if (!RGS_ALLOWED_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`))) {
+        showToast(`Domaine non autorisé : ${hostname}`, "error"); return;
+      }
+    } catch { showToast("URL invalide", "error"); return; }
 
     // Add 1fichier affiliate tag
     if (url.includes("1fichier.com") && !url.includes("af=")) {
@@ -6935,8 +6946,10 @@ export default function App() {
                           )}
                           {chatMessages.map(msg => (
                             <div key={msg.id} className={`chat-bubble ${msg.sender_id === user!.id ? "chat-bubble--mine" : "chat-bubble--theirs"}`}>
-                              {msg.content.startsWith("[img]") ? (
+                              {msg.content.startsWith("[img]") && msg.content.slice(5).startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? (
                                 <img className="chat-bubble__image" src={msg.content.slice(5)} alt="" onClick={() => window.open(msg.content.slice(5), "_blank")} />
+                              ) : msg.content.startsWith("[img]") ? (
+                                <p className="chat-bubble__text" style={{ color: "#aaa", fontStyle: "italic" }}>[image]</p>
                               ) : (
                                 <p className="chat-bubble__text">{msg.content}</p>
                               )}

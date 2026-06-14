@@ -247,13 +247,12 @@ pub async fn login_and_get_token(username: &str, password: &str) -> Result<Strin
         .build()
         .map_err(|e| e.to_string())?;
 
-    let url = format!(
-        "https://retroachievements.org/dorequest.php?r=login&u={}&p={}",
-        urlencoding::encode(username),
-        urlencoding::encode(password)
-    );
-
-    let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    let resp = client
+        .post("https://retroachievements.org/dorequest.php")
+        .form(&[("r", "login"), ("u", username), ("p", password)])
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("RA login returned {}", resp.status()));
     }
@@ -370,7 +369,14 @@ pub fn inject_retroarch_cheevos_pub(cfg: &str, username: &str, token: &str) -> S
     inject_retroarch_cheevos(cfg, username, token)
 }
 
+fn validate_ra_credential(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|c| c.is_alphanumeric() || "_-.".contains(c))
+}
+
 fn inject_retroarch_cheevos(cfg: &str, username: &str, token: &str) -> String {
+    if !validate_ra_credential(username) || !validate_ra_credential(token) {
+        return cfg.to_string();
+    }
     let mut lines: Vec<String> = cfg.lines().map(|l| l.to_string()).collect();
 
     let keys = [

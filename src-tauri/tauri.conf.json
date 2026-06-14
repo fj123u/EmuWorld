@@ -24,9 +24,9 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://*.supabase.co https://tinfoil.media https://thumbnails.libretro.com https://art.gametdb.com https://archive.org https://upload.wikimedia.org data: blob: asset:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://retroachievements.org https://thumbnails.libretro.com https://tinfoil.media https://art.gametdb.com https://archive.org; font-src 'self' data:; object-src 'none'; base-uri 'self'",
       "assetProtocol": {
-        "scope": ["**"]
+        "scope": ["$APPDATA/EmuWorld/**", "$RESOURCE/**"]
       }
     }
   },

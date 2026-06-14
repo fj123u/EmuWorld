@@ -51,8 +51,6 @@ jobs:
             exit 1
           fi
           echo "Signing key length: ${#KEY} chars"
-          # Minisign/rsign private keys start with a known header.
-          echo "First 32 chars: ${KEY:0:32}"
 
       - name: Build + bundle + sign
         env:
