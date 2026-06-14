@@ -1375,6 +1375,25 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.4.0", date: "2026-06-15", changes: [
+      "🔒 Audit de sécurité complet: 17 vulnérabilités corrigées (CSP, path traversal, injection PowerShell, Zip Slip, etc.)",
+      "🛡️ Content Security Policy activée dans le WebView — bloque les injections XSS",
+      "🛡️ Protocole asset:// restreint aux dossiers EmuWorld uniquement",
+      "🛡️ Validation des chemins dans delete_rom / open_path — plus de suppression/ouverture hors zone",
+      "🛡️ Chat: seules les images Supabase Storage sont rendues (plus d'IP tracking)",
+      "🛡️ Store RGS: whitelist de domaines autorisés (1fichier, pixeldrain, gofile, etc.)",
+      "🛡️ SHA1 réel pour les uploads cloud backup (vérification d'intégrité B2)",
+      "🛡️ RetroAchievements: credentials validées avant injection + login en POST",
+      "🐛 Fix RPCS3/Dolphin/Cemu crash au lancement sans ROM",
+      "🐛 Fix covers orphelines après suppression de ROM (.webp au lieu de .png)",
+      "🐛 Fix téléchargement Vimm bloqué à 99% — affiche 'Extraction en cours...'",
+      "🐛 Fix présence 'ONLINE' bloquée après fermeture forcée",
+      "🐛 Fix flux inscription email (meilleurs messages d'erreur + page callback)",
+      "🐛 Fix session de jeu perdue si EmuWorld est fermé pendant une partie",
+      "✨ Scan de ROMs annulable (nouveau bouton d'annulation)",
+      "✨ Choix émulateur: RetroArch ou standalone à l'installation (NES, GBA, SNES, N64, NDS, DC)",
+      "✨ Lobby multijoueur: auto-lancement pour tous les joueurs quand tout le monde est prêt",
+    ] },
     { version: "2.3.3", date: "2026-06-11", changes: [
       "📦 Fix store Switch: les archives .7z (XCI/NSP) sont maintenant extraites automatiquement après téléchargement",
       "🔐 Fix OAuth Google/Discord: page callback déployée avec les bons ports — la connexion ne charge plus dans le vide",
