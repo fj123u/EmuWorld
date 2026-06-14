@@ -1837,7 +1837,7 @@ export default function App() {
             username: loginPseudo,
             updated_at: new Date().toISOString(),
           });
-          showToast('Account created! Check your email to confirm.', 'success');
+          showToast(t("auth.accountCreated"), 'success');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -1849,7 +1849,15 @@ export default function App() {
       }
       setShowLoginModal(false);
     } catch (e: any) {
-      setAuthError(e.message);
+      const msg = e.message || "";
+      const rateLimitMatch = msg.match(/after (\d+) seconds/);
+      if (msg.includes("Email not confirmed")) {
+        setAuthError(t("auth.emailNotConfirmed") || "Confirme ton email avant de te connecter.");
+      } else if (rateLimitMatch) {
+        setAuthError(`Réessaye dans ${rateLimitMatch[1]} secondes.`);
+      } else {
+        setAuthError(msg);
+      }
     } finally {
       setAuthLoading(false);
     }
@@ -2470,6 +2478,13 @@ export default function App() {
       const interval = setInterval(() => updatePresence("online"), 60000);
       return () => { clearInterval(interval); updatePresence("offline"); };
     }
+  }, [user, updatePresence]);
+
+  // Handle app closing event from Tauri (force-close safety)
+  useEffect(() => {
+    if (!user) return;
+    const unlistenPromise = listen("app-closing", () => { updatePresence("offline"); });
+    return () => { unlistenPromise.then(fn => fn()); };
   }, [user, updatePresence]);
 
   // Load friends on login

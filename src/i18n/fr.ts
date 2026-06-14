@@ -282,9 +282,10 @@ const fr = {
     continueWith: "Continuer avec",
     orEmail: "ou par email",
     welcome: "Bienvenue !",
-    accountCreated: "Compte créé ! Vérifiez votre email.",
+    accountCreated: "Compte créé ! Vérifie ton email pour confirmer.",
     connectedSuccess: "Connecté avec succès !",
     signedOut: "Déconnecté",
+    emailNotConfirmed: "Confirme ton email avant de te connecter.",
   },
 
   // Gamepad labels

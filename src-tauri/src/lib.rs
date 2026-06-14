@@ -839,8 +839,8 @@ async fn launch_emulator(
         // No --fullscreen arg: config handles it via borderless windowed mode
     } else {
         match effective_id.as_str() {
-            "dolphin" => { cmd.arg("-b"); },
-            "cemu" => { cmd.arg("-f"); },
+            "dolphin" => { if rom_path.is_some() { cmd.arg("-b"); } },
+            "cemu" => { if rom_path.is_some() { cmd.arg("-f"); } },
             "ppsspp" => { cmd.arg("--fullscreen"); },
             "duckstation" => { cmd.arg("-fullscreen"); },
             "pcsx2" => { cmd.arg("-fullscreen"); },
@@ -911,6 +911,18 @@ async fn launch_emulator(
     // Track playtime only when we have a ROM context (launching the bare emulator doesn't count as a game session).
     if let (Some(name), Some(console)) = (rom_name.clone(), rom_console.clone()) {
         let emulator_id_for_task = emu.id.clone();
+
+        // Save current session to disk for crash recovery
+        let session_file = emuworld_base_dir().join("current_session.json");
+        let start_epoch = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        let _ = fs::write(&session_file, serde_json::json!({
+            "game": &name, "console": &console, "emulator": &emulator_id_for_task,
+            "start_epoch": start_epoch
+        }).to_string());
+
         // Wait for the child to exit on a blocking thread, then record the session.
         tauri::async_runtime::spawn_blocking(move || {
             use tauri::Emitter;
@@ -926,6 +938,8 @@ async fn launch_emulator(
                     println!("[Playtime] record failed: {}", e);
                 }
             }
+            // Remove session file on normal exit
+            let _ = fs::remove_file(emuworld_base_dir().join("current_session.json"));
             let _ = app_handle.emit("game-closed", serde_json::json!({
                 "console": console,
                 "name": name,
@@ -977,8 +991,16 @@ fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
     None
 }
 
+static SCAN_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[tauri::command]
+fn cancel_scan() {
+    SCAN_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 #[tauri::command]
 fn scan_roms(directory: String) -> Vec<RomFile> {
+    SCAN_CANCELLED.store(false, std::sync::atomic::Ordering::Relaxed);
     let catalog = emulators::get_catalog();
     let mut roms = vec![];
     let dir = PathBuf::from(&directory);
@@ -1007,6 +1029,7 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
     }
 
     for entry in walkdir::WalkDir::new(&dir).max_depth(5) {
+        if SCAN_CANCELLED.load(std::sync::atomic::Ordering::Relaxed) { break; }
         if let Ok(e) = entry {
             if e.file_type().is_file() {
                 if let Some(ext) = e.path().extension() {
@@ -5413,6 +5436,31 @@ pub fn run() {
                 std::thread::spawn(move || {
                     start_keyboard_hook(overlay_handle);
                 });
+
+                // Recover orphaned game session (EmuWorld was killed while a game was running)
+                let session_file = emuworld_base_dir().join("current_session.json");
+                if session_file.exists() {
+                    if let Ok(content) = fs::read_to_string(&session_file) {
+                        if let Ok(session) = serde_json::from_str::<serde_json::Value>(&content) {
+                            let game = session["game"].as_str().unwrap_or_default().to_string();
+                            let console = session["console"].as_str().unwrap_or_default().to_string();
+                            let emulator = session["emulator"].as_str().unwrap_or_default().to_string();
+                            let start_epoch = session["start_epoch"].as_u64().unwrap_or(0);
+                            if start_epoch > 0 && !game.is_empty() {
+                                let now_epoch = std::time::SystemTime::now()
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                let elapsed = now_epoch.saturating_sub(start_epoch);
+                                if elapsed >= 3 && elapsed < 86400 {
+                                    let _ = playtime::record_session(&console, &game, elapsed, &emulator);
+                                    push_log("INFO", &format!("Session orpheline récupérée : {} — {}s", game, elapsed));
+                                }
+                            }
+                        }
+                    }
+                    let _ = fs::remove_file(&session_file);
+                }
             }
             Ok(())
         })
@@ -5426,6 +5474,7 @@ pub fn run() {
             uninstall_emulator,
             launch_emulator,
             scan_roms,
+            cancel_scan,
             fetch_boxart,
             search_rom_store,
             get_store_consoles,
@@ -5508,6 +5557,13 @@ pub fn run() {
             overwrite_achievements,
             fetch_game_guide_data,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                use tauri::Emitter;
+                let _ = window.emit("app-closing", ());
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
 }

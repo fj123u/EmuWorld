@@ -284,9 +284,10 @@ const en: Translations = {
     continueWith: "Continue with",
     orEmail: "or by email",
     welcome: "Welcome!",
-    accountCreated: "Account created! Check your email.",
+    accountCreated: "Account created! Check your email to confirm.",
     connectedSuccess: "Connected successfully!",
     signedOut: "Signed out",
+    emailNotConfirmed: "Please confirm your email before signing in.",
   },
 
   // Gamepad labels

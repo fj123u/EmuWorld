@@ -132,6 +132,16 @@
   }
 
   function jump() {
+    // Handle email confirmation (signup/recovery) — not an OAuth flow
+    const params = new URLSearchParams(window.location.search);
+    const type = params.get('type');
+    if (type === 'signup' || type === 'recovery' || type === 'email_change') {
+      document.getElementById('status').innerHTML =
+        '✅ Email confirmé ! Tu peux retourner dans EmuWorld et te connecter.';
+      document.getElementById('retry').style.display = 'none';
+      return;
+    }
+
     // Primary: try localhost HTTP server (most reliable on Windows)
     tryLocalhost();
 
