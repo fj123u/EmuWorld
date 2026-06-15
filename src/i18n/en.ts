@@ -123,6 +123,14 @@ const en: Translations = {
     noResults: "No results",
     rgsHint: "For Switch, Wii U games and full packs, switch to the RetroGameSets tab.",
     openingFolder: "Opening folder in browser...",
+    batchDownload: "Auto download",
+    batchDesc: "Paste 1fichier links (one per line) to automatically download files to your ROMs folder.",
+    batchPlaceholder: "https://1fichier.com/?abc123\nhttps://1fichier.com/?def456\n...",
+    batchConsole: "Console (e.g. Wii U)",
+    batchPwd: "Password (optional)",
+    batchStart: "Start",
+    batchComplete: "All downloads complete!",
+    downloadQueue: "Downloads",
   },
 
   // Friends

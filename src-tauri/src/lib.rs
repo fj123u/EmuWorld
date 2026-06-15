@@ -3364,6 +3364,246 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
     Ok(files)
 }
 
+#[tauri::command]
+async fn download_1fichier(
+    app_handle: tauri::AppHandle,
+    url: String,
+    console: String,
+    password: Option<String>,
+    queue_id: String,
+) -> Result<String, String> {
+    use std::io::Write;
+
+    let config = get_config();
+    let roms_dir = std::path::PathBuf::from(&config.roms_directory);
+    let console_folder = normalize_console_folder(&console);
+    let dest_dir = roms_dir.join(&console_folder);
+    if !dest_dir.exists() {
+        fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+    }
+
+    let emit_progress = |status: &str, progress: u32, msg: &str| {
+        let _ = app_handle.emit("1fichier-progress", serde_json::json!({
+            "queue_id": queue_id,
+            "status": status,
+            "progress": progress,
+            "message": msg
+        }));
+    };
+
+    emit_progress("resolving", 0, "Fetching download page...");
+
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        .redirect(reqwest::redirect::Policy::limited(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| format!("Client build error: {}", e))?;
+
+    // Step 1: GET the file page to extract tokens/form data
+    let page_resp = client.get(&url)
+        .header("Cookie", "AF=3186111")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to load page: {}", e))?;
+
+    if !page_resp.status().is_success() {
+        return Err(format!("1fichier returned HTTP {}", page_resp.status()));
+    }
+
+    let page_html = page_resp.text().await.map_err(|e| e.to_string())?;
+
+    // Check for errors (file removed, etc.)
+    if page_html.contains("not found") || page_html.contains("has been removed") || page_html.contains("fichier n'existe pas") {
+        return Err("File has been removed from 1fichier.".to_string());
+    }
+
+    emit_progress("resolving", 10, "Requesting download link...");
+
+    // Step 2: POST to get the download link
+    // 1fichier uses a simple POST form with optional password
+    let mut form_params = vec![("dl_no_ssl", "on"), ("dlinline", "on")];
+    let pw_string;
+    if let Some(ref pw) = password {
+        pw_string = pw.clone();
+        form_params.push(("pass", &pw_string));
+    }
+
+    let post_resp = client.post(&url)
+        .header("Cookie", "AF=3186111")
+        .header("Referer", &url)
+        .form(&form_params)
+        .send()
+        .await
+        .map_err(|e| format!("POST failed: {}", e))?;
+
+    let post_html = post_resp.text().await.map_err(|e| e.to_string())?;
+
+    // Extract direct download link from response
+    // 1fichier returns the link in an <a> tag with class "ok btn-general"
+    // or in a redirect, or in a link like href="https://....1fichier.com/..."
+    let download_link = {
+        use scraper::{Html, Selector};
+        let doc = Html::parse_document(&post_html);
+
+        // Try: <a class="ok btn-general btn-general-lg" href="...">
+        let link_sel = Selector::parse("a.ok").unwrap_or_else(|_| Selector::parse("a").unwrap());
+        let mut found_link = None;
+        for el in doc.select(&link_sel) {
+            if let Some(href) = el.value().attr("href") {
+                if href.contains("1fichier.com") && !href.contains("/dir/") && href.starts_with("http") {
+                    found_link = Some(href.to_string());
+                    break;
+                }
+            }
+        }
+
+        // Fallback: regex for any 1fichier CDN link
+        if found_link.is_none() {
+            let re = regex::Regex::new(r#"(https?://[a-z0-9\-]+\.1fichier\.com/[^\s"<>]+)"#).unwrap();
+            if let Some(m) = re.find(&post_html) {
+                found_link = Some(m.as_str().to_string());
+            }
+        }
+
+        // Fallback 2: check for wait time (free users)
+        if found_link.is_none() {
+            // Check if there's a countdown/wait message
+            if post_html.contains("must wait") || post_html.contains("Veuillez patienter") || post_html.contains("You must wait") {
+                let wait_re = regex::Regex::new(r"(\d+)\s*(minutes?|seconds?|secondes?|min)").unwrap();
+                let wait_msg = if let Some(cap) = wait_re.captures(&post_html) {
+                    format!("1fichier rate limit: please wait {} {}", &cap[1], &cap[2])
+                } else {
+                    "1fichier rate limit: please wait between downloads (free account)".to_string()
+                };
+                return Err(wait_msg);
+            }
+            return Err("Could not extract download link from 1fichier. The file may require a premium account or password.".to_string());
+        }
+
+        found_link.unwrap()
+    };
+
+    emit_progress("downloading", 15, "Starting download...");
+
+    // Step 3: Download the file
+    let dl_resp = client.get(&download_link)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {}", e))?;
+
+    if !dl_resp.status().is_success() {
+        return Err(format!("Download failed: HTTP {}", dl_resp.status()));
+    }
+
+    // Extract filename from Content-Disposition or URL
+    let file_name = dl_resp.headers()
+        .get("content-disposition")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| {
+            let re = regex::Regex::new(r##"filename\*?=(?:UTF-8''|"?)([^";\r\n]+)"??"##).unwrap();
+            re.captures(s).map(|c| c[1].to_string())
+        })
+        .or_else(|| {
+            download_link.split('/').last()
+                .map(|s| urlencoding::decode(s).unwrap_or_else(|_| s.into()).to_string())
+                .filter(|s| !s.is_empty() && s.contains('.'))
+        })
+        .unwrap_or_else(|| format!("1fichier_download_{}.bin", &queue_id[..8.min(queue_id.len())]));
+
+    let total_size = dl_resp.content_length().unwrap_or(0);
+    let dest_path = dest_dir.join(&file_name);
+
+    let mut file = fs::File::create(&dest_path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+
+    let mut downloaded: u64 = 0;
+    let mut last_emit_time = std::time::Instant::now();
+    let start_time = std::time::Instant::now();
+    let mut stream = dl_resp;
+
+    while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
+        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        downloaded += chunk.len() as u64;
+
+        // Bandwidth throttling
+        let bw_limit = BANDWIDTH_LIMIT_KBPS.load(AtomicOrdering::Relaxed);
+        if bw_limit > 0 {
+            let elapsed = start_time.elapsed().as_secs_f64();
+            let expected = downloaded as f64 / (bw_limit as f64 * 1024.0);
+            if expected > elapsed {
+                tokio::time::sleep(std::time::Duration::from_millis(((expected - elapsed) * 1000.0) as u64)).await;
+            }
+        }
+
+        if last_emit_time.elapsed().as_millis() >= 400 {
+            let progress = if total_size > 0 {
+                15 + (downloaded as f64 / total_size as f64 * 85.0) as u32
+            } else {
+                50
+            };
+            let speed = if start_time.elapsed().as_secs_f64() > 0.0 {
+                downloaded as f64 / start_time.elapsed().as_secs_f64()
+            } else { 0.0 };
+            let eta = if speed > 0.0 && total_size > downloaded {
+                ((total_size - downloaded) as f64 / speed) as u64
+            } else { 0 };
+
+            let _ = app_handle.emit("1fichier-progress", serde_json::json!({
+                "queue_id": queue_id,
+                "status": "downloading",
+                "progress": progress,
+                "downloaded_bytes": downloaded,
+                "total_bytes": total_size,
+                "speed_bps": speed as u64,
+                "eta": eta,
+                "file_name": file_name,
+                "message": format!("{} / {}", format_size(downloaded), if total_size > 0 { format_size(total_size) } else { "?".to_string() })
+            }));
+            last_emit_time = std::time::Instant::now();
+        }
+    }
+    drop(file);
+
+    emit_progress("complete", 100, &format!("Downloaded: {}", file_name));
+
+    // Auto-extract if ZIP/7z
+    let lower = file_name.to_lowercase();
+    if lower.ends_with(".zip") {
+        let zip_path = dest_path.clone();
+        if let Ok(zip_file) = fs::File::open(&zip_path) {
+            if let Ok(mut archive) = zip::ZipArchive::new(zip_file) {
+                for i in 0..archive.len() {
+                    if let Ok(mut entry) = archive.by_index(i) {
+                        if let Some(safe_name) = entry.enclosed_name() {
+                            let out_path = dest_dir.join(safe_name);
+                            if entry.is_dir() {
+                                let _ = fs::create_dir_all(&out_path);
+                            } else {
+                                if let Some(p) = out_path.parent() {
+                                    let _ = fs::create_dir_all(p);
+                                }
+                                if let Ok(mut outfile) = fs::File::create(&out_path) {
+                                    let _ = std::io::copy(&mut entry, &mut outfile);
+                                }
+                            }
+                        }
+                    }
+                }
+                let _ = fs::remove_file(&zip_path);
+            }
+        }
+    } else if lower.ends_with(".7z") {
+        let sz_path = dest_path.clone();
+        let out_dir = dest_dir.clone();
+        if sevenz_rust::decompress_file(&sz_path, &out_dir).is_ok() {
+            let _ = fs::remove_file(&sz_path);
+        }
+    }
+
+    Ok(file_name)
+}
+
 // ============================================================
 // ============================================================
 // MYRIENT — individual ROM downloads from myrient.erista.me
@@ -5487,6 +5727,7 @@ pub fn run() {
             get_rgs_liens,
             search_rgs,
             scrape_1fichier_dir,
+            download_1fichier,
             finalize_rgs_import,
             get_myrient_consoles,
             browse_myrient,

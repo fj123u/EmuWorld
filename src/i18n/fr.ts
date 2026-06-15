@@ -121,6 +121,14 @@ const fr = {
     noResults: "Aucun résultat",
     rgsHint: "Pour les jeux Switch, Wii U et les packs complets, passe sur l'onglet RetroGameSets.",
     openingFolder: "Ouverture du dossier dans le navigateur...",
+    batchDownload: "Téléchargement auto",
+    batchDesc: "Colle les liens 1fichier (un par ligne) pour télécharger automatiquement les fichiers dans ton dossier ROMs.",
+    batchPlaceholder: "https://1fichier.com/?abc123\nhttps://1fichier.com/?def456\n...",
+    batchConsole: "Console (ex: Wii U)",
+    batchPwd: "Mot de passe (optionnel)",
+    batchStart: "Lancer",
+    batchComplete: "Tous les téléchargements sont terminés !",
+    downloadQueue: "Téléchargements",
   },
 
   // Friends

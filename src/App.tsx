@@ -263,6 +263,17 @@ interface RgsSearchResult {
   url?: string;
 }
 
+interface DownloadQueueItem {
+  id: string;
+  url: string;
+  fileName?: string;
+  status: 'pending' | 'downloading' | 'complete' | 'error' | 'waiting';
+  progress: number;
+  message?: string;
+  speed?: number;
+  eta?: number;
+}
+
 interface RAGameAchievement {
   id: number;
   title: string;
@@ -1369,6 +1380,13 @@ export default function App() {
   const [isSearchingRgs, setIsSearchingRgs] = useState(false);
   const [selectedRgsLien, setSelectedRgsLien] = useState<RgsLien | null>(null);
   const [rgsFolderSearch, setRgsFolderSearch] = useState("");
+  const [downloadQueue, setDownloadQueue] = useState<DownloadQueueItem[]>([]);
+  const [showDownloadPanel, setShowDownloadPanel] = useState(false);
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchUrls, setBatchUrls] = useState("");
+  const [batchConsole, setBatchConsole] = useState("");
+  const [batchPassword, setBatchPassword] = useState("");
   const [selectedConstructeur, setSelectedConstructeur] = useState<string | null>(null);
   const [selectedConstructeurName, setSelectedConstructeurName] = useState<string | null>(null);
   const [selectedRgsConsole, setSelectedRgsConsole] = useState<string | null>(null);
@@ -4195,6 +4213,72 @@ export default function App() {
     showToast(`Once downloaded, click 'Finalize' to move and unzip the game to your ${currentConsole} library!`, "info");
   }, [showToast, selectedRgsConsoleName]);
 
+  const handleBatchDownload = useCallback(async (urls: string[], console: string, password?: string) => {
+    const items: DownloadQueueItem[] = urls.map((url, i) => ({
+      id: `dl_${Date.now()}_${i}`,
+      url,
+      status: 'pending' as const,
+      progress: 0,
+    }));
+    setDownloadQueue(prev => [...prev, ...items]);
+    setShowDownloadPanel(true);
+
+    if (isProcessingQueue) return;
+    setIsProcessingQueue(true);
+
+    const allItems = [...downloadQueue.filter(d => d.status === 'pending'), ...items];
+    for (const item of allItems) {
+      setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'downloading', message: t("store.openingFolder") } : d));
+      try {
+        const fileName = await invoke<string>("download_1fichier", {
+          url: item.url,
+          console: console,
+          password: password || null,
+          queueId: item.id,
+        });
+        setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'complete', progress: 100, fileName, message: fileName } : d));
+      } catch (e: any) {
+        const errMsg = String(e);
+        if (errMsg.includes("must wait") || errMsg.includes("patienter")) {
+          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'waiting', message: errMsg } : d));
+          await new Promise(r => setTimeout(r, 60000));
+          // Retry once after wait
+          try {
+            const fileName = await invoke<string>("download_1fichier", {
+              url: item.url,
+              console: console,
+              password: password || null,
+              queueId: item.id,
+            });
+            setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'complete', progress: 100, fileName, message: fileName } : d));
+          } catch (e2: any) {
+            setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: String(e2) } : d));
+          }
+        } else {
+          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: errMsg } : d));
+        }
+      }
+    }
+    setIsProcessingQueue(false);
+    showToast(t("store.batchComplete"), "success");
+  }, [downloadQueue, isProcessingQueue, showToast, t]);
+
+  useEffect(() => {
+    const unlisten = listen<{ queue_id: string; status: string; progress: number; message?: string; speed_bps?: number; eta?: number; file_name?: string }>("1fichier-progress", (event) => {
+      const { queue_id, status, progress, message, speed_bps, eta, file_name } = event.payload;
+      setDownloadQueue(prev => prev.map(d => d.id === queue_id ? {
+        ...d,
+        status: status as any,
+        progress,
+        message: message || d.message,
+        speed: speed_bps,
+        eta,
+        fileName: file_name || d.fileName,
+      } : d));
+    });
+    return () => { unlisten.then(f => f()); };
+  }, []);
+
   const handleImportRom = useCallback(async (targetConsole: string) => {
     try {
       const selected = await open({
@@ -5750,15 +5834,21 @@ export default function App() {
                     <div className="rgs-search-header">
                       <div className="search-bar search-bar--glow">
                         <Search size={18} className="search-bar__icon" />
-                        <input 
-                          type="text" 
-                          className="search-bar__input gamepad-nav-item" 
-                          placeholder="Search RetroGameSets (e.g. Mario, Zelda, PS1...)" 
+                        <input
+                          type="text"
+                          className="search-bar__input gamepad-nav-item"
+                          placeholder="Search RetroGameSets (e.g. Mario, Zelda, PS1...)"
                           value={rgsSearchQuery}
                           onChange={(e) => setRgsSearchQuery(e.target.value)}
                         />
                         {isSearchingRgs && <RefreshCw size={14} className="animate-spin text-cyan" />}
                       </div>
+                      <button
+                        className="btn btn--primary gamepad-nav-item"
+                        onClick={() => { setBatchConsole(selectedRgsConsoleName || ""); setShowBatchModal(true); }}
+                      >
+                        <Download size={14} /> {t("store.batchDownload")}
+                      </button>
                     </div>
                   )}
 
@@ -9330,6 +9420,122 @@ export default function App() {
               <button className="btn btn--ghost btn--sm" onClick={() => setInstallChoiceModal(null)}>{t("common.cancel")}</button>
             </motion.div>
           </div>
+        )}
+
+        {/* Batch Download Modal */}
+        {showBatchModal && (
+          <div className="modal-backdrop" onClick={() => setShowBatchModal(false)}>
+            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, width: "90%" }}>
+              <h3 style={{ marginBottom: 12 }}><Download size={18} /> {t("store.batchDownload")}</h3>
+              <p style={{ color: "var(--text-secondary)", marginBottom: 12, fontSize: 13 }}>
+                {t("store.batchDesc")}
+              </p>
+              <textarea
+                className="batch-urls-input gamepad-nav-item"
+                rows={8}
+                placeholder={t("store.batchPlaceholder")}
+                value={batchUrls}
+                onChange={(e) => setBatchUrls(e.target.value)}
+                style={{ width: "100%", marginBottom: 12, background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text-primary)", resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
+              />
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input
+                  className="search-bar__input gamepad-nav-item"
+                  placeholder={t("store.batchConsole")}
+                  value={batchConsole}
+                  onChange={(e) => setBatchConsole(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  className="search-bar__input gamepad-nav-item"
+                  placeholder={t("store.batchPwd")}
+                  value={batchPassword}
+                  onChange={(e) => setBatchPassword(e.target.value)}
+                  style={{ width: 140 }}
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn--ghost gamepad-nav-item" onClick={() => setShowBatchModal(false)}>
+                  {t("common.cancel")}
+                </button>
+                <button
+                  className="btn btn--primary gamepad-nav-item"
+                  disabled={!batchUrls.trim() || !batchConsole.trim()}
+                  onClick={() => {
+                    const urls = batchUrls.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+                    if (urls.length === 0) return;
+                    handleBatchDownload(urls, batchConsole.trim(), batchPassword || undefined);
+                    setShowBatchModal(false);
+                    setBatchUrls("");
+                  }}
+                >
+                  <Download size={14} /> {t("store.batchStart")} ({batchUrls.split('\n').filter(u => u.trim().startsWith('http')).length})
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Download Queue Panel */}
+        {showDownloadPanel && downloadQueue.length > 0 && (
+          <motion.div
+            className="download-panel"
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            style={{ position: "fixed", bottom: 16, right: 16, width: 380, maxHeight: 400, background: "var(--bg-secondary)", border: "1px solid var(--border)", borderRadius: 12, overflow: "hidden", zIndex: 9999, boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>
+                <Download size={14} /> {t("store.downloadQueue")} ({downloadQueue.filter(d => d.status === 'complete').length}/{downloadQueue.length})
+              </span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {downloadQueue.every(d => d.status === 'complete' || d.status === 'error') && (
+                  <button className="btn btn--ghost btn--sm" onClick={() => { setDownloadQueue([]); setShowDownloadPanel(false); }}>
+                    {t("common.close")}
+                  </button>
+                )}
+                <button className="btn btn--ghost btn--sm" onClick={() => setShowDownloadPanel(false)}>—</button>
+              </div>
+            </div>
+            <div style={{ overflowY: "auto", maxHeight: 340, padding: 8 }}>
+              {downloadQueue.map((item) => (
+                <div key={item.id} style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 4, background: "var(--bg-tertiary)", fontSize: 12 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {item.fileName || item.url.split('?')[0].split('/').pop() || 'File'}
+                    </span>
+                    <span style={{ color: item.status === 'complete' ? 'var(--accent)' : item.status === 'error' ? '#ef4444' : item.status === 'waiting' ? '#f59e0b' : 'var(--text-secondary)' }}>
+                      {item.status === 'complete' ? '✓' : item.status === 'error' ? '✗' : item.status === 'waiting' ? '⏳' : item.status === 'downloading' ? `${item.progress}%` : '...'}
+                    </span>
+                  </div>
+                  {item.status === 'downloading' && (
+                    <div style={{ height: 3, background: "var(--bg-primary)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${item.progress}%`, background: "var(--accent)", transition: "width 0.3s" }} />
+                    </div>
+                  )}
+                  {item.message && item.status === 'error' && (
+                    <div style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>{item.message}</div>
+                  )}
+                  {item.speed && item.status === 'downloading' && (
+                    <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>
+                      {(item.speed / 1024 / 1024).toFixed(1)} MB/s {item.eta ? `• ${Math.ceil(item.eta / 60)}min` : ''}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* Mini badge when panel is hidden */}
+        {!showDownloadPanel && downloadQueue.some(d => d.status === 'downloading' || d.status === 'pending') && (
+          <button
+            className="download-badge"
+            onClick={() => setShowDownloadPanel(true)}
+            style={{ position: "fixed", bottom: 16, right: 16, background: "var(--accent)", color: "white", border: "none", borderRadius: 50, width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}
+          >
+            <Download size={20} />
+          </button>
         )}
 
         {showEmailConfirmModal && (
