@@ -121,6 +121,7 @@ const en: Translations = {
     searchPlaceholder: "Search...",
     size: "Size",
     noResults: "No results",
+    rgsHint: "For Switch, Wii U games and full packs, switch to the RetroGameSets tab.",
   },
 
   // Friends

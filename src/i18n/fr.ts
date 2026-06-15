@@ -119,6 +119,7 @@ const fr = {
     searchPlaceholder: "Rechercher...",
     size: "Taille",
     noResults: "Aucun résultat",
+    rgsHint: "Pour les jeux Switch, Wii U et les packs complets, passe sur l'onglet RetroGameSets.",
   },
 
   // Friends

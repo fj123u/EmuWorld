@@ -1350,7 +1350,7 @@ export default function App() {
   const [bgCover, setBgCover] = useState<string | null>(null);
 
   // ---- Store state ----
-  const [storeMode, setStoreMode] = useState<"rgs" | "archive" | "vimm">("vimm");
+  const [storeMode, setStoreMode] = useState<"rgs" | "vimm">("vimm");
 
   // ---- Vimm's Lair state ----
   const [vimmConsoles, setVimmConsoles] = useState<VimmConsole[]>([]);
@@ -5076,17 +5076,6 @@ export default function App() {
                         </button>
                       ));
                     })()
-                  : storeMode === "archive"
-                  ? storeConsoles.map((con) => (
-                      <button
-                        key={con}
-                        className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
-                        onClick={() => setStoreConsoleFilter(storeConsoleFilter === con ? null : con)}
-                      >
-                        <span className="sidebar__item-icon"><ConsoleLogo name={con} size={14} /></span>
-                        {con}
-                      </button>
-                    ))
                   : rgsConstructeurs.map((c) => (
                       <button
                         key={c.id}
@@ -5236,7 +5225,7 @@ export default function App() {
                     {page === "catalog" && t("header.emulators")}
                     {page === "library" && t("header.library")}
                     {page === "installed" && t("header.installedEmulators")}
-                    {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : storeMode === "archive" ? "Archive.org" : "RetroGameSets")}
+                    {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && t("header.settings")}
                     {page === "leaderboard" && t("header.leaderboard")}
                     {page === "friends" && t("header.friends")}
@@ -5263,7 +5252,6 @@ export default function App() {
                           ? `Search ${selectedVimmConsole.name} by name`
                           : "Search or pick a console"
                     )}
-                    {page === "store" && storeMode === "archive" && (storeConsoleFilter ? `${storeRoms.length} game${storeRoms.length === 1 ? "" : "s"} for ${storeConsoleFilter}` : "Pick a console or search")}
                     {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
                     {page === "library" && (
                       consoleFilter
@@ -5566,7 +5554,7 @@ export default function App() {
                 );
               })()}
 
-              {page === "store" && (
+              {page === "store" && (<>
                 <div className="store-source-toggle">
                   <button
                     className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
@@ -5575,19 +5563,18 @@ export default function App() {
                     🎮 {t("store.singleGames")} (Vimm's Lair)
                   </button>
                   <button
-                    className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "archive" ? "store-source-toggle__btn--active" : ""}`}
-                    onClick={() => setStoreMode("archive")}
-                  >
-                    📚 {t("store.singleGames")} (Archive.org)
-                  </button>
-                  <button
                     className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "rgs" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("rgs")}
                   >
                     📦 {t("store.fullPacks")} (RetroGameSets)
                   </button>
                 </div>
-              )}
+                {storeMode === "vimm" && (
+                  <div style={{ padding: "8px 16px", background: "rgba(88,101,242,0.1)", borderRadius: 10, margin: "8px 0", fontSize: 13, color: "var(--text-secondary)" }}>
+                    💡 {t("store.rgsHint")}
+                  </div>
+                )}
+              </>)}
 
               {page === "store" && storeMode === "vimm" && (
                 <div className="rgs-page">
@@ -5718,49 +5705,6 @@ export default function App() {
                       </p>
                     </div>
                   )}
-                </div>
-              )}
-
-              {page === "store" && storeMode === "archive" && (
-                <div className="store-page">
-                  <div className="rgs-search-header">
-                    <div className="search-bar search-bar--glow">
-                      <Search size={18} className="search-bar__icon" />
-                      <input
-                        type="text"
-                        className="search-bar__input gamepad-nav-item"
-                        placeholder={storeConsoleFilter ? `Search ${storeConsoleFilter}...` : "Search Archive.org..."}
-                        value={storeSearch}
-                        onChange={(e) => setStoreSearch(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid--fixed">
-                    {isSearchingStore ? (
-                      <div className="empty-state">
-                        <RefreshCw size={48} className="animate-spin mb-4 text-primary" />
-                        <h3 className="empty-state__title">Searching Archive.org...</h3>
-                        <p className="empty-state__text">Fetching the best classics for you.</p>
-                      </div>
-                    ) : storeRoms.length > 0 ? (
-                      storeRoms.map((rom) => (
-                        <RomStoreCard
-                          key={rom.id}
-                          rom={rom}
-                          onDownload={handleDownloadRom}
-                          downloading={downloading.includes(rom.id)}
-                          downloaded={downloaded.includes(rom.id)}
-                          stats={downloadProgress[rom.id] || downloadProgress[rom.file_name]}
-                        />
-                      ))
-                    ) : (
-                      <div className="empty-state">
-                        <div className="empty-state__icon">🕵️</div>
-                        <h3 className="empty-state__title">No ROMs found</h3>
-                        <p className="empty-state__text">Try adjusting your search or filters</p>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
 
