@@ -140,6 +140,9 @@ const fr = {
     links: "liens",
     downloadAll: "Tout télécharger",
     searchCollection: "Rechercher dans la collection...",
+    resolveNames: "Récupérer les noms",
+    share: "Partager",
+    collectionShared: "Collection partagée avec la communauté !",
   },
 
   // Friends

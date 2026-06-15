@@ -142,6 +142,9 @@ const en: Translations = {
     links: "links",
     downloadAll: "Download all",
     searchCollection: "Search in collection...",
+    resolveNames: "Fetch names",
+    share: "Share",
+    collectionShared: "Collection shared with the community!",
   },
 
   // Friends

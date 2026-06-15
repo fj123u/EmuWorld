@@ -3365,6 +3365,93 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
 }
 
 #[tauri::command]
+async fn resolve_1fichier_names(
+    app_handle: tauri::AppHandle,
+    urls: Vec<String>,
+) -> Result<Vec<(String, String)>, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Client error: {}", e))?;
+
+    let mut results: Vec<(String, String)> = Vec::new();
+    let total = urls.len();
+
+    for (i, url) in urls.iter().enumerate() {
+        let name = match client.get(url)
+            .header("Cookie", "AF=3186111")
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if let Ok(html) = resp.text().await {
+                    extract_1fichier_filename(&html)
+                        .unwrap_or_else(|| url.split('?').last().unwrap_or("unknown").to_string())
+                } else {
+                    url.split('?').last().unwrap_or("unknown").to_string()
+                }
+            }
+            Err(_) => url.split('?').last().unwrap_or("unknown").to_string(),
+        };
+
+        results.push((url.clone(), name));
+
+        if (i + 1) % 5 == 0 || i + 1 == total {
+            let _ = app_handle.emit("resolve-names-progress", serde_json::json!({
+                "done": i + 1,
+                "total": total
+            }));
+        }
+
+        // Small delay to avoid rate limiting
+        if i + 1 < total {
+            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        }
+    }
+
+    Ok(results)
+}
+
+fn extract_1fichier_filename(html: &str) -> Option<String> {
+    use scraper::{Html, Selector};
+    let doc = Html::parse_document(html);
+
+    // Method 1: filename in the page title or header
+    // 1fichier shows filename in various places
+    if let Ok(sel) = Selector::parse("td.normal") {
+        for el in doc.select(&sel) {
+            let text = el.text().collect::<Vec<_>>().join("");
+            let text = text.trim().to_string();
+            if text.contains('.') && text.len() > 3 && !text.contains("http") {
+                return Some(text);
+            }
+        }
+    }
+
+    // Method 2: the filename appears in a specific div
+    if let Ok(sel) = Selector::parse(".dlname, .name, #filename") {
+        for el in doc.select(&sel) {
+            let text = el.text().collect::<Vec<_>>().join("").trim().to_string();
+            if !text.is_empty() && text.contains('.') {
+                return Some(text);
+            }
+        }
+    }
+
+    // Method 3: look in the page content for file-like patterns
+    let re = regex::Regex::new(r"(?i)([A-Za-z0-9\[\]\(\)\s\-_.!&']+\.(zip|7z|rar|iso|nsp|xci|wux|wud|rpx|wbfs|rvz|chd|nds|gba|nes|sfc|n64|z64|bin|cue|pbp|cso))").unwrap();
+    if let Some(m) = re.find(html) {
+        let name = m.as_str().trim().to_string();
+        if name.len() > 3 && name.len() < 200 {
+            return Some(name);
+        }
+    }
+
+    None
+}
+
+#[tauri::command]
 async fn download_1fichier(
     app_handle: tauri::AppHandle,
     url: String,
@@ -5727,6 +5814,7 @@ pub fn run() {
             get_rgs_liens,
             search_rgs,
             scrape_1fichier_dir,
+            resolve_1fichier_names,
             download_1fichier,
             finalize_rgs_import,
             get_myrient_consoles,

@@ -11,6 +11,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useTranslation, type Locale } from "./i18n";
+import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import {
   Search,
   Settings,
@@ -1387,8 +1388,15 @@ export default function App() {
   const [batchUrls, setBatchUrls] = useState("");
   const [batchConsole, setBatchConsole] = useState("");
   const [batchPassword, setBatchPassword] = useState("");
-  const [linkCollections, setLinkCollections] = useState<{ name: string; console: string; password?: string; links: { url: string; name: string }[] }[]>(() => {
-    try { return JSON.parse(localStorage.getItem("emuworld_collections") || "[]"); } catch { return []; }
+  const [linkCollections, setLinkCollections] = useState<{ name: string; console: string; password?: string; builtin?: boolean; links: { url: string; name: string }[]; resolving?: boolean }[]>(() => {
+    const customs: any[] = (() => { try { return JSON.parse(localStorage.getItem("emuworld_collections") || "[]"); } catch { return []; } })();
+    const builtins = DEFAULT_COLLECTIONS.map(dc => ({
+      name: dc.name,
+      console: dc.console,
+      builtin: true,
+      links: dc.links.map(url => ({ url, name: url.split('?')[1] || url })),
+    }));
+    return [...builtins, ...customs];
   });
   const [showLinkCollectionModal, setShowLinkCollectionModal] = useState(false);
   const [linkColName, setLinkColName] = useState("");
@@ -4297,23 +4305,86 @@ export default function App() {
       const id = line.split('?')[1] || line.split('/').pop() || 'file';
       return { url: line, name: id };
     });
-    const newCol = { name, console: consoleName, password, links };
+    const newCol = { name, console: consoleName, password, links, resolving: true, builtin: false as const };
     setLinkCollections(prev => {
       const updated = [...prev, newCol];
-      localStorage.setItem("emuworld_collections", JSON.stringify(updated));
+      const customs = updated.filter(c => !c.builtin);
+      localStorage.setItem("emuworld_collections", JSON.stringify(customs));
       return updated;
     });
     showToast(t("store.collectionCreated"), "success");
+    // Auto-resolve names for links that don't have manual names
+    const urlsToResolve = links.filter(l => !l.name.includes('.')).map(l => l.url);
+    if (urlsToResolve.length > 0) {
+      resolveCollectionNames(name, urlsToResolve);
+    }
   }, [showToast, t]);
+
+  const resolveCollectionNames = useCallback(async (collectionName: string, urls: string[]) => {
+    try {
+      const resolved = await invoke<[string, string][]>("resolve_1fichier_names", { urls });
+      setLinkCollections(prev => prev.map(col => {
+        if (col.name !== collectionName) return col;
+        const updatedLinks = col.links.map(link => {
+          if (link.name.includes('.')) return link; // Manual name takes precedence
+          const found = resolved.find(([u]) => u === link.url);
+          return found ? { ...link, name: found[1] } : link;
+        });
+        const updated = { ...col, links: updatedLinks, resolving: false };
+        return updated;
+      }));
+      // Persist
+      setLinkCollections(prev => {
+        const customs = prev.filter(c => !c.builtin);
+        localStorage.setItem("emuworld_collections", JSON.stringify(customs));
+        return prev;
+      });
+    } catch (e) {
+      console.error("Failed to resolve names:", e);
+      setLinkCollections(prev => prev.map(col => col.name === collectionName ? { ...col, resolving: false } : col));
+    }
+  }, []);
 
   const deleteCollection = useCallback((index: number) => {
     setLinkCollections(prev => {
       const updated = prev.filter((_, i) => i !== index);
-      localStorage.setItem("emuworld_collections", JSON.stringify(updated));
+      const customs = updated.filter(c => !c.builtin);
+      localStorage.setItem("emuworld_collections", JSON.stringify(customs));
       return updated;
     });
     if (activeCollection === index) setActiveCollection(null);
   }, [activeCollection]);
+
+  const shareCollection = useCallback(async (index: number) => {
+    const col = linkCollections[index];
+    if (!col || !user) return;
+    try {
+      const { error } = await supabase.from("shared_collections").insert({
+        user_id: user.id,
+        name: col.name,
+        console: col.console,
+        links: col.links,
+        password: col.password || null,
+      });
+      if (error) throw error;
+      showToast(t("store.collectionShared"), "success");
+    } catch (e: any) {
+      showToast(`Error: ${e.message || e}`, "error");
+    }
+  }, [linkCollections, user, showToast, t]);
+
+  const importSharedCollection = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.from("shared_collections")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return data || [];
+    } catch {
+      return [];
+    }
+  }, []);
 
   const handleImportRom = useCallback(async (targetConsole: string) => {
     try {
@@ -5931,6 +6002,21 @@ export default function App() {
                         <h4 style={{ margin: 0, flex: 1 }}>{linkCollections[activeCollection].name}</h4>
                         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{linkCollections[activeCollection].links.length} {t("store.links")}</span>
                         <button
+                          className="btn btn--ghost btn--sm gamepad-nav-item"
+                          onClick={() => resolveCollectionNames(linkCollections[activeCollection!].name, linkCollections[activeCollection!].links.map(l => l.url))}
+                          title={t("store.resolveNames")}
+                        >
+                          <RefreshCw size={12} /> {t("store.resolveNames")}
+                        </button>
+                        {user && (
+                          <button
+                            className="btn btn--ghost btn--sm gamepad-nav-item"
+                            onClick={() => shareCollection(activeCollection!)}
+                          >
+                            <Upload size={12} /> {t("store.share")}
+                          </button>
+                        )}
+                        <button
                           className="btn btn--primary btn--sm gamepad-nav-item"
                           onClick={() => {
                             const col = linkCollections[activeCollection!];
@@ -5942,13 +6028,15 @@ export default function App() {
                         >
                           <Download size={12} /> {t("store.downloadAll")}
                         </button>
-                        <button
-                          className="btn btn--ghost btn--sm gamepad-nav-item"
-                          onClick={() => deleteCollection(activeCollection!)}
-                          style={{ color: "#ef4444" }}
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                        {!linkCollections[activeCollection]?.builtin && (
+                          <button
+                            className="btn btn--ghost btn--sm gamepad-nav-item"
+                            onClick={() => deleteCollection(activeCollection!)}
+                            style={{ color: "#ef4444" }}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
                       </div>
                       <div className="search-bar" style={{ marginBottom: 12 }}>
                         <Search size={14} className="search-bar__icon" />
