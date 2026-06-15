@@ -131,6 +131,17 @@ const en: Translations = {
     batchStart: "Start",
     batchComplete: "All downloads complete!",
     downloadQueue: "Downloads",
+    waitingRetry: "Waiting (1fichier rate limit)... Retrying in 60s",
+    saveAsCollection: "Save as collection",
+    createCollection: "Create collection",
+    collectionDesc: "Create a collection of downloadable links. You can then search by name and download individually.",
+    collectionName: "Collection name",
+    collectionLinksPlaceholder: "One link per line:\nhttps://1fichier.com/?abc123 GameName.zip\nhttps://1fichier.com/?def456 OtherGame.7z",
+    collectionCreated: "Collection created!",
+    myCollections: "My collections",
+    links: "links",
+    downloadAll: "Download all",
+    searchCollection: "Search in collection...",
   },
 
   // Friends

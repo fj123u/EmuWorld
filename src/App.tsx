@@ -1382,11 +1382,21 @@ export default function App() {
   const [rgsFolderSearch, setRgsFolderSearch] = useState("");
   const [downloadQueue, setDownloadQueue] = useState<DownloadQueueItem[]>([]);
   const [showDownloadPanel, setShowDownloadPanel] = useState(false);
-  const [isProcessingQueue, setIsProcessingQueue] = useState(false);
+  const isProcessingRef = useRef(false);
   const [showBatchModal, setShowBatchModal] = useState(false);
   const [batchUrls, setBatchUrls] = useState("");
   const [batchConsole, setBatchConsole] = useState("");
   const [batchPassword, setBatchPassword] = useState("");
+  const [linkCollections, setLinkCollections] = useState<{ name: string; console: string; password?: string; links: { url: string; name: string }[] }[]>(() => {
+    try { return JSON.parse(localStorage.getItem("emuworld_collections") || "[]"); } catch { return []; }
+  });
+  const [showLinkCollectionModal, setShowLinkCollectionModal] = useState(false);
+  const [linkColName, setLinkColName] = useState("");
+  const [linkColConsole, setLinkColConsole] = useState("");
+  const [linkColPwd, setLinkColPwd] = useState("");
+  const [linkColLinks, setLinkColLinks] = useState("");
+  const [activeCollection, setActiveCollection] = useState<number | null>(null);
+  const [collectionSearch, setCollectionSearch] = useState("");
   const [selectedConstructeur, setSelectedConstructeur] = useState<string | null>(null);
   const [selectedConstructeurName, setSelectedConstructeurName] = useState<string | null>(null);
   const [selectedRgsConsole, setSelectedRgsConsole] = useState<string | null>(null);
@@ -4213,7 +4223,7 @@ export default function App() {
     showToast(`Once downloaded, click 'Finalize' to move and unzip the game to your ${currentConsole} library!`, "info");
   }, [showToast, selectedRgsConsoleName]);
 
-  const handleBatchDownload = useCallback(async (urls: string[], console: string, password?: string) => {
+  const handleBatchDownload = useCallback(async (urls: string[], consoleName: string, password?: string) => {
     const items: DownloadQueueItem[] = urls.map((url, i) => ({
       id: `dl_${Date.now()}_${i}`,
       url,
@@ -4223,16 +4233,15 @@ export default function App() {
     setDownloadQueue(prev => [...prev, ...items]);
     setShowDownloadPanel(true);
 
-    if (isProcessingQueue) return;
-    setIsProcessingQueue(true);
+    if (isProcessingRef.current) return;
+    isProcessingRef.current = true;
 
-    const allItems = [...downloadQueue.filter(d => d.status === 'pending'), ...items];
-    for (const item of allItems) {
-      setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'downloading', message: t("store.openingFolder") } : d));
+    for (const item of items) {
+      setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'downloading', progress: 5, message: "Resolving..." } : d));
       try {
         const fileName = await invoke<string>("download_1fichier", {
           url: item.url,
-          console: console,
+          console: consoleName,
           password: password || null,
           queueId: item.id,
         });
@@ -4240,13 +4249,12 @@ export default function App() {
       } catch (e: any) {
         const errMsg = String(e);
         if (errMsg.includes("must wait") || errMsg.includes("patienter")) {
-          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'waiting', message: errMsg } : d));
-          await new Promise(r => setTimeout(r, 60000));
-          // Retry once after wait
+          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'waiting', message: t("store.waitingRetry") } : d));
+          await new Promise(r => setTimeout(r, 65000));
           try {
             const fileName = await invoke<string>("download_1fichier", {
               url: item.url,
-              console: console,
+              console: consoleName,
               password: password || null,
               queueId: item.id,
             });
@@ -4259,9 +4267,9 @@ export default function App() {
         }
       }
     }
-    setIsProcessingQueue(false);
+    isProcessingRef.current = false;
     showToast(t("store.batchComplete"), "success");
-  }, [downloadQueue, isProcessingQueue, showToast, t]);
+  }, [showToast, t]);
 
   useEffect(() => {
     const unlisten = listen<{ queue_id: string; status: string; progress: number; message?: string; speed_bps?: number; eta?: number; file_name?: string }>("1fichier-progress", (event) => {
@@ -4278,6 +4286,34 @@ export default function App() {
     });
     return () => { unlisten.then(f => f()); };
   }, []);
+
+  const saveCollection = useCallback((name: string, consoleName: string, linksText: string, password?: string) => {
+    const lines = linksText.split('\n').map(l => l.trim()).filter(l => l.startsWith('http'));
+    const links = lines.map(line => {
+      const spaceIdx = line.indexOf(' ');
+      if (spaceIdx > 0) {
+        return { url: line.substring(0, spaceIdx), name: line.substring(spaceIdx + 1).trim() };
+      }
+      const id = line.split('?')[1] || line.split('/').pop() || 'file';
+      return { url: line, name: id };
+    });
+    const newCol = { name, console: consoleName, password, links };
+    setLinkCollections(prev => {
+      const updated = [...prev, newCol];
+      localStorage.setItem("emuworld_collections", JSON.stringify(updated));
+      return updated;
+    });
+    showToast(t("store.collectionCreated"), "success");
+  }, [showToast, t]);
+
+  const deleteCollection = useCallback((index: number) => {
+    setLinkCollections(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      localStorage.setItem("emuworld_collections", JSON.stringify(updated));
+      return updated;
+    });
+    if (activeCollection === index) setActiveCollection(null);
+  }, [activeCollection]);
 
   const handleImportRom = useCallback(async (targetConsole: string) => {
     try {
@@ -5849,6 +5885,95 @@ export default function App() {
                       >
                         <Download size={14} /> {t("store.batchDownload")}
                       </button>
+                      <button
+                        className="btn btn--ghost gamepad-nav-item"
+                        onClick={() => setShowLinkCollectionModal(true)}
+                      >
+                        <BookOpen size={14} /> {t("store.createCollection")}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Collections Section */}
+                  {linkCollections.length > 0 && !selectedConstructeur && !rgsSearchResults.length && activeCollection === null && (
+                    <div style={{ marginBottom: 16 }}>
+                      <h4 style={{ marginBottom: 8, color: "var(--text-secondary)", fontSize: 13, textTransform: "uppercase", letterSpacing: 1 }}>{t("store.myCollections")}</h4>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {linkCollections.map((col, idx) => (
+                          <motion.div
+                            key={idx}
+                            className="rgs-console-card gamepad-nav-item"
+                            whileHover={{ scale: 1.03 }}
+                            whileTap={{ scale: 0.97 }}
+                            onClick={() => { setActiveCollection(idx); setCollectionSearch(""); }}
+                            style={{ cursor: "pointer", padding: "12px 16px", minWidth: 140 }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <BookOpen size={16} />
+                              <span style={{ fontWeight: 600 }}>{col.name}</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 4 }}>
+                              {col.links.length} {t("store.links")} • {col.console}
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Active Collection View */}
+                  {activeCollection !== null && linkCollections[activeCollection] && (
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => setActiveCollection(null)}>
+                          ← {t("common.back")}
+                        </button>
+                        <h4 style={{ margin: 0, flex: 1 }}>{linkCollections[activeCollection].name}</h4>
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{linkCollections[activeCollection].links.length} {t("store.links")}</span>
+                        <button
+                          className="btn btn--primary btn--sm gamepad-nav-item"
+                          onClick={() => {
+                            const col = linkCollections[activeCollection!];
+                            const filtered = collectionSearch
+                              ? col.links.filter(l => l.name.toLowerCase().includes(collectionSearch.toLowerCase()))
+                              : col.links;
+                            handleBatchDownload(filtered.map(l => l.url), col.console, col.password);
+                          }}
+                        >
+                          <Download size={12} /> {t("store.downloadAll")}
+                        </button>
+                        <button
+                          className="btn btn--ghost btn--sm gamepad-nav-item"
+                          onClick={() => deleteCollection(activeCollection!)}
+                          style={{ color: "#ef4444" }}
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                      <div className="search-bar" style={{ marginBottom: 12 }}>
+                        <Search size={14} className="search-bar__icon" />
+                        <input
+                          className="search-bar__input gamepad-nav-item"
+                          placeholder={t("store.searchCollection")}
+                          value={collectionSearch}
+                          onChange={(e) => setCollectionSearch(e.target.value)}
+                        />
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 400, overflowY: "auto" }}>
+                        {linkCollections[activeCollection].links
+                          .filter(l => !collectionSearch || l.name.toLowerCase().includes(collectionSearch.toLowerCase()))
+                          .map((link, idx) => (
+                            <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 8 }}>
+                              <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.name}</span>
+                              <button
+                                className="btn btn--primary btn--sm gamepad-nav-item"
+                                onClick={() => handleBatchDownload([link.url], linkCollections[activeCollection!].console, linkCollections[activeCollection!].password)}
+                              >
+                                <Download size={12} />
+                              </button>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
 
@@ -9425,7 +9550,7 @@ export default function App() {
         {/* Batch Download Modal */}
         {showBatchModal && (
           <div className="modal-backdrop" onClick={() => setShowBatchModal(false)}>
-            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520, width: "90%" }}>
+            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, width: "90%" }}>
               <h3 style={{ marginBottom: 12 }}><Download size={18} /> {t("store.batchDownload")}</h3>
               <p style={{ color: "var(--text-secondary)", marginBottom: 12, fontSize: 13 }}>
                 {t("store.batchDesc")}
@@ -9459,6 +9584,17 @@ export default function App() {
                   {t("common.cancel")}
                 </button>
                 <button
+                  className="btn btn--ghost gamepad-nav-item"
+                  disabled={!batchUrls.trim() || !batchConsole.trim()}
+                  onClick={() => {
+                    saveCollection(batchConsole.trim(), batchConsole.trim(), batchUrls, batchPassword || undefined);
+                    setShowBatchModal(false);
+                    setBatchUrls("");
+                  }}
+                >
+                  {t("store.saveAsCollection")}
+                </button>
+                <button
                   className="btn btn--primary gamepad-nav-item"
                   disabled={!batchUrls.trim() || !batchConsole.trim()}
                   onClick={() => {
@@ -9470,6 +9606,68 @@ export default function App() {
                   }}
                 >
                   <Download size={14} /> {t("store.batchStart")} ({batchUrls.split('\n').filter(u => u.trim().startsWith('http')).length})
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* Link Collection Modal */}
+        {showLinkCollectionModal && (
+          <div className="modal-backdrop" onClick={() => setShowLinkCollectionModal(false)}>
+            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600, width: "90%", maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
+              <h3 style={{ marginBottom: 12 }}>{t("store.createCollection")}</h3>
+              <p style={{ color: "var(--text-secondary)", marginBottom: 12, fontSize: 13 }}>
+                {t("store.collectionDesc")}
+              </p>
+              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                <input
+                  className="search-bar__input gamepad-nav-item"
+                  placeholder={t("store.collectionName")}
+                  value={linkColName}
+                  onChange={(e) => setLinkColName(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <input
+                  className="search-bar__input gamepad-nav-item"
+                  placeholder={t("store.batchConsole")}
+                  value={linkColConsole}
+                  onChange={(e) => setLinkColConsole(e.target.value)}
+                  style={{ width: 120 }}
+                />
+                <input
+                  className="search-bar__input gamepad-nav-item"
+                  placeholder={t("store.batchPwd")}
+                  value={linkColPwd}
+                  onChange={(e) => setLinkColPwd(e.target.value)}
+                  style={{ width: 120 }}
+                />
+              </div>
+              <textarea
+                className="gamepad-nav-item"
+                rows={6}
+                placeholder={t("store.collectionLinksPlaceholder")}
+                value={linkColLinks}
+                onChange={(e) => setLinkColLinks(e.target.value)}
+                style={{ width: "100%", marginBottom: 12, background: "var(--bg-tertiary)", border: "1px solid var(--border)", borderRadius: 8, padding: 10, color: "var(--text-primary)", resize: "vertical", fontFamily: "monospace", fontSize: 12 }}
+              />
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button className="btn btn--ghost gamepad-nav-item" onClick={() => setShowLinkCollectionModal(false)}>
+                  {t("common.cancel")}
+                </button>
+                <button
+                  className="btn btn--primary gamepad-nav-item"
+                  disabled={!linkColName.trim() || !linkColConsole.trim() || !linkColLinks.trim()}
+                  onClick={() => {
+                    saveCollection(linkColName.trim(), linkColConsole.trim(), linkColLinks, linkColPwd || undefined);
+                    setShowLinkCollectionModal(false);
+                    setLinkColName("");
+                    setLinkColConsole("");
+                    setLinkColLinks("");
+                    setLinkColPwd("");
+                  }}
+                >
+                  {t("common.save")}
                 </button>
               </div>
             </motion.div>

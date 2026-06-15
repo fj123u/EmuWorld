@@ -129,6 +129,17 @@ const fr = {
     batchStart: "Lancer",
     batchComplete: "Tous les téléchargements sont terminés !",
     downloadQueue: "Téléchargements",
+    waitingRetry: "Attente (limite 1fichier)... Nouvel essai dans 60s",
+    saveAsCollection: "Sauvegarder en collection",
+    createCollection: "Créer une collection",
+    collectionDesc: "Crée une collection de liens téléchargeables. Tu pourras ensuite chercher par nom et télécharger individuellement.",
+    collectionName: "Nom de la collection",
+    collectionLinksPlaceholder: "Un lien par ligne :\nhttps://1fichier.com/?abc123 NomDuJeu.zip\nhttps://1fichier.com/?def456 AutreJeu.7z",
+    collectionCreated: "Collection créée !",
+    myCollections: "Mes collections",
+    links: "liens",
+    downloadAll: "Tout télécharger",
+    searchCollection: "Rechercher dans la collection...",
   },
 
   // Friends
