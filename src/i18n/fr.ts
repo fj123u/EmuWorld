@@ -120,6 +120,7 @@ const fr = {
     size: "Taille",
     noResults: "Aucun résultat",
     rgsHint: "Pour les jeux Switch, Wii U et les packs complets, passe sur l'onglet RetroGameSets.",
+    openingFolder: "Ouverture du dossier dans le navigateur...",
   },
 
   // Friends

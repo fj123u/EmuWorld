@@ -4156,21 +4156,16 @@ export default function App() {
       url += (url.includes("?") ? "&" : "?") + "af=3186111";
     }
     
-    // If it's a directory, scrape it instead of opening it
+    // 1fichier directories: open in system browser (scraping is blocked by anti-bot)
     if (url.includes("1fichier.com/dir/")) {
-      setRgsLoading(true);
-      if (lien) setSelectedRgsLien(lien);
+      showToast(t("store.openingFolder"), "info");
       try {
-        const files = await invoke<RgsFile[]>("scrape_1fichier_dir", { url });
-        setRgsFolderFiles(files);
-        showToast(`📁 Loaded ${files.length} files from folder`, "success");
-      } catch (e: any) {
-        showToast(`Failed to scrape folder: ${e}`, "error");
-        // Fallback to opening in browser if scraping fails
         await openUrl(url).catch(() => window.open(url, "_blank"));
-      } finally {
-        setRgsLoading(false);
+      } catch {
+        window.open(url, "_blank");
       }
+      const currentConsole = selectedRgsConsoleName || "Nintendo Switch";
+      setPendingImportConsole(currentConsole);
       return;
     }
 
@@ -5882,11 +5877,11 @@ export default function App() {
                             >
                               <div className="rgs-file-name">{file.nom}</div>
                               <div className="rgs-file-size">{file.taille}</div>
-                              <button 
-                                className="btn btn--primary btn--sm"
+                              <button
+                                className="btn btn--primary btn--sm gamepad-nav-item"
                                 onClick={() => handleOpenRgsLink(file.url)}
                               >
-                                Download
+                                {t("store.download")}
                               </button>
                             </motion.div>
                           ))}
@@ -5959,8 +5954,11 @@ export default function App() {
                               </div>
                             )}
                             
-                            <button className="btn btn--ghost btn--full rgs-lien-card__dl-btn">
-                              {lien.url.includes('/dir/') ? 'Open Folder' : 'Download File'}
+                            <button
+                              className="btn btn--ghost btn--full rgs-lien-card__dl-btn gamepad-nav-item"
+                              onClick={(e) => { e.stopPropagation(); handleOpenRgsLink(lien); }}
+                            >
+                              {lien.url.includes('/dir/') ? t("emulator.openFolder") : t("store.download")}
                             </button>
                           </motion.div>
                         );
