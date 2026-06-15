@@ -1614,6 +1614,7 @@ export default function App() {
   const [avatarCacheKey, setAvatarCacheKey] = useState<string>("");
   const [authLoading, setAuthLoading] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showEmailConfirmModal, setShowEmailConfirmModal] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginPseudo, setLoginPseudo] = useState("");
@@ -1856,7 +1857,8 @@ export default function App() {
             username: loginPseudo,
             updated_at: new Date().toISOString(),
           });
-          showToast(t("auth.accountCreated"), 'success');
+          setShowLoginModal(false);
+          setShowEmailConfirmModal(true);
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
@@ -9354,6 +9356,23 @@ export default function App() {
                 </button>
               </div>
               <button className="btn btn--ghost btn--sm" onClick={() => setInstallChoiceModal(null)}>{t("common.cancel")}</button>
+            </motion.div>
+          </div>
+        )}
+
+        {showEmailConfirmModal && (
+          <div className="modal-backdrop" onClick={() => setShowEmailConfirmModal(false)}>
+            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ marginBottom: 12 }}>📧 {t("auth.checkEmailTitle")}</h3>
+              <p style={{ color: "var(--text-secondary)", marginBottom: 8, lineHeight: 1.5 }}>
+                {t("auth.checkEmailDesc")}
+              </p>
+              <p style={{ color: "var(--text-secondary)", fontSize: 13, marginBottom: 16 }}>
+                <strong>{loginEmail}</strong>
+              </p>
+              <button className="btn btn--primary gamepad-nav-item" onClick={() => setShowEmailConfirmModal(false)}>
+                {t("common.close")}
+              </button>
             </motion.div>
           </div>
         )}

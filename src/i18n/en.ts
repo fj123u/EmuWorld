@@ -288,6 +288,8 @@ const en: Translations = {
     connectedSuccess: "Connected successfully!",
     signedOut: "Signed out",
     emailNotConfirmed: "Please confirm your email before signing in.",
+    checkEmailTitle: "Check your email",
+    checkEmailDesc: "A confirmation email has been sent. Click the link in the email to activate your account, then come back and sign in.",
   },
 
   // Gamepad labels

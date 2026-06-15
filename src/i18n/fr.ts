@@ -286,6 +286,8 @@ const fr = {
     connectedSuccess: "Connecté avec succès !",
     signedOut: "Déconnecté",
     emailNotConfirmed: "Confirme ton email avant de te connecter.",
+    checkEmailTitle: "Vérifie ton email",
+    checkEmailDesc: "Un email de confirmation vient d'être envoyé. Clique sur le lien dans le mail pour activer ton compte, puis reviens te connecter ici.",
   },
 
   // Gamepad labels
