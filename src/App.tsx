@@ -5076,6 +5076,17 @@ export default function App() {
                         </button>
                       ));
                     })()
+                  : storeMode === "archive"
+                  ? storeConsoles.map((con) => (
+                      <button
+                        key={con}
+                        className={`sidebar__item ${storeConsoleFilter === con ? "sidebar__item--active" : ""}`}
+                        onClick={() => setStoreConsoleFilter(storeConsoleFilter === con ? null : con)}
+                      >
+                        <span className="sidebar__item-icon"><ConsoleLogo name={con} size={14} /></span>
+                        {con}
+                      </button>
+                    ))
                   : rgsConstructeurs.map((c) => (
                       <button
                         key={c.id}
@@ -5225,7 +5236,7 @@ export default function App() {
                     {page === "catalog" && t("header.emulators")}
                     {page === "library" && t("header.library")}
                     {page === "installed" && t("header.installedEmulators")}
-                    {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
+                    {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : storeMode === "archive" ? "Archive.org" : "RetroGameSets")}
                     {page === "settings" && t("header.settings")}
                     {page === "leaderboard" && t("header.leaderboard")}
                     {page === "friends" && t("header.friends")}
@@ -5252,6 +5263,7 @@ export default function App() {
                           ? `Search ${selectedVimmConsole.name} by name`
                           : "Search or pick a console"
                     )}
+                    {page === "store" && storeMode === "archive" && (storeConsoleFilter ? `${storeRoms.length} game${storeRoms.length === 1 ? "" : "s"} for ${storeConsoleFilter}` : "Pick a console or search")}
                     {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
                     {page === "library" && (
                       consoleFilter
@@ -5560,13 +5572,19 @@ export default function App() {
                     className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "vimm" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("vimm")}
                   >
-                    🎮 Individual games (Vimm's Lair)
+                    🎮 {t("store.singleGames")} (Vimm's Lair)
+                  </button>
+                  <button
+                    className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "archive" ? "store-source-toggle__btn--active" : ""}`}
+                    onClick={() => setStoreMode("archive")}
+                  >
+                    📚 {t("store.singleGames")} (Archive.org)
                   </button>
                   <button
                     className={`store-source-toggle__btn gamepad-nav-item ${storeMode === "rgs" ? "store-source-toggle__btn--active" : ""}`}
                     onClick={() => setStoreMode("rgs")}
                   >
-                    📦 Complete packs (RetroGameSets)
+                    📦 {t("store.fullPacks")} (RetroGameSets)
                   </button>
                 </div>
               )}
@@ -5705,6 +5723,18 @@ export default function App() {
 
               {page === "store" && storeMode === "archive" && (
                 <div className="store-page">
+                  <div className="rgs-search-header">
+                    <div className="search-bar search-bar--glow">
+                      <Search size={18} className="search-bar__icon" />
+                      <input
+                        type="text"
+                        className="search-bar__input gamepad-nav-item"
+                        placeholder={storeConsoleFilter ? `Search ${storeConsoleFilter}...` : "Search Archive.org..."}
+                        value={storeSearch}
+                        onChange={(e) => setStoreSearch(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   <div className="grid grid--fixed">
                     {isSearchingStore ? (
                       <div className="empty-state">

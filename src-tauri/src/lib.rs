@@ -3020,7 +3020,8 @@ async fn finalize_rgs_import(
 ) -> Result<String, String> {
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
-    let dest_dir = roms_dir.join(&console);
+    let normalized = normalize_console_folder(&console);
+    let dest_dir = roms_dir.join(&normalized);
     
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
