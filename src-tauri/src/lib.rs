@@ -3524,8 +3524,9 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
 async fn resolve_1fichier_names(
     app_handle: tauri::AppHandle,
     urls: Vec<String>,
+    collection_name: String,
 ) -> Result<Vec<(String, String)>, String> {
-    push_log("INFO", &format!("Résolution des noms 1fichier: {} URLs", urls.len()));
+    push_log("INFO", &format!("Résolution des noms 1fichier: {} URLs (collection: {})", urls.len(), collection_name));
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         .timeout(std::time::Duration::from_secs(15))
@@ -3567,16 +3568,17 @@ async fn resolve_1fichier_names(
         }).collect();
 
         let batch_results = futures::future::join_all(futures).await;
-        results.extend(batch_results);
+        results.extend(batch_results.clone());
 
-        let done = chunk_end;
-        let _ = app_handle.emit("resolve-names-progress", serde_json::json!({
-            "done": done,
+        let _ = app_handle.emit("resolve-names-batch", serde_json::json!({
+            "collection": collection_name,
+            "batch": batch_results.iter().map(|(u, n)| serde_json::json!({"url": u, "name": n})).collect::<Vec<_>>(),
+            "done": chunk_end,
             "total": total
         }));
 
         if chunk_end < total {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
         }
     }
 

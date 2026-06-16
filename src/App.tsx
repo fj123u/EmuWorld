@@ -4356,9 +4356,10 @@ export default function App() {
   }, [showToast, t]);
 
   const resolveCollectionNames = useCallback(async (collectionName: string, urls: string[]) => {
+    if (urls.length === 0) return;
     try {
       setLinkCollections(prev => prev.map(col => col.name === collectionName ? { ...col, resolving: true } : col));
-      const resolved = await invoke<[string, string][]>("resolve_1fichier_names", { urls });
+      const resolved = await invoke<[string, string][]>("resolve_1fichier_names", { urls, collectionName });
       setLinkCollections(prev => {
         const updated = prev.map(col => {
           if (col.name !== collectionName) return col;
@@ -4394,6 +4395,25 @@ export default function App() {
       resolveCollectionNames(col.name, unresolved.map(l => l.url));
     }
   }, [activeCollection]);
+
+  useEffect(() => {
+    const unlisten = listen<{ collection: string; batch: { url: string; name: string }[]; done: number; total: number }>("resolve-names-batch", (event) => {
+      const { collection, batch } = event.payload;
+      setLinkCollections(prev => prev.map(col => {
+        if (col.name !== collection) return col;
+        const updatedLinks = col.links.map(link => {
+          const found = batch.find(b => b.url === link.url);
+          return found && found.name.includes('.') ? { ...link, name: found.name } : link;
+        });
+        return { ...col, links: updatedLinks };
+      }));
+      const builtinNamesCache: Record<string, Record<string, string>> = (() => { try { return JSON.parse(localStorage.getItem("emuworld_builtin_names") || "{}"); } catch { return {}; } })();
+      if (!builtinNamesCache[collection]) builtinNamesCache[collection] = {};
+      batch.forEach(b => { if (b.name.includes('.')) builtinNamesCache[collection][b.url] = b.name; });
+      localStorage.setItem("emuworld_builtin_names", JSON.stringify(builtinNamesCache));
+    });
+    return () => { unlisten.then(fn => fn()); };
+  }, []);
 
   const deleteCollection = useCallback((index: number) => {
     setLinkCollections(prev => {
