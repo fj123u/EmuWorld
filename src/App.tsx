@@ -139,6 +139,8 @@ interface DownloadStats {
   total_bytes: number;
   speed_bps: number;
   eta: number;
+  status?: string;
+  message?: string;
 }
 
 interface Toast {
@@ -1837,8 +1839,7 @@ export default function App() {
     setAuthError(null);
     try {
       // Start local HTTP server as fallback receiver
-      const port = await invoke<number>("start_oauth_server");
-      // Use alwaysdata bounce page as primary redirect (works through proxies/firewalls)
+      await invoke<number>("start_oauth_server");
       const redirectUrl = "https://emuworld.alwaysdata.net/auth-callback.html";
 
       const { data, error } = await supabase.auth.signInWithOAuth({
@@ -1852,9 +1853,25 @@ export default function App() {
       if (data.url) {
         await openUrl(data.url);
       }
+      // Poll for session arrival (fallback if deep-link/localhost fails)
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        if (attempts > 60) { // 120s max
+          clearInterval(pollInterval);
+          setAuthLoading(false);
+          return;
+        }
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session) {
+          clearInterval(pollInterval);
+          setAuthLoading(false);
+          setShowLoginModal(false);
+          showToast('Connected successfully! 🎉', 'success');
+        }
+      }, 2000);
     } catch (e: any) {
       setAuthError(e.message);
-    } finally {
       setAuthLoading(false);
     }
   };
@@ -1884,6 +1901,9 @@ export default function App() {
         const { data, error } = await supabase.auth.signUp({
           email: loginEmail,
           password: loginPassword,
+          options: {
+            emailRedirectTo: "https://emuworld.alwaysdata.net/auth-callback.html",
+          },
         });
         if (error) throw error;
         // Insert profile with pseudo
@@ -5838,7 +5858,13 @@ export default function App() {
                                 disabled={downloading.includes(game.id)}
                               >
                                 {downloading.includes(game.id) ? (
-                                  <><RefreshCw size={12} className="animate-spin" /> {downloadProgress[game.id]?.progress || 0}%</>
+                                  downloadProgress[game.id]?.status === "extracting" ? (
+                                    <><RefreshCw size={12} className="animate-spin" /> {t("store.extracting")}</>
+                                  ) : downloadProgress[game.id]?.status === "done" ? (
+                                    <><Check size={12} /> {t("store.done")}</>
+                                  ) : (
+                                    <><RefreshCw size={12} className="animate-spin" /> {downloadProgress[game.id]?.progress || 0}%</>
+                                  )
                                 ) : (
                                   <><Download size={12} /> Download</>
                                 )}
@@ -8465,12 +8491,15 @@ export default function App() {
                   if (s < 60) return `${s}s`;
                   return `${Math.floor(s / 60)}m${s % 60}s`;
                 };
+                const statusLabel = stats?.status === "extracting" ? t("store.extracting")
+                  : stats?.status === "done" ? t("store.done")
+                  : `${progress}%${speed > 0 ? ` · ${formatBytes(speed)}/s` : ''}${eta > 0 ? ` · ${formatEta(eta)}` : ''}`;
                 return (
                   <div key={id} className="download-banner__item">
                     <div className="download-banner__info">
                       <span className="download-banner__name">{name}</span>
                       <span className="download-banner__stats">
-                        {progress}%{speed > 0 && ` · ${formatBytes(speed)}/s`}{eta > 0 && ` · ${formatEta(eta)}`}
+                        {statusLabel}
                       </span>
                     </div>
                     <div className="download-banner__bar">

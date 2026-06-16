@@ -143,6 +143,8 @@ const fr = {
     resolveNames: "Récupérer les noms",
     share: "Partager",
     collectionShared: "Collection partagée avec la communauté !",
+    extracting: "Extraction...",
+    done: "Terminé !",
   },
 
   // Friends

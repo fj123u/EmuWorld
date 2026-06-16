@@ -112,28 +112,42 @@
     return 'emuworld://auth-callback' + getTokens();
   }
 
-  function tryLocalhost() {
-    // Try the fixed ports used by EmuWorld's OAuth server
+  function tryLocalhost(callback) {
     const tokens = getTokens();
     const ports = [17643, 17644, 17645, 17646, 17647];
     let connected = false;
 
     ports.forEach(port => {
-      fetch(`http://127.0.0.1:${port}/callback${tokens}`, { mode: 'no-cors' })
-        .then(() => {
-          if (!connected) {
-            connected = true;
-            document.getElementById('status').innerHTML = '✅ Connecté ! Tu peux fermer cet onglet.';
-            setTimeout(() => window.close(), 1500);
-          }
-        })
-        .catch(() => {});
+      const img = new Image();
+      img.onload = img.onerror = () => {
+        if (!connected) {
+          // Image trick doesn't confirm delivery, use XHR
+        }
+      };
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', `http://127.0.0.1:${port}/callback${tokens}`, true);
+      xhr.timeout = 2000;
+      xhr.onload = () => {
+        if (!connected) {
+          connected = true;
+          document.getElementById('status').innerHTML = '✅ Connecté ! Tu peux fermer cet onglet.';
+          if (callback) callback(true);
+          setTimeout(() => window.close(), 1500);
+        }
+      };
+      xhr.onerror = () => {};
+      xhr.ontimeout = () => {};
+      try { xhr.send(); } catch(e) {}
     });
+
+    // Fallback after delay
+    setTimeout(() => { if (!connected && callback) callback(false); }, 3000);
   }
 
   function jump() {
     // Handle email confirmation (signup/recovery) — not an OAuth flow
     const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash;
     const type = params.get('type');
     if (type === 'signup' || type === 'recovery' || type === 'email_change') {
       document.getElementById('status').innerHTML =
@@ -142,27 +156,37 @@
       return;
     }
 
-    // Primary: try localhost HTTP server (most reliable on Windows)
-    tryLocalhost();
+    // If no tokens at all, show error
+    const tokens = getTokens();
+    if (!tokens || tokens.length < 5) {
+      document.getElementById('status').innerHTML =
+        '❌ Aucun token reçu. Réessaye la connexion depuis EmuWorld.';
+      return;
+    }
 
-    // Secondary: try deep-link protocol
-    const url = buildDeepLink();
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.src = url;
-    document.body.appendChild(iframe);
+    // Strategy 1: Deep link (most reliable on Windows with registered protocol)
+    const deepLink = buildDeepLink();
+    window.location.href = deepLink;
 
-    // Retry localhost after a short delay in case server was slow to start
-    setTimeout(tryLocalhost, 1000);
-    setTimeout(tryLocalhost, 3000);
+    // Strategy 2: Try localhost after short delay (in case deep link didn't work)
+    setTimeout(() => {
+      tryLocalhost((success) => {
+        if (!success) {
+          // Show manual fallback
+          document.getElementById('status').innerHTML =
+            '⚠️ Si EmuWorld ne s\'est pas ouvert, clique ci-dessous.';
+          document.getElementById('retry').style.display = 'inline-flex';
+          document.getElementById('manual').style.display = 'block';
+        }
+      });
+    }, 500);
 
+    // Auto-close after 6s if still open
     setTimeout(() => {
       document.getElementById('status').innerHTML =
         '✅ Connecté ! Tu peux fermer cet onglet.';
-      document.getElementById('retry').style.display = 'inline-flex';
-      document.getElementById('manual').style.display = 'block';
       window.close();
-    }, 5000);
+    }, 6000);
   }
 
   function copyToken() {

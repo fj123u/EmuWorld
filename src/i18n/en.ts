@@ -145,6 +145,8 @@ const en: Translations = {
     resolveNames: "Fetch names",
     share: "Share",
     collectionShared: "Collection shared with the community!",
+    extracting: "Extracting...",
+    done: "Done!",
   },
 
   // Friends

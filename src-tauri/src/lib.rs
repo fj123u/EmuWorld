@@ -2589,9 +2589,10 @@ async fn search_rom_store(query: String, console_filter: Option<String>) -> Resu
             if query.is_empty() {
                 (format!("collection:({})", collection), "&sort[]=downloads%20desc", console)
             } else {
-                // Clean up query: remove & and other special IA-reserved characters
-                let clean_query = query.replace("&", "*").replace(":", " ").replace("-", " ").replace("+", " ");
-                (format!("collection:({}) AND (title:({})^10 OR {})", collection, clean_query, clean_query), "", console)
+                let clean_query = query.replace("&", " ").replace(":", " ").replace("-", " ").replace("+", " ");
+                let words: Vec<&str> = clean_query.split_whitespace().collect();
+                let title_clause = words.iter().map(|w| format!("title:({})", w)).collect::<Vec<_>>().join(" AND ");
+                (format!("collection:({}) AND ({})", collection, title_clause), "", console)
             }
         } else {
             return Err(format!("Unknown console: {}", console));
@@ -2600,7 +2601,10 @@ async fn search_rom_store(query: String, console_filter: Option<String>) -> Resu
         if query.is_empty() {
             ("mediatype:software AND (subject:rom OR subject:redump OR subject:no-intro) AND (subject:nintendo OR subject:sony OR subject:sega) AND downloads:[1000 TO *] AND NOT title:(part OR bios OR set OR merged OR pack OR collection OR bundle OR \"rom pack\" OR \"rom set\" OR roms OR \"iso set\" OR \"romset\")".to_string(), "&sort[]=downloads%20desc", "Multiple".to_string())
         } else {
-            (format!("(rom OR emulator OR game) AND mediatype:software AND title:(\"{}\") AND NOT title:(pack OR bundle OR collection OR romset OR roms)", query), "&sort[]=downloads%20desc", "Mixed".to_string())
+            let clean_q = query.replace("&", " ").replace(":", " ").replace("+", " ");
+            let words: Vec<&str> = clean_q.split_whitespace().collect();
+            let title_clause = words.iter().map(|w| format!("title:({})", w)).collect::<Vec<_>>().join(" AND ");
+            (format!("mediatype:software AND {} AND NOT title:(pack OR bundle OR collection OR romset OR roms)", title_clause), "&sort[]=downloads%20desc", "Mixed".to_string())
         }
     };
     
@@ -2949,15 +2953,24 @@ async fn download_rom(
     // Close the file handle before post-processing
     drop(file);
     println!("[Download] Download complete: {} bytes saved to {}", downloaded_bytes, dest.display());
-    
+
     // === ZIP Auto-Extraction ===
     // Check if the downloaded file is actually a ZIP archive
-    let is_zip = final_url.to_lowercase().ends_with(".zip") 
+    let is_zip = final_url.to_lowercase().ends_with(".zip")
         || final_file_name.to_lowercase().ends_with(".zip")
         || is_zip_file(&dest);
-    
+
     let is_7z = final_file_name.to_lowercase().ends_with(".7z")
         || final_url.to_lowercase().ends_with(".7z");
+
+    if is_zip || is_7z {
+        let _ = app_handle.emit("rom-download-progress", serde_json::json!({
+            "store_id": final_store_id,
+            "status": "extracting",
+            "progress": 99,
+            "message": "Extracting archive..."
+        }));
+    }
 
     if is_zip {
         println!("[Download] Detected ZIP archive, extracting...");
@@ -3051,14 +3064,15 @@ async fn finalize_rgs_import(
         }
     }
 
-    let dest_dir = roms_dir.join(&final_console);
+    let normalized_final = normalize_console_folder(&final_console);
+    let dest_dir = roms_dir.join(&normalized_final);
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
     }
 
     let dest = dest_dir.join(&file_name);
-    
-    println!("[Import] Moving {} to {} (Console: {})", src.display(), dest.display(), final_console);
+
+    println!("[Import] Moving {} to {} (Console: {} -> {})", src.display(), dest.display(), final_console, normalized_final);
     
     // Try to move directly (instant if on same drive)
     if let Err(_) = fs::rename(&src, &dest) {
@@ -3652,10 +3666,12 @@ async fn download_1fichier(
     }
     drop(file);
 
-    emit_progress("complete", 100, &format!("Downloaded: {}", file_name));
-
     // Auto-extract if ZIP/7z
     let lower = file_name.to_lowercase();
+    if lower.ends_with(".zip") || lower.ends_with(".7z") {
+        emit_progress("extracting", 95, &format!("Extracting: {}", file_name));
+    }
+
     if lower.ends_with(".zip") {
         let zip_path = dest_path.clone();
         if let Ok(zip_file) = fs::File::open(&zip_path) {
@@ -3687,6 +3703,8 @@ async fn download_1fichier(
             let _ = fs::remove_file(&sz_path);
         }
     }
+
+    emit_progress("complete", 100, &format!("Done: {}", file_name));
 
     Ok(file_name)
 }
