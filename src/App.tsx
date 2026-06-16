@@ -1413,6 +1413,17 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.4.1", date: "2026-06-16", changes: [
+      "🔐 Fix OAuth Google/Discord: deep-link direct + polling de session — plus de chargement infini",
+      "🔐 Fix inscription email: désactivation de la confirmation obligatoire + redirect corrigé",
+      "🐛 Fix import Switch: les ROMs finalisées via RGS vont maintenant dans le même dossier que les DL auto",
+      "🐛 Fix recherche multi-mots (Zelda Breath of the Wild marche enfin)",
+      "📦 Extraction visible: le bouton affiche 'Extraction...' puis 'Terminé !' au lieu de rester bloqué à 99%",
+      "📂 Collections de liens: créez des dossiers de liens 1fichier avec scraping auto des noms",
+      "📂 Collections par défaut Wii U intégrées (160+ jeux)",
+      "🔗 Partage de collections via Supabase (bouton Partager)",
+      "🔍 Bouton 'Récupérer les noms' pour résoudre les noms de fichiers depuis 1fichier",
+    ] },
     { version: "2.4.0", date: "2026-06-15", changes: [
       "🔒 Audit de sécurité complet: 17 vulnérabilités corrigées (CSP, path traversal, injection PowerShell, Zip Slip, etc.)",
       "🛡️ Content Security Policy activée dans le WebView — bloque les injections XSS",
