@@ -3685,8 +3685,9 @@ async fn download_1fichier(
         return Err("File has been removed from 1fichier.".to_string());
     }
 
-    // Check for rate-limit already on GET page
-    if page_html.contains("temporairement limit") || page_html.contains("forte affluence") || (page_html.contains("Identifiez-vous") && !page_html.contains("var ct")) {
+    // Check for rate-limit already on GET page (only if no countdown = file not accessible)
+    let has_countdown = page_html.contains("var ct");
+    if !has_countdown && (page_html.contains("temporairement limit") || page_html.contains("forte affluence") || page_html.contains("Identifiez-vous")) {
         push_log("WARN", &format!("1fichier: rate limit dès le GET — ouverture navigateur pour {}", url));
         return Err("OPEN_BROWSER".to_string());
     }
@@ -3700,7 +3701,7 @@ async fn download_1fichier(
     };
 
     if wait_seconds > 0 {
-        emit_progress("resolving", 5, &format!("Waiting {}s (1fichier free limit)...", wait_seconds));
+        emit_progress("resolving", 0, &format!("Waiting {}s (1fichier free limit)...", wait_seconds));
         push_log("INFO", &format!("1fichier: attente de {}s avant POST", wait_seconds));
         for elapsed in 0..wait_seconds {
             if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
@@ -3710,12 +3711,13 @@ async fn download_1fichier(
                 return Err("Download cancelled by user".to_string());
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let pct = ((elapsed + 1) as f64 / wait_seconds as f64 * 10.0) as u32;
-            emit_progress("resolving", pct, &format!("Waiting {}s...", wait_seconds - elapsed - 1));
+            let pct = ((elapsed + 1) as f64 / wait_seconds as f64 * 100.0) as u32;
+            let remaining = wait_seconds - elapsed - 1;
+            emit_progress("resolving", pct, &format!("Waiting {}s...", remaining));
         }
     }
 
-    emit_progress("resolving", 10, "Requesting download link...");
+    emit_progress("resolving", 100, "Requesting download link...");
 
     // Step 2: POST to get the download link
     let mut form_params = vec![("dl_no_ssl", "on")];
@@ -3733,12 +3735,21 @@ async fn download_1fichier(
         .await
         .map_err(|e| format!("POST failed: {}", e))?;
 
+    // Check if we were redirected directly to a CDN URL
+    let final_url = post_resp.url().to_string();
+    let redirected_to_cdn = final_url.contains(".1fichier.com/") && final_url != url && !final_url.contains("img.1fichier.com");
+
+    let download_link = if redirected_to_cdn {
+        push_log("INFO", &format!("1fichier: redirected directly to CDN: {}", final_url));
+        final_url
+    } else {
+
     let post_html = post_resp.text().await.map_err(|e| e.to_string())?;
 
     // Extract direct download link from response
     // 1fichier returns the link in an <a> tag with class "ok btn-general"
     // or in a redirect, or in a link like href="https://....1fichier.com/..."
-    let download_link = {
+    {
         use scraper::{Html, Selector};
         let doc = Html::parse_document(&post_html);
 
@@ -3773,7 +3784,7 @@ async fn download_1fichier(
 
         // Fallback 2: check for wait time or login requirement (free users)
         if found_link.is_none() {
-            if post_html.contains("must wait") || post_html.contains("Veuillez patienter") || post_html.contains("You must wait") {
+            if post_html.contains("must wait") || post_html.contains("Veuillez patienter") || post_html.contains("You must wait") || post_html.contains("attendre entre chaque") {
                 let wait_re = regex::Regex::new(r"(\d+)\s*(minutes?|seconds?|secondes?|min)").unwrap();
                 let wait_msg = if let Some(cap) = wait_re.captures(&post_html) {
                     format!("1fichier rate limit: please wait {} {}", &cap[1], &cap[2])
@@ -3783,19 +3794,21 @@ async fn download_1fichier(
                 push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
                 return Err(wait_msg);
             }
-            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") || post_html.contains("temporairement limit") || post_html.contains("forte affluence") || post_html.contains("attendre entre chaque") {
+            if post_html.contains("temporairement limit") || post_html.contains("forte affluence") {
                 push_log("WARN", &format!("1fichier: rate limit après POST — ouverture navigateur pour {}", url));
                 let _ = app_handle.emit("1fichier-open-browser", serde_json::json!({ "url": url }));
                 return Err("OPEN_BROWSER".to_string());
             }
-            push_log("ERROR", &format!("1fichier: impossible d'extraire le lien de téléchargement pour {}", url));
+            // Log the full POST response for debugging
+            push_log("ERROR", &format!("1fichier: impossible d'extraire le lien pour {} — HTML len={}, first 500 chars: {}", url, post_html.len(), &post_html[..post_html.len().min(500)]));
             return Err("Could not extract download link from 1fichier. The file may require a premium account or password.".to_string());
         }
 
         found_link.unwrap()
+    }
     };
 
-    emit_progress("downloading", 15, "Starting download...");
+    emit_progress("downloading", 0, "Starting download...");
 
     // Step 3: Download the file
     let dl_resp = client.get(&download_link)
@@ -3859,7 +3872,7 @@ async fn download_1fichier(
 
         if last_emit_time.elapsed().as_millis() >= 400 {
             let progress = if total_size > 0 {
-                15 + (downloaded as f64 / total_size as f64 * 85.0) as u32
+                (downloaded as f64 / total_size as f64 * 100.0) as u32
             } else {
                 50
             };
