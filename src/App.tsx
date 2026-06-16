@@ -4291,7 +4291,12 @@ export default function App() {
         setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'complete', progress: 100, fileName, message: fileName } : d));
       } catch (e: any) {
         const errMsg = String(e);
-        if (errMsg.includes("must wait") || errMsg.includes("patienter")) {
+        if (errMsg.includes("OPEN_BROWSER")) {
+          window.open(item.url, '_blank');
+          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.openedInBrowser") } : d));
+        } else if (errMsg.includes("cancelled")) {
+          setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.cancelled") } : d));
+        } else if (errMsg.includes("must wait") || errMsg.includes("patienter")) {
           setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'waiting', message: t("store.waitingRetry") } : d));
           await new Promise(r => setTimeout(r, 65000));
           try {
@@ -5920,6 +5925,16 @@ export default function App() {
                                   <><Download size={12} /> Download</>
                                 )}
                               </button>
+                              {downloading.includes(game.id) && downloadProgress[game.id]?.status !== "done" && (
+                                <button
+                                  className="btn btn--ghost btn--sm gamepad-nav-item"
+                                  style={{ color: "#ef4444", padding: "4px 8px" }}
+                                  onClick={() => invoke("cancel_download", { downloadId: game.id })}
+                                  title={t("common.cancel")}
+                                >
+                                  <X size={12} />
+                                </button>
+                              )}
                             </motion.div>
                           ))}
                         </div>
@@ -9886,13 +9901,25 @@ export default function App() {
             <div style={{ overflowY: "auto", maxHeight: 340, padding: 8 }}>
               {downloadQueue.map((item) => (
                 <div key={item.id} style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 4, background: "var(--bg-tertiary)", fontSize: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                    <span style={{ color: "var(--text-primary)", fontWeight: 500, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                    <span style={{ color: "var(--text-primary)", fontWeight: 500, maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {item.fileName || item.url.split('?')[0].split('/').pop() || 'File'}
                     </span>
-                    <span style={{ color: item.status === 'complete' ? 'var(--accent)' : item.status === 'error' ? '#ef4444' : item.status === 'waiting' ? '#f59e0b' : 'var(--text-secondary)' }}>
-                      {item.status === 'complete' ? '✓' : item.status === 'error' ? '✗' : item.status === 'waiting' ? '⏳' : item.status === 'downloading' ? `${item.progress}%` : '...'}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      {(item.status === 'downloading' || item.status === 'pending') && (
+                        <button
+                          className="btn btn--ghost btn--sm gamepad-nav-item"
+                          style={{ padding: "2px 6px", fontSize: 10, color: "#ef4444" }}
+                          onClick={() => invoke("cancel_download", { downloadId: item.id })}
+                          title={t("common.cancel")}
+                        >
+                          ✗
+                        </button>
+                      )}
+                      <span style={{ color: item.status === 'complete' ? 'var(--accent)' : item.status === 'error' ? '#ef4444' : item.status === 'waiting' ? '#f59e0b' : 'var(--text-secondary)' }}>
+                        {item.status === 'complete' ? '✓' : item.status === 'error' ? '✗' : item.status === 'waiting' ? '⏳' : item.status === 'downloading' ? `${item.progress}%` : '...'}
+                      </span>
+                    </div>
                   </div>
                   {item.status === 'downloading' && (
                     <div style={{ height: 3, background: "var(--bg-primary)", borderRadius: 2, overflow: "hidden" }}>

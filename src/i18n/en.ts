@@ -132,6 +132,8 @@ const en: Translations = {
     batchComplete: "All downloads complete!",
     downloadQueue: "Downloads",
     waitingRetry: "Waiting (1fichier rate limit)... Retrying in 60s",
+    openedInBrowser: "Opened in browser (1fichier rate limit)",
+    cancelled: "Cancelled",
     saveAsCollection: "Save as collection",
     createCollection: "Create collection",
     collectionDesc: "Create a collection of downloadable links. You can then search by name and download individually.",

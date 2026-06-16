@@ -44,6 +44,11 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 static APP_LOGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 static BANDWIDTH_LIMIT_KBPS: AtomicU64 = AtomicU64::new(0);
 static COVER_URLS: OnceLock<Mutex<std::collections::HashMap<String, String>>> = OnceLock::new();
+static CANCELLED_DOWNLOADS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
+fn cancelled_downloads() -> &'static Mutex<std::collections::HashSet<String>> {
+    CANCELLED_DOWNLOADS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
 
 fn cover_urls() -> &'static Mutex<std::collections::HashMap<String, String>> {
     COVER_URLS.get_or_init(|| {
@@ -3720,17 +3725,25 @@ async fn download_1fichier(
             }
         }
 
-        // Fallback: regex for any 1fichier CDN link
+        // Fallback: regex for any 1fichier CDN link (exclude img/css/static assets)
         if found_link.is_none() {
             let re = regex::Regex::new(r#"(https?://[a-z0-9\-]+\.1fichier\.com/[^\s"<>]+)"#).unwrap();
-            if let Some(m) = re.find(&post_html) {
-                found_link = Some(m.as_str().to_string());
+            for m in re.find_iter(&post_html) {
+                let candidate = m.as_str();
+                if !candidate.contains("img.1fichier.com")
+                    && !candidate.ends_with(".css")
+                    && !candidate.ends_with(".js")
+                    && !candidate.ends_with(".ico")
+                    && !candidate.ends_with(".png")
+                {
+                    found_link = Some(candidate.to_string());
+                    break;
+                }
             }
         }
 
-        // Fallback 2: check for wait time (free users)
+        // Fallback 2: check for wait time or login requirement (free users)
         if found_link.is_none() {
-            // Check if there's a countdown/wait message
             if post_html.contains("must wait") || post_html.contains("Veuillez patienter") || post_html.contains("You must wait") {
                 let wait_re = regex::Regex::new(r"(\d+)\s*(minutes?|seconds?|secondes?|min)").unwrap();
                 let wait_msg = if let Some(cap) = wait_re.captures(&post_html) {
@@ -3740,6 +3753,10 @@ async fn download_1fichier(
                 };
                 push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
                 return Err(wait_msg);
+            }
+            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") {
+                push_log("WARN", &format!("1fichier: login requis/rate limit — ouverture navigateur pour {}", url));
+                return Err("OPEN_BROWSER".to_string());
             }
             push_log("ERROR", &format!("1fichier: impossible d'extraire le lien de téléchargement pour {}", url));
             return Err("Could not extract download link from 1fichier. The file may require a premium account or password.".to_string());
@@ -3787,6 +3804,16 @@ async fn download_1fichier(
     let mut stream = dl_resp;
 
     while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
+        // Check for cancellation
+        if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
+            drop(file);
+            let _ = fs::remove_file(&dest_path);
+            cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
+            push_log("INFO", &format!("Download annulé: {} (queue: {})", file_name, queue_id));
+            emit_progress("cancelled", 0, "Download cancelled");
+            return Err("Download cancelled by user".to_string());
+        }
+
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded += chunk.len() as u64;
 
@@ -3828,6 +3855,7 @@ async fn download_1fichier(
         }
     }
     drop(file);
+    cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
 
     // Auto-extract if ZIP/7z
     let lower = file_name.to_lowercase();
@@ -3871,6 +3899,14 @@ async fn download_1fichier(
     push_log("INFO", &format!("1fichier download terminé: {} → {} (queue: {})", file_name, dest_dir.display(), queue_id));
 
     Ok(file_name)
+}
+
+#[tauri::command]
+fn cancel_download(download_id: String) -> Result<(), String> {
+    push_log("INFO", &format!("Annulation demandée pour: {}", download_id));
+    cancelled_downloads().lock()
+        .map(|mut s| { s.insert(download_id); })
+        .map_err(|e| e.to_string())
 }
 
 // ============================================================
@@ -4457,6 +4493,20 @@ async fn download_vimm_rom(
     use std::io::Write;
     let mut stream = response;
     while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
+        // Check for cancellation
+        if cancelled_downloads().lock().map(|s| s.contains(&game_id)).unwrap_or(false) {
+            drop(file);
+            let _ = fs::remove_file(&dest);
+            cancelled_downloads().lock().map(|mut s| s.remove(&game_id)).ok();
+            push_log("INFO", &format!("Download Vimm annulé: {} ({})", game_name, game_id));
+            let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+                "game_id": game_id,
+                "status": "cancelled",
+                "progress": 0
+            }));
+            return Err("Download cancelled by user".to_string());
+        }
+
         file.write_all(&chunk).map_err(|e| e.to_string())?;
         downloaded_bytes += chunk.len() as u64;
 
@@ -6020,6 +6070,7 @@ pub fn run() {
             scrape_1fichier_dir,
             resolve_1fichier_names,
             download_1fichier,
+            cancel_download,
             finalize_rgs_import,
             get_myrient_consoles,
             browse_myrient,

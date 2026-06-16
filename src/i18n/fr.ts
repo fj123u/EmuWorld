@@ -130,6 +130,8 @@ const fr = {
     batchComplete: "Tous les téléchargements sont terminés !",
     downloadQueue: "Téléchargements",
     waitingRetry: "Attente (limite 1fichier)... Nouvel essai dans 60s",
+    openedInBrowser: "Ouvert dans le navigateur (limite 1fichier)",
+    cancelled: "Annulé",
     saveAsCollection: "Sauvegarder en collection",
     createCollection: "Créer une collection",
     collectionDesc: "Crée une collection de liens téléchargeables. Tu pourras ensuite chercher par nom et télécharger individuellement.",
