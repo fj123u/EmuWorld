@@ -4715,6 +4715,7 @@ export default function App() {
   // Debounced Vimm search — scoped to the currently selected console when available,
   // or global across all Vimm consoles otherwise.
   useEffect(() => {
+    let stale = false;
     if (vimmSearch.trim().length < 2) {
       setVimmGames([]);
       setVimmLoading(false);
@@ -4727,14 +4728,14 @@ export default function App() {
           query: vimmSearch.trim(),
           consoleSlug: selectedVimmConsole?.id ?? null,
         });
-        setVimmGames(data);
+        if (!stale) setVimmGames(data);
       } catch (e) {
         console.error("Vimm search failed:", e);
       } finally {
-        setVimmLoading(false);
+        if (!stale) setVimmLoading(false);
       }
     }, 400);
-    return () => clearTimeout(timer);
+    return () => { stale = true; clearTimeout(timer); };
   }, [vimmSearch, selectedVimmConsole]);
 
   // ---- Actions ----
@@ -6126,7 +6127,12 @@ export default function App() {
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 400, overflowY: "auto" }}>
                         {linkCollections[activeCollection].links
-                          .filter(l => !collectionSearch || l.name.toLowerCase().includes(collectionSearch.toLowerCase()))
+                          .filter(l => {
+                            if (!collectionSearch) return true;
+                            const q = collectionSearch.toLowerCase();
+                            const name = l.name.toLowerCase().replace(/[._-]/g, ' ');
+                            return name.includes(q) || l.name.toLowerCase().includes(q);
+                          })
                           .map((link, idx) => (
                             <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "var(--bg-tertiary)", borderRadius: 8 }}>
                               <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.name}</span>
@@ -6142,7 +6148,7 @@ export default function App() {
                     </div>
                   )}
 
-                  {rgsLoading ? (
+                  {activeCollection === null && (rgsLoading ? (
                     <div className="empty-state">
                       <RefreshCw size={48} className="animate-spin" />
                       <h3 className="empty-state__title">Loading from RetroGameSets...</h3>
@@ -6351,7 +6357,7 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
 
