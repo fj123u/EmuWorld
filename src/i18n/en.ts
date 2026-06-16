@@ -143,6 +143,7 @@ const en: Translations = {
     downloadAll: "Download all",
     searchCollection: "Search in collection...",
     resolveNames: "Fetch names",
+    resolving: "Resolving...",
     share: "Share",
     collectionShared: "Collection shared with the community!",
     extracting: "Extracting...",

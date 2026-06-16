@@ -4385,6 +4385,16 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (activeCollection === null) return;
+    const col = linkCollections[activeCollection];
+    if (!col || !col.builtin || col.resolving) return;
+    const unresolved = col.links.filter(l => !l.name.includes('.'));
+    if (unresolved.length > 0) {
+      resolveCollectionNames(col.name, unresolved.map(l => l.url));
+    }
+  }, [activeCollection]);
+
   const deleteCollection = useCallback((index: number) => {
     setLinkCollections(prev => {
       const updated = prev.filter((_, i) => i !== index);
@@ -6049,10 +6059,11 @@ export default function App() {
                         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{linkCollections[activeCollection].links.length} {t("store.links")}</span>
                         <button
                           className="btn btn--ghost btn--sm gamepad-nav-item"
-                          onClick={() => resolveCollectionNames(linkCollections[activeCollection!].name, linkCollections[activeCollection!].links.map(l => l.url))}
+                          disabled={linkCollections[activeCollection]?.resolving}
+                          onClick={() => resolveCollectionNames(linkCollections[activeCollection!].name, linkCollections[activeCollection!].links.filter(l => !l.name.includes('.')).map(l => l.url))}
                           title={t("store.resolveNames")}
                         >
-                          <RefreshCw size={12} /> {t("store.resolveNames")}
+                          <RefreshCw size={12} className={linkCollections[activeCollection]?.resolving ? "spin" : ""} /> {linkCollections[activeCollection]?.resolving ? t("store.resolving") : t("store.resolveNames")}
                         </button>
                         {user && (
                           <button
