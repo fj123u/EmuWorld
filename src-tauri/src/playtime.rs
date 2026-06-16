@@ -83,6 +83,7 @@ fn key(console: &str, name: &str) -> String {
 /// Record a completed play session (when the emulator child process exits).
 /// Updates total seconds, launches, last-played timestamp, per-emulator totals.
 pub fn record_session(console: &str, name: &str, seconds: u64, emulator_id: &str) -> Result<(), String> {
+    crate::push_log("INFO", &format!("Session enregistrée: '{}' ({}) — {}s via {}", name, console, seconds, emulator_id));
     let mut store = load();
     let now = chrono::Utc::now().to_rfc3339();
     let entry = store.games.entry(key(console, name)).or_insert(GameEntry {

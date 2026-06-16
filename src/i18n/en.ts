@@ -369,6 +369,7 @@ const en: Translations = {
     leave: "Leave",
     inviteFriend: "Invite a friend...",
     createLobby: "Create a lobby",
+    launch: "Launch game",
     you: "You",
   },
 

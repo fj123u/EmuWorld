@@ -78,7 +78,7 @@ fn log_file_path() -> PathBuf {
     logs_dir.join(format!("emuworld_{}.log", date))
 }
 
-fn push_log(level: &str, msg: &str) {
+pub fn push_log(level: &str, msg: &str) {
     let now = chrono::Local::now();
     let timestamp = now.format("%H:%M:%S").to_string();
     let entry = format!("[{}] {} — {}", level, timestamp, msg);
@@ -281,6 +281,7 @@ fn get_config() -> AppConfig {
         let data = fs::read_to_string(&path).unwrap_or_default();
         serde_json::from_str(&data).unwrap_or_default()
     } else {
+        push_log("INFO", "Aucune config existante, utilisation des valeurs par défaut");
         AppConfig::default()
     };
 
@@ -301,6 +302,7 @@ fn save_config(config: AppConfig) -> Result<(), String> {
     BANDWIDTH_LIMIT_KBPS.store(config.bandwidth_limit_kbps, AtomicOrdering::Relaxed);
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, data).map_err(|e| e.to_string())?;
+    push_log("INFO", &format!("Config sauvegardée (ROMs: {}, Émulateurs: {}, BW limit: {} KB/s)", config.roms_directory, config.emulators_directory, config.bandwidth_limit_kbps));
     Ok(())
 }
 
@@ -591,6 +593,7 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
 
 #[tauri::command]
 fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
+    push_log("INFO", &format!("Désinstallation de l'émulateur: {}", emulator_id));
     let id_lower = emulator_id.to_lowercase();
     let config = get_config();
     let catalog = emulators::get_catalog();
@@ -640,6 +643,7 @@ async fn launch_emulator(
     rom_name: Option<String>,
     rom_console: Option<String>,
 ) -> Result<String, String> {
+    push_log("INFO", &format!("Lancement émulateur: {} (ROM: {:?}, jeu: {:?}, console: {:?})", emulator_id, rom_path, rom_name, rom_console));
     let catalog = emulators::get_catalog();
     let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or_else(|| "Emulator not found".to_string())?.clone();
     let config = get_config();
@@ -995,16 +999,21 @@ static SCAN_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 
 #[tauri::command]
 fn cancel_scan() {
+    push_log("INFO", "Scan ROMs annulé par l'utilisateur");
     SCAN_CANCELLED.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 #[tauri::command]
 fn scan_roms(directory: String) -> Vec<RomFile> {
     SCAN_CANCELLED.store(false, std::sync::atomic::Ordering::Relaxed);
+    push_log("INFO", &format!("Scan ROMs démarré dans: {}", directory));
     let catalog = emulators::get_catalog();
     let mut roms = vec![];
     let dir = PathBuf::from(&directory);
-    if !dir.exists() { return roms; }
+    if !dir.exists() {
+        push_log("WARN", &format!("Dossier ROMs inexistant: {}", directory));
+        return roms;
+    }
 
     // PS3 folder-based game detection: look for directories containing PS3_DISC.SFB
     let ps3_dir = dir.join("PlayStation 3");
@@ -1321,8 +1330,10 @@ pub struct RomFile {
 
 #[tauri::command]
 fn delete_rom(path: String) -> Result<String, String> {
+    push_log("INFO", &format!("Suppression ROM demandée: {}", path));
     let p = PathBuf::from(&path);
     if !p.exists() {
+        push_log("WARN", &format!("Suppression impossible — fichier introuvable: {}", path));
         return Err("File not found".to_string());
     }
 
@@ -1405,7 +1416,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
 
-    println!("[Boxart] Request for: '{}' ({})", game_name, console);
+    push_log("INFO", &format!("Fetch cover: '{}' ({}) [force={}]", game_name, console, force_refresh));
 
     // Helper to log to frontend via events
     let log_event = {
@@ -2577,6 +2588,7 @@ fn detect_console_from_title(title: &str) -> Option<String> {
 
 #[tauri::command]
 async fn search_rom_store(query: String, console_filter: Option<String>) -> Result<Vec<RomStoreEntry>, String> {
+    push_log("INFO", &format!("Store: recherche '{}' (filtre: {:?})", query, console_filter));
     let mut results = Vec::new();
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0")
@@ -3031,6 +3043,7 @@ async fn finalize_rgs_import(
     src_path: String,
     console: String,
 ) -> Result<String, String> {
+    push_log("INFO", &format!("Import RGS: {} → console '{}'", src_path, console));
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let normalized = normalize_console_folder(&console);
@@ -3129,6 +3142,7 @@ async fn finalize_rgs_import(
         return Ok(format!("Extracting {} ({} MB) in background — you'll be notified when done", file_name, size_mb));
     }
 
+    push_log("INFO", &format!("Import RGS terminé: {} → dossier {}", file_name, final_console));
     Ok(format!("Imported successfully to {} folder", final_console))
 }
 
@@ -3302,6 +3316,7 @@ async fn get_rgs_liens(console_id: String) -> Result<Vec<RgsLien>, String> {
 
 #[tauri::command]
 async fn search_rgs(query: String) -> Result<Vec<RgsSearchResult>, String> {
+    push_log("INFO", &format!("Recherche RGS: '{}'", query));
     if query.len() < 2 {
         return Ok(vec![]);
     }
@@ -3325,6 +3340,7 @@ async fn search_rgs(query: String) -> Result<Vec<RgsSearchResult>, String> {
 
 #[tauri::command]
 async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
+    push_log("INFO", &format!("Scrape dossier 1fichier: {}", url));
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0")
         .timeout(std::time::Duration::from_secs(15))
@@ -3383,6 +3399,7 @@ async fn resolve_1fichier_names(
     app_handle: tauri::AppHandle,
     urls: Vec<String>,
 ) -> Result<Vec<(String, String)>, String> {
+    push_log("INFO", &format!("Résolution des noms 1fichier: {} URLs", urls.len()));
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
         .timeout(std::time::Duration::from_secs(10))
@@ -3475,6 +3492,7 @@ async fn download_1fichier(
 ) -> Result<String, String> {
     use std::io::Write;
 
+    push_log("INFO", &format!("Download 1fichier: {} (console: {}, pwd: {}, queue: {})", url, console, password.is_some(), queue_id));
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let console_folder = normalize_console_folder(&console);
@@ -3516,6 +3534,7 @@ async fn download_1fichier(
 
     // Check for errors (file removed, etc.)
     if page_html.contains("not found") || page_html.contains("has been removed") || page_html.contains("fichier n'existe pas") {
+        push_log("ERROR", &format!("1fichier: fichier supprimé — {}", url));
         return Err("File has been removed from 1fichier.".to_string());
     }
 
@@ -3577,8 +3596,10 @@ async fn download_1fichier(
                 } else {
                     "1fichier rate limit: please wait between downloads (free account)".to_string()
                 };
+                push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
                 return Err(wait_msg);
             }
+            push_log("ERROR", &format!("1fichier: impossible d'extraire le lien de téléchargement pour {}", url));
             return Err("Could not extract download link from 1fichier. The file may require a premium account or password.".to_string());
         }
 
@@ -3705,6 +3726,7 @@ async fn download_1fichier(
     }
 
     emit_progress("complete", 100, &format!("Done: {}", file_name));
+    push_log("INFO", &format!("1fichier download terminé: {} → {} (queue: {})", file_name, dest_dir.display(), queue_id));
 
     Ok(file_name)
 }
@@ -3924,6 +3946,7 @@ async fn download_myrient_rom(
         "progress": 100
     }));
 
+    push_log("INFO", &format!("Download terminé: {} → {}", file_name, dest_dir.display()));
     Ok(format!("Downloaded to {}", dest_dir.display()))
 }
 
@@ -4366,6 +4389,7 @@ async fn download_vimm_rom(
         "progress": 100
     }));
 
+    push_log("INFO", &format!("Vimm download terminé: {} → {}", file_name, dest_dir.display()));
     Ok(format!("Downloaded {} to {}", file_name, dest_dir.display()))
 }
 
@@ -4375,6 +4399,7 @@ async fn download_vimm_rom(
 
 #[tauri::command]
 fn save_ra_credentials(username: String, api_key: String) -> Result<(), String> {
+    push_log("INFO", &format!("Sauvegarde credentials RA: user='{}'", username));
     let mut config = retroachievements::load_config();
     config.username = username.clone();
     config.api_key = api_key;
@@ -4405,6 +4430,7 @@ async fn get_ra_game_progress(game_name: String, console: String) -> Result<retr
 
 #[tauri::command]
 async fn ra_login(username: String, password: String) -> Result<String, String> {
+    push_log("INFO", &format!("Login RetroAchievements: user='{}'", username));
     let token = retroachievements::login_and_get_token(&username, &password).await?;
     // Save token to config
     let mut config = retroachievements::load_config();
@@ -4417,8 +4443,10 @@ async fn ra_login(username: String, password: String) -> Result<String, String> 
 
 #[tauri::command]
 fn configure_ra_emulators() -> Result<Vec<String>, String> {
+    push_log("INFO", "Configuration RA dans les émulateurs installés...");
     let config = retroachievements::load_config();
     if config.username.is_empty() || config.token.is_empty() {
+        push_log("WARN", "RA: token non configuré, login requis");
         return Err("RetroAchievements token not configured. Use 'Login' first.".to_string());
     }
     let app_config = get_config();
@@ -4428,17 +4456,21 @@ fn configure_ra_emulators() -> Result<Vec<String>, String> {
         &config.token,
     );
     if configured.is_empty() {
+        push_log("WARN", "RA: aucun émulateur compatible trouvé");
         return Err("No compatible emulators found. Install RetroArch, DuckStation, PCSX2, Dolphin, or PPSSPP first.".to_string());
     }
+    push_log("INFO", &format!("RA configuré dans: {:?}", configured));
     Ok(configured)
 }
 
 #[tauri::command]
 async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, String> {
+    push_log("INFO", "Téléchargement des cores RetroArch...");
     let config = get_config();
     let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
 
     if !ra_dir.exists() {
+        push_log("ERROR", "RetroArch non installé — impossible de télécharger les cores");
         return Err("RetroArch not installed. Please install RetroArch first.".to_string());
     }
 
@@ -4559,6 +4591,7 @@ struct GuideAchievement {
 
 #[tauri::command]
 async fn fetch_game_guide_data(game_name: String, console: String) -> Result<GameGuideData, String> {
+    push_log("INFO", &format!("Fetch guide: '{}' ({})", game_name, console));
     let client = reqwest::Client::builder()
         .user_agent("EmuWorld/1.0.0")
         .timeout(std::time::Duration::from_secs(15))
@@ -4674,9 +4707,11 @@ fn scan_local_saves() -> Vec<cloud_backup::SaveEntry> {
 
 #[tauri::command]
 async fn backup_saves_to_cloud() -> Result<String, String> {
+    push_log("INFO", "Cloud backup: démarrage upload saves...");
     let app_config = get_config();
     let b2_config = cloud_backup::load_config();
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
+        push_log("WARN", "Cloud backup: B2 non configuré");
         return Err("Backblaze B2 not configured.".to_string());
     }
 
@@ -4709,6 +4744,7 @@ async fn list_cloud_backups() -> Result<Vec<cloud_backup::CloudFile>, String> {
 
 #[tauri::command]
 async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
+    push_log("INFO", &format!("Cloud backup: restauration fichier {}", file_id));
     let app_config = get_config();
     let b2_config = cloud_backup::load_config();
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
@@ -4816,12 +4852,14 @@ fn overwrite_playtime(store: playtime::PlaytimeStore) -> Result<(), String> {
 
 #[tauri::command]
 fn clear_cover_cache() -> Result<(), String> {
+    push_log("INFO", "Nettoyage du cache des covers...");
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
     if covers_dir.exists() {
         std::fs::remove_dir_all(&covers_dir).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&covers_dir).map_err(|e| e.to_string())?;
     }
+    push_log("INFO", "Cache covers nettoyé");
     Ok(())
 }
 
@@ -4955,6 +4993,7 @@ fn migrate_covers_to_webp() -> Result<String, String> {
 
 #[tauri::command]
 fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
+    push_log("INFO", &format!("Screenshot: '{}' ({})", game_name, console));
     use std::process::Command as Cmd;
 
     let mut base = emuworld_base_dir();
@@ -5303,6 +5342,7 @@ struct RomHealthIssue {
 
 #[tauri::command]
 fn check_roms_health() -> Vec<RomHealthIssue> {
+    push_log("INFO", "Vérification intégrité des ROMs...");
     let config = get_config();
     let roms = scan_roms(config.roms_directory.clone());
     let mut issues = Vec::new();
@@ -5388,6 +5428,7 @@ struct EmulatorUpdate {
 
 #[tauri::command]
 async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
+    push_log("INFO", "Vérification des mises à jour émulateurs...");
     let installed = get_installed_emulators();
     let catalog = emulators::get_catalog();
     let client = reqwest::Client::builder()
@@ -5690,6 +5731,7 @@ fn close_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn export_config() -> Result<String, String> {
+    push_log("INFO", "Export de la configuration complète");
     let export = FullExport {
         config: get_config(),
         playtime: playtime::load(),
@@ -5704,9 +5746,11 @@ fn read_text_file(path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn import_config(json: String) -> Result<(), String> {
+    push_log("INFO", "Import de configuration depuis JSON");
     let imported: FullExport = serde_json::from_str(&json).map_err(|e| format!("JSON invalide: {}", e))?;
     save_config(imported.config)?;
     playtime::overwrite(imported.playtime)?;
+    push_log("INFO", "Configuration importée avec succès");
     Ok(())
 }
 

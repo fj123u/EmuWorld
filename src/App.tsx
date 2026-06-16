@@ -8609,12 +8609,26 @@ export default function App() {
             )}
             {!(currentLobby.members || []).find(m => m.user_id === user?.id)?.is_ready && (
               roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console) ? (
-                <button className="btn btn--success btn--sm" onClick={handleReadyLobby}>{t("lobby.ready")}</button>
+                <button className="btn btn--success btn--sm gamepad-nav-item" onClick={handleReadyLobby}>{t("lobby.ready")}</button>
               ) : (
-                <button className="btn btn--primary btn--sm" onClick={() => setPage("store")}>
+                <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={() => setPage("store")}>
                   <Download size={12} /> {t("lobby.downloadGame")}
                 </button>
               )
+            )}
+            {(currentLobby.members || []).length >= 2 && (currentLobby.members || []).every(m => m.is_ready) && currentLobby.host_id === user?.id && (
+              <button className="btn btn--success gamepad-nav-item" onClick={() => {
+                const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
+                if (rom) {
+                  const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
+                  if (emu) {
+                    invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost: true, lobbyId: currentLobby.id }).catch(() => {});
+                    showToast(t("lobby.allReady"), "success");
+                  }
+                }
+              }}>
+                <Play size={14} /> {t("lobby.launch")}
+              </button>
             )}
           </div>
         </motion.div>

@@ -367,6 +367,7 @@ const fr = {
     leave: "Quitter",
     inviteFriend: "Inviter un ami...",
     createLobby: "Créer un lobby",
+    launch: "Lancer le jeu",
     you: "Toi",
   },
 

@@ -161,6 +161,7 @@ pub fn unlock_single(id: &str) -> Option<Achievement> {
     let now = chrono::Utc::now().to_rfc3339();
     store.unlocked.insert(id.to_string(), now.clone());
     let _ = save(&store);
+    crate::push_log("INFO", &format!("Achievement débloqué: {} ({})", def.name, id));
     Some(Achievement {
         id: def.id.to_string(),
         name: def.name.to_string(),

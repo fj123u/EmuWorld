@@ -9,6 +9,8 @@ use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use crate::push_log;
+
 // Replace with your own app ID from https://discord.com/developers/applications.
 // For now we ship a placeholder — the user must create the app themselves and
 // drop the ID in the UI if they want rich presence to light up.
@@ -48,9 +50,13 @@ fn ensure_connected(state: &RpcState) -> Result<(), String> {
     }
     let mut client_slot = state.client.lock().map_err(|e| e.to_string())?;
     let mut client = DiscordIpcClient::new(DEFAULT_APP_ID);
-    client.connect().map_err(|e| format!("discord connect failed: {}", e))?;
+    client.connect().map_err(|e| {
+        push_log("WARN", &format!("Discord RPC: connexion échouée — {}", e));
+        format!("discord connect failed: {}", e)
+    })?;
     *client_slot = Some(client);
     *connected = true;
+    push_log("INFO", "Discord RPC: connecté");
     Ok(())
 }
 
@@ -98,6 +104,7 @@ pub fn discord_set_playing(
     console: Option<String>,
     cover_url: Option<String>,
 ) -> Result<(), String> {
+    push_log("INFO", &format!("Discord RPC: playing '{}' ({:?})", game_name, console));
     let now = unix_ts();
     {
         let mut start_lock = state.start_ts.lock().map_err(|e| e.to_string())?;
