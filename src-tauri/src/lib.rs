@@ -3685,6 +3685,12 @@ async fn download_1fichier(
         return Err("File has been removed from 1fichier.".to_string());
     }
 
+    // Check for rate-limit already on GET page
+    if page_html.contains("temporairement limit") || page_html.contains("forte affluence") || (page_html.contains("Identifiez-vous") && !page_html.contains("var ct")) {
+        push_log("WARN", &format!("1fichier: rate limit dès le GET — ouverture navigateur pour {}", url));
+        return Err("OPEN_BROWSER".to_string());
+    }
+
     // Extract countdown timer from page (free users must wait)
     let wait_seconds = {
         let re = regex::Regex::new(r"var\s+ct\s*=\s*(\d+)").unwrap();
@@ -3777,8 +3783,9 @@ async fn download_1fichier(
                 push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
                 return Err(wait_msg);
             }
-            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") || post_html.contains("temporairement limit") || post_html.contains("forte affluence") {
-                push_log("WARN", &format!("1fichier: rate limit/login requis — ouverture navigateur pour {}", url));
+            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") || post_html.contains("temporairement limit") || post_html.contains("forte affluence") || post_html.contains("attendre entre chaque") {
+                push_log("WARN", &format!("1fichier: rate limit après POST — ouverture navigateur pour {}", url));
+                let _ = app_handle.emit("1fichier-open-browser", serde_json::json!({ "url": url }));
                 return Err("OPEN_BROWSER".to_string());
             }
             push_log("ERROR", &format!("1fichier: impossible d'extraire le lien de téléchargement pour {}", url));

@@ -270,7 +270,7 @@ interface DownloadQueueItem {
   id: string;
   url: string;
   fileName?: string;
-  status: 'pending' | 'downloading' | 'complete' | 'error' | 'waiting';
+  status: 'pending' | 'downloading' | 'resolving' | 'complete' | 'error' | 'waiting';
   progress: number;
   message?: string;
   speed?: number;
@@ -4331,6 +4331,13 @@ export default function App() {
         eta,
         fileName: file_name || d.fileName,
       } : d));
+    });
+    return () => { unlisten.then(f => f()); };
+  }, []);
+
+  useEffect(() => {
+    const unlisten = listen<{ url: string }>("1fichier-open-browser", (event) => {
+      openUrl(event.payload.url);
     });
     return () => { unlisten.then(f => f()); };
   }, []);
@@ -9906,7 +9913,7 @@ export default function App() {
                       {item.fileName || item.url.split('?')[0].split('/').pop() || 'File'}
                     </span>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                      {(item.status === 'downloading' || item.status === 'pending') && (
+                      {(item.status === 'downloading' || item.status === 'pending' || item.status === 'resolving') && (
                         <button
                           className="btn btn--ghost btn--sm gamepad-nav-item"
                           style={{ padding: "2px 6px", fontSize: 10, color: "#ef4444" }}
@@ -9916,18 +9923,18 @@ export default function App() {
                           ✗
                         </button>
                       )}
-                      <span style={{ color: item.status === 'complete' ? 'var(--accent)' : item.status === 'error' ? '#ef4444' : item.status === 'waiting' ? '#f59e0b' : 'var(--text-secondary)' }}>
-                        {item.status === 'complete' ? '✓' : item.status === 'error' ? '✗' : item.status === 'waiting' ? '⏳' : item.status === 'downloading' ? `${item.progress}%` : '...'}
+                      <span style={{ color: item.status === 'complete' ? 'var(--accent)' : item.status === 'error' ? '#ef4444' : item.status === 'waiting' || item.status === 'resolving' ? '#f59e0b' : 'var(--text-secondary)' }}>
+                        {item.status === 'complete' ? '✓' : item.status === 'error' ? '✗' : item.status === 'waiting' ? '⏳' : item.status === 'resolving' ? '⏳' : item.status === 'downloading' ? `${item.progress}%` : '...'}
                       </span>
                     </div>
                   </div>
-                  {item.status === 'downloading' && (
+                  {(item.status === 'downloading' || item.status === 'resolving') && (
                     <div style={{ height: 3, background: "var(--bg-primary)", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${item.progress}%`, background: "var(--accent)", transition: "width 0.3s" }} />
+                      <div style={{ height: "100%", width: `${item.progress}%`, background: item.status === 'resolving' ? '#f59e0b' : "var(--accent)", transition: "width 0.3s" }} />
                     </div>
                   )}
-                  {item.message && item.status === 'error' && (
-                    <div style={{ color: "#ef4444", fontSize: 11, marginTop: 4 }}>{item.message}</div>
+                  {item.message && (item.status === 'error' || item.status === 'resolving') && (
+                    <div style={{ color: item.status === 'error' ? "#ef4444" : "#f59e0b", fontSize: 11, marginTop: 4 }}>{item.message}</div>
                   )}
                   {item.speed && item.status === 'downloading' && (
                     <div style={{ color: "var(--text-secondary)", fontSize: 11, marginTop: 2 }}>
@@ -9941,7 +9948,7 @@ export default function App() {
         )}
 
         {/* Mini badge when panel is hidden */}
-        {!showDownloadPanel && downloadQueue.some(d => d.status === 'downloading' || d.status === 'pending') && (
+        {!showDownloadPanel && downloadQueue.some(d => d.status === 'downloading' || d.status === 'pending' || d.status === 'resolving') && (
           <button
             className="download-badge"
             onClick={() => setShowDownloadPanel(true)}
