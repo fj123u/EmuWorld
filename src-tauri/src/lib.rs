@@ -3685,11 +3685,13 @@ async fn download_1fichier(
         return Err("File has been removed from 1fichier.".to_string());
     }
 
-    // Check for rate-limit already on GET page (only if no countdown = file not accessible)
+    // Check for rate-limit on GET page (no countdown = file not accessible at all)
     let has_countdown = page_html.contains("var ct");
-    if !has_countdown && (page_html.contains("temporairement limit") || page_html.contains("forte affluence") || page_html.contains("Identifiez-vous")) {
-        push_log("WARN", &format!("1fichier: rate limit dès le GET — ouverture navigateur pour {}", url));
-        return Err("OPEN_BROWSER".to_string());
+    if !has_countdown {
+        if page_html.contains("temporairement limit") || page_html.contains("forte affluence") {
+            push_log("WARN", &format!("1fichier: rate limit dès le GET — ouverture navigateur pour {}", url));
+            return Err("OPEN_BROWSER".to_string());
+        }
     }
 
     // Extract countdown timer from page (free users must wait)
@@ -3700,8 +3702,17 @@ async fn download_1fichier(
             .unwrap_or(0)
     };
 
+    let form_params: Vec<(String, String)> = {
+        let mut params = Vec::new();
+        params.push(("dl_no_ssl".to_string(), "on".to_string()));
+        if let Some(ref pw) = password {
+            params.push(("pass".to_string(), pw.clone()));
+        }
+        params
+    };
+
     if wait_seconds > 0 {
-        emit_progress("resolving", 0, &format!("Waiting {}s (1fichier free limit)...", wait_seconds));
+        emit_progress("resolving", 0, &format!("Waiting {}s...", wait_seconds));
         push_log("INFO", &format!("1fichier: attente de {}s avant POST", wait_seconds));
         for elapsed in 0..wait_seconds {
             if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
@@ -3719,17 +3730,10 @@ async fn download_1fichier(
 
     emit_progress("resolving", 100, "Requesting download link...");
 
-    // Step 2: POST to get the download link
-    let mut form_params = vec![("dl_no_ssl", "on")];
-    let pw_string;
-    if let Some(ref pw) = password {
-        pw_string = pw.clone();
-        form_params.push(("pass", &pw_string));
-    }
-
-    // Use cookies from the GET request for session continuity
+    // Step 2: POST directly (do NOT re-GET — 1fichier tracks time since the initial GET)
     let post_resp = client.post(&url)
         .header("Referer", &url)
+        .header("Origin", "https://1fichier.com")
         .form(&form_params)
         .send()
         .await
@@ -3745,6 +3749,7 @@ async fn download_1fichier(
     } else {
 
     let post_html = post_resp.text().await.map_err(|e| e.to_string())?;
+    push_log("INFO", &format!("1fichier POST response len={}, first 300: {}", post_html.len(), &post_html[..post_html.len().min(300)]));
 
     // Extract direct download link from response
     // 1fichier returns the link in an <a> tag with class "ok btn-general"
@@ -3782,26 +3787,24 @@ async fn download_1fichier(
             }
         }
 
-        // Fallback 2: check for wait time or login requirement (free users)
+        // Fallback 2: detect various failure modes
         if found_link.is_none() {
+            // POST returned the countdown page again = server rejected (didn't wait long enough or session issue)
+            if post_html.contains("var ct") {
+                push_log("WARN", &format!("1fichier: POST returned countdown page again — opening browser for {}", url));
+                return Err("OPEN_BROWSER".to_string());
+            }
             if post_html.contains("must wait") || post_html.contains("Veuillez patienter") || post_html.contains("You must wait") || post_html.contains("attendre entre chaque") {
-                let wait_re = regex::Regex::new(r"(\d+)\s*(minutes?|seconds?|secondes?|min)").unwrap();
-                let wait_msg = if let Some(cap) = wait_re.captures(&post_html) {
-                    format!("1fichier rate limit: please wait {} {}", &cap[1], &cap[2])
-                } else {
-                    "1fichier rate limit: please wait between downloads (free account)".to_string()
-                };
-                push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
-                return Err(wait_msg);
+                push_log("WARN", "1fichier: must wait between downloads");
+                return Err("OPEN_BROWSER".to_string());
             }
             if post_html.contains("temporairement limit") || post_html.contains("forte affluence") {
                 push_log("WARN", &format!("1fichier: rate limit après POST — ouverture navigateur pour {}", url));
-                let _ = app_handle.emit("1fichier-open-browser", serde_json::json!({ "url": url }));
                 return Err("OPEN_BROWSER".to_string());
             }
             // Log the full POST response for debugging
-            push_log("ERROR", &format!("1fichier: impossible d'extraire le lien pour {} — HTML len={}, first 500 chars: {}", url, post_html.len(), &post_html[..post_html.len().min(500)]));
-            return Err("Could not extract download link from 1fichier. The file may require a premium account or password.".to_string());
+            push_log("ERROR", &format!("1fichier: impossible d'extraire le lien pour {} — HTML len={}, first 300: {}", url, post_html.len(), &post_html[..post_html.len().min(300)]));
+            return Err("OPEN_BROWSER".to_string());
         }
 
         found_link.unwrap()

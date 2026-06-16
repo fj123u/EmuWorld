@@ -4292,7 +4292,7 @@ export default function App() {
       } catch (e: any) {
         const errMsg = String(e);
         if (errMsg.includes("OPEN_BROWSER")) {
-          openUrl(item.url);
+          await openUrl(item.url).catch(() => window.open(item.url, "_blank"));
           setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.openedInBrowser") } : d));
         } else if (errMsg.includes("cancelled")) {
           setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.cancelled") } : d));
@@ -4331,13 +4331,6 @@ export default function App() {
         eta,
         fileName: file_name || d.fileName,
       } : d));
-    });
-    return () => { unlisten.then(f => f()); };
-  }, []);
-
-  useEffect(() => {
-    const unlisten = listen<{ url: string }>("1fichier-open-browser", (event) => {
-      openUrl(event.payload.url);
     });
     return () => { unlisten.then(f => f()); };
   }, []);
