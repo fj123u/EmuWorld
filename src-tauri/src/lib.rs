@@ -3711,6 +3711,29 @@ async fn download_1fichier(
         params
     };
 
+    // Quick probe POST: detect IP-level rate-limit BEFORE waiting 60s
+    // If rate-limited: "temporairement limité" → open browser immediately (don't waste 60s)
+    // If not rate-limited but too early: countdown page re-served → proceed to wait
+    if wait_seconds > 0 {
+        emit_progress("resolving", 0, "Checking availability...");
+        let probe_resp = client.post(&url)
+            .header("Referer", &url)
+            .header("Origin", "https://1fichier.com")
+            .form(&form_params)
+            .send()
+            .await
+            .map_err(|e| format!("POST probe failed: {}", e))?;
+        let probe_html = probe_resp.text().await.map_err(|e| e.to_string())?;
+        if probe_html.contains("temporairement limit") || probe_html.contains("forte affluence") {
+            push_log("WARN", &format!("1fichier: rate limit IP détecté au probe — ouverture navigateur pour {}", url));
+            return Err("OPEN_BROWSER".to_string());
+        }
+        // Not rate-limited — proceed with countdown then real POST
+        // Need a fresh GET since the probe POST consumed the session
+        let fresh_resp = client.get(&url).send().await.map_err(|e| format!("Fresh GET failed: {}", e))?;
+        let _ = fresh_resp.text().await;
+    }
+
     if wait_seconds > 0 {
         emit_progress("resolving", 0, &format!("Waiting {}s...", wait_seconds));
         push_log("INFO", &format!("1fichier: attente de {}s avant POST", wait_seconds));
@@ -3730,7 +3753,7 @@ async fn download_1fichier(
 
     emit_progress("resolving", 100, "Requesting download link...");
 
-    // Step 2: POST directly (do NOT re-GET — 1fichier tracks time since the initial GET)
+    // Step 2: POST after waiting (1fichier tracks time since GET per IP)
     let post_resp = client.post(&url)
         .header("Referer", &url)
         .header("Origin", "https://1fichier.com")
