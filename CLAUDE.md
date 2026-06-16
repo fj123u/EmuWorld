@@ -111,6 +111,7 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
 
 - **i18n** : Every visible text string MUST use `t("section.key")` — never hardcode French or English. Add keys to both `src/i18n/fr.ts` and `src/i18n/en.ts`.
 - **Gamepad** : Every new interactive element (button, input, select, card) MUST have the CSS class `gamepad-nav-item` or be a `.btn` for controller navigation.
+- **Logs** : Every new feature or command MUST include `push_log("INFO"|"WARN"|"ERROR", ...)` calls at entry, on errors, and on completion. This enables debugging via the daily log files in `%LOCALAPPDATA%/EmuWorld/logs/`.
 
 ## Workflow After Each Feature/Fix
 

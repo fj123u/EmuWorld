@@ -374,38 +374,154 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
     let _ = app_handle.emit("install-progress", serde_json::json!({
         "emulator_id": emulator_id,
         "status": "downloading",
-        "progress": 10
+        "progress": 5
     }));
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(std::time::Duration::from_secs(300))
+        .timeout(std::time::Duration::from_secs(600))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     // For shared RetroArch: only download base if not already installed
     let ra_already_installed = is_shared_retroarch && find_executable(&install_dir, "retroarch.exe").is_some();
 
-    if !ra_already_installed {
-        if !is_shared_retroarch && install_dir.exists() {
+    // If installing a retroarch-* core but RetroArch base is not installed, install RetroArch first
+    if is_shared_retroarch && !ra_already_installed {
+        push_log("INFO", "RetroArch non installé — installation automatique de la base RetroArch...");
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "downloading",
+            "progress": 10,
+            "message": "Installing RetroArch base..."
+        }));
+
+        fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
+
+        // Download RetroArch base using streaming to avoid timeout on large files
+        let ra_url = "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z";
+        push_log("INFO", &format!("Téléchargement RetroArch depuis: {}", ra_url));
+
+        let response = client
+            .get(ra_url)
+            .header("User-Agent", "EmuWorld/2.0 (Windows; Desktop)")
+            .send()
+            .await
+            .map_err(|e| format!("RetroArch download failed: {}", e))?;
+
+        if !response.status().is_success() {
+            push_log("ERROR", &format!("RetroArch download HTTP {}", response.status()));
+            return Err(format!("RetroArch download failed with HTTP status: {}", response.status()));
+        }
+
+        let total_size = response.content_length().unwrap_or(0);
+        push_log("INFO", &format!("RetroArch taille: {} Mo", total_size / 1_048_576));
+
+        // Stream to disk to avoid memory issues with large 7z files
+        let archive_path = install_dir.join("archive.7z");
+        {
+            let mut file = fs::File::create(&archive_path)
+                .map_err(|e| format!("Failed to create archive file: {}", e))?;
+            let mut downloaded: u64 = 0;
+            let mut last_emit = std::time::Instant::now();
+            let mut stream = response;
+            while let Some(chunk) = stream.chunk().await.map_err(|e| format!("Download stream error: {}", e))? {
+                file.write_all(&chunk).map_err(|e| format!("Write error: {}", e))?;
+                downloaded += chunk.len() as u64;
+                if last_emit.elapsed().as_millis() >= 500 {
+                    let progress = if total_size > 0 {
+                        (downloaded as f64 / total_size as f64 * 50.0) as u32 + 10
+                    } else { 30 };
+                    let _ = app_handle.emit("install-progress", serde_json::json!({
+                        "emulator_id": emulator_id,
+                        "status": "downloading",
+                        "progress": progress
+                    }));
+                    last_emit = std::time::Instant::now();
+                }
+            }
+        }
+
+        push_log("INFO", "RetroArch téléchargé, extraction en cours...");
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "extracting",
+            "progress": 60
+        }));
+
+        extract_7z(&archive_path, &install_dir).map_err(|e| {
+            push_log("ERROR", &format!("Extraction RetroArch échouée: {}", e));
+            format!("RetroArch 7z extraction failed: {}", e)
+        })?;
+
+        fs::remove_file(&archive_path).ok();
+
+        if find_executable(&install_dir, "retroarch.exe").is_none() {
+            push_log("ERROR", "retroarch.exe introuvable après extraction");
+            return Err("RetroArch installation failed: retroarch.exe not found after extraction.".to_string());
+        }
+        push_log("INFO", "RetroArch base installé avec succès");
+    }
+
+    if !ra_already_installed && !is_shared_retroarch {
+        // Standalone emulator install
+        if install_dir.exists() {
             fs::remove_dir_all(&install_dir).ok();
         }
         fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
 
+        let _ = app_handle.emit("install-progress", serde_json::json!({
+            "emulator_id": emulator_id,
+            "status": "downloading",
+            "progress": 10
+        }));
+
         let response = client
             .get(&emu.download_url)
-            .header("User-Agent", "EmuWorld/0.1.0 (Windows; Desktop)")
+            .header("User-Agent", "EmuWorld/2.0 (Windows; Desktop)")
             .send()
             .await
             .map_err(|e| format!("Download failed: {}", e))?;
 
         if !response.status().is_success() {
+            push_log("ERROR", &format!("Download échoué HTTP {}: {}", response.status(), emu.download_url));
             return Err(format!("Download failed with HTTP status: {}", response.status()));
         }
 
-        let bytes = response.bytes().await.map_err(|e| format!("Failed to read download data: {}", e))?;
-        if bytes.is_empty() {
-            return Err("Downloaded file is empty".to_string());
+        let total_size = response.content_length().unwrap_or(0);
+
+        // Stream to disk for large files (>50 MB), buffer in memory for small ones
+        let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
+        let archive_path = install_dir.join(format!("archive.{}", archive_ext));
+
+        if total_size > 50_000_000 {
+            push_log("INFO", &format!("Gros fichier ({} Mo), téléchargement en streaming...", total_size / 1_048_576));
+            let mut file = fs::File::create(&archive_path)
+                .map_err(|e| format!("Failed to create archive file: {}", e))?;
+            let mut downloaded: u64 = 0;
+            let mut last_emit = std::time::Instant::now();
+            let mut stream = response;
+            while let Some(chunk) = stream.chunk().await.map_err(|e| format!("Download stream error: {}", e))? {
+                file.write_all(&chunk).map_err(|e| format!("Write error: {}", e))?;
+                downloaded += chunk.len() as u64;
+                if last_emit.elapsed().as_millis() >= 500 {
+                    let progress = if total_size > 0 {
+                        (downloaded as f64 / total_size as f64 * 50.0) as u32 + 10
+                    } else { 30 };
+                    let _ = app_handle.emit("install-progress", serde_json::json!({
+                        "emulator_id": emulator_id,
+                        "status": "downloading",
+                        "progress": progress
+                    }));
+                    last_emit = std::time::Instant::now();
+                }
+            }
+        } else {
+            let bytes = response.bytes().await.map_err(|e| format!("Failed to read download data: {}", e))?;
+            if bytes.is_empty() {
+                return Err("Downloaded file is empty".to_string());
+            }
+            fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
         }
 
         let _ = app_handle.emit("install-progress", serde_json::json!({
@@ -414,21 +530,25 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
             "progress": 60
         }));
 
-        let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
-        let archive_path = install_dir.join(format!("archive.{}", archive_ext));
-        fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
-
+        push_log("INFO", &format!("Extraction de l'archive ({})...", archive_ext));
         if emu.archive_type == "zip" {
-            extract_zip(&archive_path, &install_dir).map_err(|e| format!("Zip extraction failed: {}", e))?;
+            extract_zip(&archive_path, &install_dir).map_err(|e| {
+                push_log("ERROR", &format!("Extraction zip échouée: {}", e));
+                format!("Zip extraction failed: {}", e)
+            })?;
         } else if emu.archive_type == "7z" {
-            extract_7z(&archive_path, &install_dir).map_err(|e| format!("7z extraction failed: {}", e))?;
+            extract_7z(&archive_path, &install_dir).map_err(|e| {
+                push_log("ERROR", &format!("Extraction 7z échouée: {}", e));
+                format!("7z extraction failed: {}", e)
+            })?;
         } else {
             return Err(format!("Unsupported archive type: {}", emu.archive_type));
         }
 
         fs::remove_file(&archive_path).ok();
-    } else {
+    } else if ra_already_installed {
         // RetroArch already installed, skip to core download
+        push_log("INFO", "RetroArch déjà installé, passage au téléchargement du core...");
         let _ = app_handle.emit("install-progress", serde_json::json!({
             "emulator_id": emulator_id,
             "status": "extracting",
@@ -441,8 +561,9 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
     }
 
-    // Download setup files (keys, firmware, BIOS)
+    // Download setup files (keys, firmware, BIOS, cores)
     if !emu.setup_files.is_empty() {
+        push_log("INFO", &format!("Téléchargement de {} fichier(s) de setup...", emu.setup_files.len()));
         let _ = app_handle.emit("install-progress", serde_json::json!({
             "emulator_id": emulator_id,
             "status": "setup",
@@ -453,6 +574,7 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         let exe_base_dir = find_executable(&install_dir, &emu.executable_name)
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_else(|| install_dir.clone());
+        push_log("INFO", &format!("Setup base dir: {}", exe_base_dir.display()));
 
         for sf in &emu.setup_files {
             if sf.url.starts_with("PLACEHOLDER") { continue; }
@@ -460,34 +582,38 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
             if let Some(parent) = dest_path.parent() {
                 fs::create_dir_all(parent).ok();
             }
-            println!("[Setup] Downloading {} -> {}", sf.url, dest_path.display());
+            push_log("INFO", &format!("Setup: {} → {} (extract: {})", sf.url, dest_path.display(), sf.extract));
             match client.get(&sf.url)
-                .header("User-Agent", "EmuWorld/0.2.0 (Windows; Desktop)")
+                .header("User-Agent", "EmuWorld/2.0 (Windows; Desktop)")
                 .send().await
             {
                 Ok(resp) => {
                     if resp.status().is_success() {
                         match resp.bytes().await {
                             Ok(data) => {
+                                push_log("INFO", &format!("Setup: téléchargé {} octets pour {}", data.len(), sf.dest));
                                 if sf.extract {
                                     let tmp_zip = install_dir.join("_setup_tmp.zip");
                                     if fs::write(&tmp_zip, &data).is_ok() {
                                         fs::create_dir_all(&dest_path).ok();
-                                        let _ = extract_zip(&tmp_zip, &dest_path);
+                                        match extract_zip(&tmp_zip, &dest_path) {
+                                            Ok(_) => push_log("INFO", &format!("Setup: extrait dans {}", dest_path.display())),
+                                            Err(e) => push_log("ERROR", &format!("Setup: extraction échouée pour {}: {}", sf.dest, e)),
+                                        }
                                         fs::remove_file(&tmp_zip).ok();
                                     }
                                 } else {
                                     let _ = fs::write(&dest_path, &data);
+                                    push_log("INFO", &format!("Setup: fichier écrit: {}", dest_path.display()));
                                 }
-                                println!("[Setup] OK: {}", sf.dest);
                             }
-                            Err(e) => println!("[Setup] Read failed for {}: {}", sf.dest, e),
+                            Err(e) => push_log("ERROR", &format!("Setup: lecture échouée pour {}: {}", sf.dest, e)),
                         }
                     } else {
-                        println!("[Setup] HTTP {} for {}", resp.status(), sf.url);
+                        push_log("ERROR", &format!("Setup: HTTP {} pour {}", resp.status(), sf.url));
                     }
                 }
-                Err(e) => println!("[Setup] Download failed for {}: {}", sf.dest, e),
+                Err(e) => push_log("ERROR", &format!("Setup: téléchargement échoué pour {}: {}", sf.dest, e)),
             }
         }
 
