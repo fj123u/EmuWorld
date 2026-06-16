@@ -1392,11 +1392,15 @@ export default function App() {
   const [batchPassword, setBatchPassword] = useState("");
   const [linkCollections, setLinkCollections] = useState<{ name: string; console: string; password?: string; builtin?: boolean; links: { url: string; name: string }[]; resolving?: boolean }[]>(() => {
     const customs: any[] = (() => { try { return JSON.parse(localStorage.getItem("emuworld_collections") || "[]"); } catch { return []; } })();
+    const builtinNamesCache: Record<string, Record<string, string>> = (() => { try { return JSON.parse(localStorage.getItem("emuworld_builtin_names") || "{}"); } catch { return {}; } })();
     const builtins = DEFAULT_COLLECTIONS.map(dc => ({
       name: dc.name,
       console: dc.console,
       builtin: true,
-      links: dc.links.map(url => ({ url, name: url.split('?')[1] || url })),
+      links: dc.links.map(url => {
+        const cached = builtinNamesCache[dc.name]?.[url];
+        return { url, name: cached || url.split('?')[1] || url };
+      }),
     }));
     return [...builtins, ...customs];
   });
@@ -4353,22 +4357,27 @@ export default function App() {
 
   const resolveCollectionNames = useCallback(async (collectionName: string, urls: string[]) => {
     try {
+      setLinkCollections(prev => prev.map(col => col.name === collectionName ? { ...col, resolving: true } : col));
       const resolved = await invoke<[string, string][]>("resolve_1fichier_names", { urls });
-      setLinkCollections(prev => prev.map(col => {
-        if (col.name !== collectionName) return col;
-        const updatedLinks = col.links.map(link => {
-          if (link.name.includes('.')) return link; // Manual name takes precedence
-          const found = resolved.find(([u]) => u === link.url);
-          return found ? { ...link, name: found[1] } : link;
-        });
-        const updated = { ...col, links: updatedLinks, resolving: false };
-        return updated;
-      }));
-      // Persist
       setLinkCollections(prev => {
-        const customs = prev.filter(c => !c.builtin);
+        const updated = prev.map(col => {
+          if (col.name !== collectionName) return col;
+          const updatedLinks = col.links.map(link => {
+            if (link.name.includes('.')) return link;
+            const found = resolved.find(([u]) => u === link.url);
+            return found ? { ...link, name: found[1] } : link;
+          });
+          return { ...col, links: updatedLinks, resolving: false };
+        });
+        const customs = updated.filter(c => !c.builtin);
         localStorage.setItem("emuworld_collections", JSON.stringify(customs));
-        return prev;
+        const builtinNamesCache: Record<string, Record<string, string>> = (() => { try { return JSON.parse(localStorage.getItem("emuworld_builtin_names") || "{}"); } catch { return {}; } })();
+        updated.filter(c => c.builtin).forEach(col => {
+          if (!builtinNamesCache[col.name]) builtinNamesCache[col.name] = {};
+          col.links.forEach(l => { if (l.name.includes('.')) builtinNamesCache[col.name][l.url] = l.name; });
+        });
+        localStorage.setItem("emuworld_builtin_names", JSON.stringify(builtinNamesCache));
+        return updated;
       });
     } catch (e) {
       console.error("Failed to resolve names:", e);

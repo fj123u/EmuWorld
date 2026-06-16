@@ -3528,45 +3528,59 @@ async fn resolve_1fichier_names(
     push_log("INFO", &format!("Résolution des noms 1fichier: {} URLs", urls.len()));
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        .timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(15))
         .build()
         .map_err(|e| format!("Client error: {}", e))?;
 
     let mut results: Vec<(String, String)> = Vec::new();
     let total = urls.len();
+    let batch_size = 5;
 
-    for (i, url) in urls.iter().enumerate() {
-        let name = match client.get(url)
-            .header("Cookie", "AF=3186111")
-            .send()
-            .await
-        {
-            Ok(resp) => {
-                if let Ok(html) = resp.text().await {
-                    extract_1fichier_filename(&html)
-                        .unwrap_or_else(|| url.split('?').last().unwrap_or("unknown").to_string())
-                } else {
-                    url.split('?').last().unwrap_or("unknown").to_string()
-                }
+    for chunk_start in (0..total).step_by(batch_size) {
+        let chunk_end = (chunk_start + batch_size).min(total);
+        let chunk = &urls[chunk_start..chunk_end];
+
+        let futures: Vec<_> = chunk.iter().map(|url| {
+            let c = client.clone();
+            let u = url.clone();
+            async move {
+                let name = match c.get(&u)
+                    .header("Cookie", "AF=3186111")
+                    .send()
+                    .await
+                {
+                    Ok(resp) => {
+                        if let Ok(html) = resp.text().await {
+                            extract_1fichier_filename(&html)
+                                .unwrap_or_else(|| u.split('?').last().unwrap_or("unknown").to_string())
+                        } else {
+                            u.split('?').last().unwrap_or("unknown").to_string()
+                        }
+                    }
+                    Err(e) => {
+                        push_log("WARN", &format!("Échec résolution nom pour {}: {}", u, e));
+                        u.split('?').last().unwrap_or("unknown").to_string()
+                    }
+                };
+                (u, name)
             }
-            Err(_) => url.split('?').last().unwrap_or("unknown").to_string(),
-        };
+        }).collect();
 
-        results.push((url.clone(), name));
+        let batch_results = futures::future::join_all(futures).await;
+        results.extend(batch_results);
 
-        if (i + 1) % 5 == 0 || i + 1 == total {
-            let _ = app_handle.emit("resolve-names-progress", serde_json::json!({
-                "done": i + 1,
-                "total": total
-            }));
-        }
+        let done = chunk_end;
+        let _ = app_handle.emit("resolve-names-progress", serde_json::json!({
+            "done": done,
+            "total": total
+        }));
 
-        // Small delay to avoid rate limiting
-        if i + 1 < total {
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        if chunk_end < total {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
     }
 
+    push_log("INFO", &format!("Résolution terminée: {}/{} noms récupérés", results.iter().filter(|(_, n)| n.contains('.')).count(), total));
     Ok(results)
 }
 
