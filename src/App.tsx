@@ -4292,7 +4292,7 @@ export default function App() {
       } catch (e: any) {
         const errMsg = String(e);
         if (errMsg.includes("OPEN_BROWSER")) {
-          window.open(item.url, '_blank');
+          openUrl(item.url);
           setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.openedInBrowser") } : d));
         } else if (errMsg.includes("cancelled")) {
           setDownloadQueue(prev => prev.map(d => d.id === item.id ? { ...d, status: 'error', message: t("store.cancelled") } : d));

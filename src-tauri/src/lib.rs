@@ -3662,13 +3662,13 @@ async fn download_1fichier(
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(std::time::Duration::from_secs(600))
+        .cookie_store(true)
         .build()
         .map_err(|e| format!("Client build error: {}", e))?;
 
     // Step 1: GET the file page to extract tokens/form data
     let page_resp = client.get(&url)
-        .header("Cookie", "AF=3186111")
         .send()
         .await
         .map_err(|e| format!("Failed to load page: {}", e))?;
@@ -3685,19 +3685,42 @@ async fn download_1fichier(
         return Err("File has been removed from 1fichier.".to_string());
     }
 
+    // Extract countdown timer from page (free users must wait)
+    let wait_seconds = {
+        let re = regex::Regex::new(r"var\s+ct\s*=\s*(\d+)").unwrap();
+        re.captures(&page_html)
+            .and_then(|c| c[1].parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+
+    if wait_seconds > 0 {
+        emit_progress("resolving", 5, &format!("Waiting {}s (1fichier free limit)...", wait_seconds));
+        push_log("INFO", &format!("1fichier: attente de {}s avant POST", wait_seconds));
+        for elapsed in 0..wait_seconds {
+            if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
+                cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
+                push_log("INFO", &format!("Download annulé pendant l'attente (queue: {})", queue_id));
+                emit_progress("cancelled", 0, "Download cancelled");
+                return Err("Download cancelled by user".to_string());
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let pct = ((elapsed + 1) as f64 / wait_seconds as f64 * 10.0) as u32;
+            emit_progress("resolving", pct, &format!("Waiting {}s...", wait_seconds - elapsed - 1));
+        }
+    }
+
     emit_progress("resolving", 10, "Requesting download link...");
 
     // Step 2: POST to get the download link
-    // 1fichier uses a simple POST form with optional password
-    let mut form_params = vec![("dl_no_ssl", "on"), ("dlinline", "on")];
+    let mut form_params = vec![("dl_no_ssl", "on")];
     let pw_string;
     if let Some(ref pw) = password {
         pw_string = pw.clone();
         form_params.push(("pass", &pw_string));
     }
 
+    // Use cookies from the GET request for session continuity
     let post_resp = client.post(&url)
-        .header("Cookie", "AF=3186111")
         .header("Referer", &url)
         .form(&form_params)
         .send()
@@ -3754,8 +3777,8 @@ async fn download_1fichier(
                 push_log("WARN", &format!("1fichier rate limit — {}", wait_msg));
                 return Err(wait_msg);
             }
-            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") {
-                push_log("WARN", &format!("1fichier: login requis/rate limit — ouverture navigateur pour {}", url));
+            if post_html.contains("Identifiez-vous") || post_html.contains("pour continuer") || post_html.contains("You need to be") || post_html.contains("temporairement limit") || post_html.contains("forte affluence") {
+                push_log("WARN", &format!("1fichier: rate limit/login requis — ouverture navigateur pour {}", url));
                 return Err("OPEN_BROWSER".to_string());
             }
             push_log("ERROR", &format!("1fichier: impossible d'extraire le lien de téléchargement pour {}", url));
