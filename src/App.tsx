@@ -1418,6 +1418,20 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.5.1", date: "2026-06-17", changes: [
+      "🔒 Audit sécurité: 18 vulnérabilités corrigées (P03-P29, N01, Bug 9-12)",
+      "🛡️ DPAPI: les credentials B2 et RetroAchievements sont chiffrés sur disque (Windows)",
+      "🛡️ Clé de signature rotée avec mot de passe — protection contre le détournement d'update",
+      "🛡️ RLS Supabase renforcé: messages entre amis uniquement, achievements/lobbies/activité restreints",
+      "🛡️ Limite de taille downloads émulateurs (1.5 GB max)",
+      "🛡️ Vérification d'intégrité SHA256 pour les firmwares (champ expected_sha256)",
+      "🛡️ HTTP loopback supprimé de la page OAuth callback",
+      "🗑️ Bouton 'Supprimer mon compte' ajouté (RGPD Article 17)",
+      "🐛 Fix playtime RPCS3: suivi du processus par nom après relance interne",
+      "🐛 Fix 'Invalid login credentials' non détecté — propose l'inscription",
+      "🐛 Fix pseudo qui disparaît après inscription",
+      "🐛 Fix données locales écrasées à la première connexion (push local → cloud)",
+    ] },
     { version: "2.5.0", date: "2026-06-17", changes: [
       "⬇️ Téléchargement 1fichier fonctionnel: countdown 60s avec barre de progression + download direct",
       "⚡ Détection instantanée du rate-limit 1fichier: ouverture navigateur immédiate au lieu de 60s d'attente inutile",
