@@ -50,7 +50,7 @@ jobs:
             echo "::error::Repo secret TAURI_SIGNING_PRIVATE_KEY is empty or missing — updates won't sign"
             exit 1
           fi
-          echo "Signing key length: ${#KEY} chars"
+          echo "Signing key present: OK"
 
       - name: Build + bundle + sign
         env:
