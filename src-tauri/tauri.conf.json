@@ -59,7 +59,7 @@
       "endpoints": [
         "https://github.com/fj123u/EmuWorld/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNGNDAwNDQ0QzQxOUYyQkIKUldTNzhobkVSQVJBUDR4SUMyYnJrY2pGMGh3d0F2VEc5cCtqRjRDZVp0MVVzLzZFMTNKbGQ2MmcK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY1NThGMUZCRDlBOEIwODcKUldTSHNLalorL0ZZOWJhYmplUm4yR2MxdzlMNllBdXBCMmJUTTB4dUdZNnZLWnJGT0NoY1NYVDcK",
       "windows": {
         "installMode": "passive"
       }
