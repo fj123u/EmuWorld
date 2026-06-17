@@ -3707,6 +3707,40 @@ async fn download_1fichier(
 
     push_log("INFO", &format!("1fichier: countdown = {}s", wait_seconds));
 
+    let form_params: Vec<(String, String)> = {
+        let mut params = Vec::new();
+        params.push(("dl_no_ssl".to_string(), "on".to_string()));
+        if let Some(ref pw) = password {
+            params.push(("pass".to_string(), pw.clone()));
+        }
+        params
+    };
+
+    // Quick probe: POST immediately to detect IP rate-limit without wasting 60s
+    // - If rate-limited: returns "temporairement limité" → open browser right away
+    // - If NOT rate-limited but too early: returns countdown page → wait then POST for real
+    if wait_seconds > 0 {
+        emit_progress("resolving", 0, "Checking...");
+        let probe_resp = client.post(&url)
+            .header("Referer", &url)
+            .header("Origin", "https://1fichier.com")
+            .form(&form_params)
+            .send()
+            .await
+            .map_err(|e| format!("Probe POST failed: {}", e))?;
+        let probe_html = probe_resp.text().await.map_err(|e| e.to_string())?;
+
+        if probe_html.contains("temporairement limit") || probe_html.contains("forte affluence") {
+            push_log("WARN", &format!("1fichier: IP rate-limited (detected via probe) — opening browser for {}", url));
+            return Err("OPEN_BROWSER".to_string());
+        }
+        push_log("INFO", "1fichier: probe OK — not rate-limited, starting countdown");
+
+        // Fresh GET to reset session timer (probe consumed it)
+        let fresh = client.get(&url).send().await.map_err(|e| format!("Fresh GET failed: {}", e))?;
+        let _ = fresh.text().await;
+    }
+
     // Wait the countdown with progress bar
     if wait_seconds > 0 {
         emit_progress("resolving", 0, &format!("Waiting {}s...", wait_seconds));
@@ -3728,19 +3762,7 @@ async fn download_1fichier(
 
     emit_progress("resolving", 100, "Requesting download link...");
 
-    // Step 2: POST to get download link
-    // Form only needs dl_no_ssl=on (that's what the website JS submits)
-    let form_params: Vec<(String, String)> = {
-        let mut params = Vec::new();
-        params.push(("dl_no_ssl".to_string(), "on".to_string()));
-        if let Some(ref pw) = password {
-            params.push(("pass".to_string(), pw.clone()));
-        }
-        params
-    };
-
-    push_log("INFO", &format!("1fichier: POST to {} with params: {:?}", url, form_params));
-
+    // Step 2: POST to get download link after countdown
     let post_resp = client.post(&url)
         .header("Referer", &url)
         .header("Origin", "https://1fichier.com")
