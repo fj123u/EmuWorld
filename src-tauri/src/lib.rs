@@ -227,6 +227,7 @@ mod achievements;
 mod gamepad;
 mod retroachievements;
 mod cloud_backup;
+mod dpapi;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -494,6 +495,11 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
         }
 
         let total_size = response.content_length().unwrap_or(0);
+        const MAX_DOWNLOAD_SIZE: u64 = 1_500_000_000; // 1.5 GB max for emulators
+
+        if total_size > MAX_DOWNLOAD_SIZE {
+            return Err(format!("Download too large ({} MB) — max {} MB", total_size / 1_048_576, MAX_DOWNLOAD_SIZE / 1_048_576));
+        }
 
         // Stream to disk for large files (>50 MB), buffer in memory for small ones
         let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
@@ -509,6 +515,11 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
             while let Some(chunk) = stream.chunk().await.map_err(|e| format!("Download stream error: {}", e))? {
                 file.write_all(&chunk).map_err(|e| format!("Write error: {}", e))?;
                 downloaded += chunk.len() as u64;
+                if downloaded > MAX_DOWNLOAD_SIZE {
+                    drop(file);
+                    let _ = fs::remove_file(&archive_path);
+                    return Err("Download exceeded maximum size limit".to_string());
+                }
                 if last_emit.elapsed().as_millis() >= 500 {
                     let progress = if total_size > 0 {
                         (downloaded as f64 / total_size as f64 * 50.0) as u32 + 10
@@ -525,6 +536,9 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
             let bytes = response.bytes().await.map_err(|e| format!("Failed to read download data: {}", e))?;
             if bytes.is_empty() {
                 return Err("Downloaded file is empty".to_string());
+            }
+            if bytes.len() as u64 > MAX_DOWNLOAD_SIZE {
+                return Err("Downloaded file exceeds maximum size limit".to_string());
             }
             fs::write(&archive_path, &bytes).map_err(|e| format!("Failed to save archive: {}", e))?;
         }
@@ -597,6 +611,18 @@ async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> 
                         match resp.bytes().await {
                             Ok(data) => {
                                 push_log("INFO", &format!("Setup: téléchargé {} octets pour {}", data.len(), sf.dest));
+                                // Verify SHA256 integrity if expected hash is set
+                                if let Some(ref expected) = sf.expected_sha256 {
+                                    use sha2::Digest;
+                                    let mut hasher = sha2::Sha256::new();
+                                    hasher.update(&data);
+                                    let actual = format!("{:x}", hasher.finalize());
+                                    if actual != expected.to_lowercase() {
+                                        push_log("ERROR", &format!("Setup: SHA256 mismatch for {} — expected {} got {}", sf.dest, expected, actual));
+                                        continue;
+                                    }
+                                    push_log("INFO", &format!("Setup: SHA256 verified for {}", sf.dest));
+                                }
                                 if sf.extract {
                                     let tmp_zip = install_dir.join("_setup_tmp.zip");
                                     if fs::write(&tmp_zip, &data).is_ok() {
@@ -1046,6 +1072,7 @@ async fn launch_emulator(
     // Track playtime only when we have a ROM context (launching the bare emulator doesn't count as a game session).
     if let (Some(name), Some(console)) = (rom_name.clone(), rom_console.clone()) {
         let emulator_id_for_task = emu.id.clone();
+        let exe_name = emu.executable_name.clone();
 
         // Save current session to disk for crash recovery
         let session_file = emuworld_base_dir().join("current_session.json");
@@ -1066,6 +1093,31 @@ async fn launch_emulator(
                 Ok(status) => println!("[Launch] Child exited ({:?}) for {}", status, name),
                 Err(e) => println!("[Launch] wait() failed: {}", e),
             }
+
+            // If the process exited very quickly (<120s), check if a successor process
+            // with the same exe name is still running (handles RPCS3 process re-launch)
+            if start.elapsed().as_secs() < 120 {
+                let poll_interval = std::time::Duration::from_secs(5);
+                let max_wait = std::time::Duration::from_secs(28800); // 8h max
+                let deadline = std::time::Instant::now() + max_wait;
+                std::thread::sleep(std::time::Duration::from_secs(2)); // brief grace period
+                while std::time::Instant::now() < deadline {
+                    let output = std::process::Command::new("tasklist")
+                        .args(["/FI", &format!("IMAGENAME eq {}", exe_name), "/FO", "CSV", "/NH"])
+                        .output();
+                    match output {
+                        Ok(out) => {
+                            let stdout = String::from_utf8_lossy(&out.stdout);
+                            if !stdout.to_lowercase().contains(&exe_name.to_lowercase()) {
+                                break; // process gone
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                    std::thread::sleep(poll_interval);
+                }
+            }
+
             let elapsed = start.elapsed().as_secs();
             // Ignore sessions < 3s (likely the emulator crashed or the user mis-clicked).
             if elapsed >= 3 {
@@ -3177,11 +3229,18 @@ async fn finalize_rgs_import(
     push_log("INFO", &format!("Import RGS: {} → console '{}'", src_path, console));
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
+    let roms_root = roms_dir.canonicalize().unwrap_or_else(|_| roms_dir.clone());
     let normalized = normalize_console_folder(&console);
     let dest_dir = roms_dir.join(&normalized);
-    
+
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
+    }
+
+    // Validate dest_dir is within ROMs root (prevent path traversal via console name)
+    let dest_dir_canon = dest_dir.canonicalize().unwrap_or_else(|_| dest_dir.clone());
+    if !dest_dir_canon.starts_with(&roms_root) {
+        return Err("Invalid console path — directory traversal blocked".to_string());
     }
 
     let src = std::path::PathBuf::from(&src_path);
@@ -3297,18 +3356,24 @@ fn extract_rom_zip(zip_path: &std::path::Path, dest_dir: &std::path::Path) -> Re
     let mut extracted = Vec::new();
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
-        let name = entry.name().to_string();
-        
+
+        // Use enclosed_name() to prevent path traversal (Zip Slip)
+        let safe_path = match entry.enclosed_name() {
+            Some(p) => p.to_path_buf(),
+            None => continue,
+        };
+        let name = safe_path.to_string_lossy().to_string();
+
         // Skip directories and macOS resource forks
         if entry.is_dir() || name.starts_with("__MACOSX") || name.starts_with(".") {
             continue;
         }
-        
+
         // Extract to the destination directory (flatten — no subdirectories)
-        let file_name = std::path::Path::new(&name)
+        let file_name = safe_path
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
-            .unwrap_or(name.clone());
+            .unwrap_or_else(|| name.clone());
         
         let out_path = dest_dir.join(&file_name);
         println!("[Extract] {} -> {}", name, out_path.display());
@@ -4051,6 +4116,13 @@ fn get_myrient_consoles() -> Result<Vec<MyrientConsole>, String> {
 
 #[tauri::command]
 async fn browse_myrient(console_url: String, console_id: String) -> Result<Vec<MyrientFile>, String> {
+    // Validate URL to prevent SSRF — only allow known domains
+    let allowed_domains = ["myrient.erista.me", "myrient.erista.me/"];
+    let is_safe = allowed_domains.iter().any(|d| console_url.starts_with(&format!("https://{}", d)));
+    if !is_safe {
+        return Err("Invalid URL — only myrient.erista.me is allowed".to_string());
+    }
+
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(30))

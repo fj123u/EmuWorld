@@ -105,7 +105,11 @@ pub fn clear() -> Result<(), String> {
 }
 
 pub fn overwrite(unlocked: HashMap<String, String>) -> Result<(), String> {
-    save(&AchievementsStore { unlocked })
+    let valid_ids: std::collections::HashSet<&str> = all_achievements().iter().map(|a| a.id).collect();
+    let filtered: HashMap<String, String> = unlocked.into_iter()
+        .filter(|(id, _)| valid_ids.contains(id.as_str()))
+        .collect();
+    save(&AchievementsStore { unlocked: filtered })
 }
 
 pub fn get_all_with_status() -> Vec<Achievement> {

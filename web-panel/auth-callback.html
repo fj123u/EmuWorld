@@ -113,35 +113,9 @@
   }
 
   function tryLocalhost(callback) {
-    const tokens = getTokens();
-    const ports = [17643, 17644, 17645, 17646, 17647];
-    let connected = false;
-
-    ports.forEach(port => {
-      const img = new Image();
-      img.onload = img.onerror = () => {
-        if (!connected) {
-          // Image trick doesn't confirm delivery, use XHR
-        }
-      };
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', `http://127.0.0.1:${port}/callback${tokens}`, true);
-      xhr.timeout = 2000;
-      xhr.onload = () => {
-        if (!connected) {
-          connected = true;
-          document.getElementById('status').innerHTML = '✅ Connecté ! Tu peux fermer cet onglet.';
-          if (callback) callback(true);
-          setTimeout(() => window.close(), 1500);
-        }
-      };
-      xhr.onerror = () => {};
-      xhr.ontimeout = () => {};
-      try { xhr.send(); } catch(e) {}
-    });
-
-    // Fallback after delay
-    setTimeout(() => { if (!connected && callback) callback(false); }, 3000);
+    // HTTP loopback removed for security (tokens were sent in cleartext).
+    // Deep link is the only strategy now.
+    setTimeout(() => { if (callback) callback(false); }, 2000);
   }
 
   function jump() {

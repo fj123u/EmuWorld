@@ -982,6 +982,7 @@ function OverlayWindow() {
   const sendMessage = async () => {
     if (!userId || !chatTarget || !chatInput.trim()) return;
     const content = chatInput.trim();
+    if (content.length > 2000) return;
     setChatInput("");
     const { data } = await supabase.from("messages").insert({ sender_id: userId, receiver_id: chatTarget.id, content }).select().single();
     if (data) {
@@ -1941,6 +1942,7 @@ export default function App() {
             username: loginPseudo,
             updated_at: new Date().toISOString(),
           });
+          setProfile({ id: data.user.id, username: loginPseudo, public_profile: false, avatar_url: null } as any);
           setShowLoginModal(false);
           setShowEmailConfirmModal(true);
         }
@@ -1960,6 +1962,8 @@ export default function App() {
         setAuthError(t("auth.emailNotConfirmed") || "Confirme ton email avant de te connecter.");
       } else if (rateLimitMatch) {
         setAuthError(`Réessaye dans ${rateLimitMatch[1]} secondes.`);
+      } else if (msg.includes("Invalid login credentials")) {
+        setAuthError(t("auth.invalidCredentials") || "Email ou mot de passe incorrect. Pas encore inscrit ?");
       } else {
         setAuthError(msg);
       }
@@ -4106,26 +4110,60 @@ export default function App() {
           supabase.from("playtime_emulators").select("*").eq("user_id", currentId),
           supabase.from("user_achievements").select("*").eq("user_id", currentId),
         ]);
-        const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
-        for (const row of gamesRes.data || []) {
-          cloud.games[`${row.console}::${row.name}`] = {
-            console: row.console,
-            name: row.name,
-            seconds: row.seconds || 0,
-            launches: row.launches || 0,
-            last_played: row.last_played,
-            first_played: row.first_played,
-            favorite: !!row.favorite,
-            last_emulator_id: row.last_emulator_id,
-            rating: row.rating ?? undefined,
-            notes: row.notes ?? undefined,
-          };
+
+        const cloudIsEmpty = (gamesRes.data || []).length === 0 && (emusRes.data || []).length === 0;
+        const localPt = await invoke<PlaytimeStore>("get_playtime").catch(() => null);
+        const localHasData = localPt && Object.keys(localPt.games).length > 0;
+
+        if (cloudIsEmpty && localHasData) {
+          // First sign-in with existing local data: push local → cloud
+          const gameRows = Object.values(localPt.games).map((g) => ({
+            user_id: currentId,
+            console: g.console,
+            name: g.name,
+            seconds: g.seconds,
+            launches: g.launches,
+            last_played: g.last_played,
+            first_played: g.first_played,
+            favorite: g.favorite,
+            last_emulator_id: g.last_emulator_id,
+            rating: g.rating ?? null,
+            notes: g.notes ?? null,
+          }));
+          const emuRows = Object.entries(localPt.emulators).map(([id, seconds]) => ({
+            user_id: currentId,
+            emulator_id: id,
+            seconds,
+          }));
+          if (gameRows.length > 0) {
+            await supabase.from("playtime_games").upsert(gameRows, { onConflict: "user_id,console,name" });
+          }
+          if (emuRows.length > 0) {
+            await supabase.from("playtime_emulators").upsert(emuRows, { onConflict: "user_id,emulator_id" });
+          }
+          await loadPlaytime();
+        } else {
+          const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
+          for (const row of gamesRes.data || []) {
+            cloud.games[`${row.console}::${row.name}`] = {
+              console: row.console,
+              name: row.name,
+              seconds: row.seconds || 0,
+              launches: row.launches || 0,
+              last_played: row.last_played,
+              first_played: row.first_played,
+              favorite: !!row.favorite,
+              last_emulator_id: row.last_emulator_id,
+              rating: row.rating ?? undefined,
+              notes: row.notes ?? undefined,
+            };
+          }
+          for (const row of emusRes.data || []) {
+            cloud.emulators[row.emulator_id] = row.seconds || 0;
+          }
+          await invoke("overwrite_playtime", { store: cloud });
+          await loadPlaytime();
         }
-        for (const row of emusRes.data || []) {
-          cloud.emulators[row.emulator_id] = row.seconds || 0;
-        }
-        await invoke("overwrite_playtime", { store: cloud });
-        await loadPlaytime();
 
         // Restore achievements from cloud
         const unlocked: Record<string, string> = {};
@@ -9464,11 +9502,11 @@ export default function App() {
               </div>
 
               <div className="account-modal__footer">
-                <button 
-                  className="account-modal__logout" 
-                  onClick={async () => { 
-                    await supabase.auth.signOut(); 
-                    setShowAccountModal(false); 
+                <button
+                  className="account-modal__logout"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    setShowAccountModal(false);
                   }}
                 >
                   <LogOut size={16} />
@@ -9479,21 +9517,30 @@ export default function App() {
                   onClick={async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session) return;
-                    // Token handoff lives on the `#` fragment; the SPA router reads it once
-                    // via `consumeTokenHandoff` and then navigates to whichever route follows.
-                    // `/account` is the web equivalent of the in-app account modal —
-                    // the SPA lands you on your own profile and auto-opens the edit modal.
-                    const target = "/account";
-                    // Timestamp in the query so Firefox can't silently focus an already-open
-                    // EmuWorld tab (which still has `#/u/...` from a previous handoff) and
-                    // skip navigating to the new URL — otherwise the tokens in the fragment
-                    // never get loaded.
-                    const url = `https://emuworld.alwaysdata.net/?h=${Date.now()}#access_token=${session.access_token}&refresh_token=${session.refresh_token}&token_type=bearer&next=${encodeURIComponent(target)}`;
+                    const url = `https://emuworld.alwaysdata.net/?u=${user?.id || ""}`;
                     await openUrl(url);
                   }}
                 >
                   <ExternalLink size={14} />
                   Manage account on Web
+                </button>
+                <button
+                  className="account-modal__delete-btn btn gamepad-nav-item"
+                  onClick={async () => {
+                    if (!confirm(t("auth.deleteAccountConfirm"))) return;
+                    try {
+                      const { error } = await supabase.functions.invoke("delete-account");
+                      if (error) throw error;
+                      await supabase.auth.signOut();
+                      setShowAccountModal(false);
+                      showToast(t("auth.deleteAccountSuccess"), "success");
+                    } catch {
+                      showToast(t("auth.deleteAccountError"), "error");
+                    }
+                  }}
+                >
+                  <Trash2 size={14} />
+                  {t("auth.deleteAccount")}
                 </button>
               </div>
             </motion.div>

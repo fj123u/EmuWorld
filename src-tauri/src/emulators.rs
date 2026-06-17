@@ -7,6 +7,9 @@ pub struct SetupFile {
     pub dest: String,
     /// If true, the downloaded file is a zip that should be extracted at `dest` (treated as dir)
     pub extract: bool,
+    /// Optional SHA256 hex digest — if set, downloaded file is verified before install
+    #[serde(default)]
+    pub expected_sha256: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -188,6 +191,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://gist.githubusercontent.com/MuTLY/7876de98811aac72b13b31c24c84b5be/raw/keys.txt".to_string(),
                     dest: "keys.txt".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -209,11 +213,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://raw.githubusercontent.com/THZoria/NX_Firmware/master/prod.keys".to_string(),
                     dest: "portable/system/prod.keys".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://github.com/THZoria/NX_Firmware/releases/download/22.1.0/Firmware.22.1.0.zip".to_string(),
                     dest: "portable/system/Contents/registered".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -235,6 +241,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mesen_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -256,6 +263,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/snes9x_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -277,6 +285,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mgba_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -298,6 +307,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mupen64plus_next_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -319,6 +329,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/melonds_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -340,6 +351,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/flycast_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -361,6 +373,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_vb_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -385,6 +398,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://ps1emulator.com/SCPH1001.BIN".to_string(),
                     dest: "bios/SCPH1001.BIN".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -406,6 +420,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://archive.org/download/ps2-bios-megadump/PS2_BIOS.zip".to_string(),
                     dest: "bios".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -424,9 +439,10 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             core_name: None,
             setup_files: vec![
                 SetupFile {
-                    url: "http://dus01.ps3.update.playstation.net/update/ps3/image/us/2026_0318_a2b60b6ac1d2e49e230144345616927c/PS3UPDAT.PUP".to_string(),
+                    url: "https://dus01.ps3.update.playstation.net/update/ps3/image/us/2026_0318_a2b60b6ac1d2e49e230144345616927c/PS3UPDAT.PUP".to_string(),
                     dest: "PS3UPDAT.PUP".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -481,6 +497,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -500,6 +517,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -519,6 +537,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -539,21 +558,25 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_E.bin".to_string(),
                     dest: "system/bios_CD_E.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_U.bin".to_string(),
                     dest: "system/bios_CD_U.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/segacd/bios_CD_J.bin".to_string(),
                     dest: "system/bios_CD_J.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -574,6 +597,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/picodrive_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -594,16 +618,19 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/kronos_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/saturn/sega_101.bin".to_string(),
                     dest: "system/sega_101.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/saturn/mpr-17933.bin".to_string(),
                     dest: "system/mpr-17933.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -629,16 +656,19 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/mcpx_1.0.bin".to_string(),
                     dest: "mcpx_1.0.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/Complex_4627v1.03.bin".to_string(),
                     dest: "Complex_4627v1.03.bin".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/xbox/xbox_hdd.qcow2".to_string(),
                     dest: "xbox_hdd.qcow2".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -679,6 +709,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mame_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -698,6 +729,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/fbneo_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -717,6 +749,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_pce_fast_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -736,6 +769,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/stella_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -755,6 +789,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/atari800_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -774,6 +809,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/prosystem_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -793,6 +829,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/virtualjaguar_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -812,6 +849,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/handy_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -831,6 +869,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_pce_fast_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
         EmulatorInfo {
@@ -851,11 +890,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_pce_fast_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/tgcd/syscard3.pce".to_string(),
                     dest: "system/syscard3.pce".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -877,11 +918,13 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/same_cdi_libretro.dll.zip".to_string(),
                     dest: "cores".to_string(),
                     extract: true,
+                    expected_sha256: None,
                 },
                 SetupFile {
                     url: "https://raw.githubusercontent.com/fj123u/EmuWorld/main/bios/cdi/cdimono1.zip".to_string(),
                     dest: "system/cdimono1.zip".to_string(),
                     extract: false,
+                    expected_sha256: None,
                 },
             ],
         },
@@ -902,6 +945,7 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                 url: "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mednafen_wswan_libretro.dll.zip".to_string(),
                 dest: "cores".to_string(),
                 extract: true,
+                    expected_sha256: None,
             }],
         },
 

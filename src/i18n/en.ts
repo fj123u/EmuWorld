@@ -319,6 +319,11 @@ const en: Translations = {
     emailNotConfirmed: "Please confirm your email before signing in.",
     checkEmailTitle: "Check your email",
     checkEmailDesc: "A confirmation email has been sent. Click the link in the email to activate your account, then come back and sign in.",
+    invalidCredentials: "Incorrect email or password. Don't have an account yet?",
+    deleteAccount: "Delete my account",
+    deleteAccountConfirm: "Are you sure you want to delete your account? All your data will be permanently erased.",
+    deleteAccountSuccess: "Account deleted successfully.",
+    deleteAccountError: "Error deleting account.",
   },
 
   // Gamepad labels

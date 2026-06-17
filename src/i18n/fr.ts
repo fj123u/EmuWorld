@@ -317,6 +317,11 @@ const fr = {
     emailNotConfirmed: "Confirme ton email avant de te connecter.",
     checkEmailTitle: "Vérifie ton email",
     checkEmailDesc: "Un email de confirmation vient d'être envoyé. Clique sur le lien dans le mail pour activer ton compte, puis reviens te connecter ici.",
+    invalidCredentials: "Email ou mot de passe incorrect. Pas encore inscrit ?",
+    deleteAccount: "Supprimer mon compte",
+    deleteAccountConfirm: "Es-tu sûr de vouloir supprimer ton compte ? Toutes tes données seront effacées définitivement.",
+    deleteAccountSuccess: "Compte supprimé avec succès.",
+    deleteAccountError: "Erreur lors de la suppression du compte.",
   },
 
   // Gamepad labels

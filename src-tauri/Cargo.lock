@@ -1204,7 +1204,7 @@ checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
 
 [[package]]
 name = "emuworld"
-version = "2.4.1"
+version = "2.5.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -1222,6 +1222,7 @@ dependencies = [
  "serde_json",
  "sevenz-rust",
  "sha1",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-deep-link",

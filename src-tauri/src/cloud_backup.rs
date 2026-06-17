@@ -77,20 +77,29 @@ fn config_path() -> PathBuf {
 
 pub fn load_config() -> B2Config {
     let path = config_path();
-    if let Ok(data) = fs::read_to_string(&path) {
-        serde_json::from_str(&data).unwrap_or_default()
-    } else {
-        B2Config::default()
+    if !path.exists() {
+        return B2Config::default();
+    }
+    crate::dpapi::migrate_plaintext_if_needed(&path);
+    match crate::dpapi::read_and_decrypt(&path) {
+        Ok(plaintext) => {
+            let json = String::from_utf8_lossy(&plaintext);
+            serde_json::from_str(&json).unwrap_or_default()
+        }
+        Err(_) => {
+            if let Ok(data) = fs::read_to_string(&path) {
+                serde_json::from_str(&data).unwrap_or_default()
+            } else {
+                B2Config::default()
+            }
+        }
     }
 }
 
 pub fn save_config(config: &B2Config) -> Result<(), String> {
     let path = config_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
     let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    fs::write(&path, json).map_err(|e| e.to_string())
+    crate::dpapi::encrypt_and_write(&path, json.as_bytes())
 }
 
 /// Save file extensions we look for
