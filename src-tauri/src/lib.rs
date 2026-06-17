@@ -3685,16 +3685,18 @@ async fn download_1fichier(
         return Err("File has been removed from 1fichier.".to_string());
     }
 
-    // Check for rate-limit on GET page (no countdown = file not accessible at all)
+    // Check for rate-limit on GET page (no countdown = truly blocked)
     let has_countdown = page_html.contains("var ct");
     if !has_countdown {
         if page_html.contains("temporairement limit") || page_html.contains("forte affluence") {
-            push_log("WARN", &format!("1fichier: rate limit dès le GET — ouverture navigateur pour {}", url));
+            push_log("WARN", &format!("1fichier: rate limit on GET (no countdown) — browser fallback for {}", url));
             return Err("OPEN_BROWSER".to_string());
         }
     }
 
-    // Extract countdown timer from page (free users must wait)
+    push_log("INFO", &format!("1fichier: GET OK — has_countdown={}, page_len={}", has_countdown, page_html.len()));
+
+    // Extract countdown timer
     let wait_seconds = {
         let re = regex::Regex::new(r"var\s+ct\s*=\s*(\d+)").unwrap();
         re.captures(&page_html)
@@ -3702,6 +3704,31 @@ async fn download_1fichier(
             .unwrap_or(0)
     };
 
+    push_log("INFO", &format!("1fichier: countdown = {}s", wait_seconds));
+
+    // Wait the countdown with progress bar
+    if wait_seconds > 0 {
+        emit_progress("resolving", 0, &format!("Waiting {}s...", wait_seconds));
+        push_log("INFO", &format!("1fichier: starting {}s countdown", wait_seconds));
+        for elapsed in 0..wait_seconds {
+            if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
+                cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
+                push_log("INFO", &format!("Download cancelled during countdown (queue: {})", queue_id));
+                emit_progress("cancelled", 0, "Download cancelled");
+                return Err("Download cancelled by user".to_string());
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let pct = ((elapsed + 1) as f64 / wait_seconds as f64 * 100.0) as u32;
+            let remaining = wait_seconds - elapsed - 1;
+            emit_progress("resolving", pct, &format!("Waiting {}s...", remaining));
+        }
+        push_log("INFO", "1fichier: countdown finished, sending POST");
+    }
+
+    emit_progress("resolving", 100, "Requesting download link...");
+
+    // Step 2: POST to get download link
+    // Form only needs dl_no_ssl=on (that's what the website JS submits)
     let form_params: Vec<(String, String)> = {
         let mut params = Vec::new();
         params.push(("dl_no_ssl".to_string(), "on".to_string()));
@@ -3711,49 +3738,8 @@ async fn download_1fichier(
         params
     };
 
-    // Quick probe POST: detect IP-level rate-limit BEFORE waiting 60s
-    // If rate-limited: "temporairement limité" → open browser immediately (don't waste 60s)
-    // If not rate-limited but too early: countdown page re-served → proceed to wait
-    if wait_seconds > 0 {
-        emit_progress("resolving", 0, "Checking availability...");
-        let probe_resp = client.post(&url)
-            .header("Referer", &url)
-            .header("Origin", "https://1fichier.com")
-            .form(&form_params)
-            .send()
-            .await
-            .map_err(|e| format!("POST probe failed: {}", e))?;
-        let probe_html = probe_resp.text().await.map_err(|e| e.to_string())?;
-        if probe_html.contains("temporairement limit") || probe_html.contains("forte affluence") {
-            push_log("WARN", &format!("1fichier: rate limit IP détecté au probe — ouverture navigateur pour {}", url));
-            return Err("OPEN_BROWSER".to_string());
-        }
-        // Not rate-limited — proceed with countdown then real POST
-        // Need a fresh GET since the probe POST consumed the session
-        let fresh_resp = client.get(&url).send().await.map_err(|e| format!("Fresh GET failed: {}", e))?;
-        let _ = fresh_resp.text().await;
-    }
+    push_log("INFO", &format!("1fichier: POST to {} with params: {:?}", url, form_params));
 
-    if wait_seconds > 0 {
-        emit_progress("resolving", 0, &format!("Waiting {}s...", wait_seconds));
-        push_log("INFO", &format!("1fichier: attente de {}s avant POST", wait_seconds));
-        for elapsed in 0..wait_seconds {
-            if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
-                cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
-                push_log("INFO", &format!("Download annulé pendant l'attente (queue: {})", queue_id));
-                emit_progress("cancelled", 0, "Download cancelled");
-                return Err("Download cancelled by user".to_string());
-            }
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let pct = ((elapsed + 1) as f64 / wait_seconds as f64 * 100.0) as u32;
-            let remaining = wait_seconds - elapsed - 1;
-            emit_progress("resolving", pct, &format!("Waiting {}s...", remaining));
-        }
-    }
-
-    emit_progress("resolving", 100, "Requesting download link...");
-
-    // Step 2: POST after waiting (1fichier tracks time since GET per IP)
     let post_resp = client.post(&url)
         .header("Referer", &url)
         .header("Origin", "https://1fichier.com")
@@ -3761,6 +3747,10 @@ async fn download_1fichier(
         .send()
         .await
         .map_err(|e| format!("POST failed: {}", e))?;
+
+    let post_status = post_resp.status();
+    let post_final_url = post_resp.url().to_string();
+    push_log("INFO", &format!("1fichier: POST response status={}, final_url={}", post_status, post_final_url));
 
     // Check if we were redirected directly to a CDN URL
     let final_url = post_resp.url().to_string();
@@ -3772,11 +3762,15 @@ async fn download_1fichier(
     } else {
 
     let post_html = post_resp.text().await.map_err(|e| e.to_string())?;
-    push_log("INFO", &format!("1fichier POST response len={}, first 300: {}", post_html.len(), &post_html[..post_html.len().min(300)]));
+    push_log("INFO", &format!("1fichier: POST HTML len={}", post_html.len()));
+    // Log in chunks of 500 to see the full response
+    for (i, chunk) in post_html.as_bytes().chunks(500).enumerate() {
+        if i < 6 {
+            push_log("INFO", &format!("1fichier: POST HTML chunk {}: {}", i, String::from_utf8_lossy(chunk)));
+        }
+    }
 
     // Extract direct download link from response
-    // 1fichier returns the link in an <a> tag with class "ok btn-general"
-    // or in a redirect, or in a link like href="https://....1fichier.com/..."
     {
         use scraper::{Html, Selector};
         let doc = Html::parse_document(&post_html);
@@ -3786,6 +3780,7 @@ async fn download_1fichier(
         let mut found_link = None;
         for el in doc.select(&link_sel) {
             if let Some(href) = el.value().attr("href") {
+                push_log("INFO", &format!("1fichier: found <a.ok> href={}", href));
                 if href.contains("1fichier.com") && !href.contains("/dir/") && href.starts_with("http") {
                     found_link = Some(href.to_string());
                     break;
@@ -3793,11 +3788,12 @@ async fn download_1fichier(
             }
         }
 
-        // Fallback: regex for any 1fichier CDN link (exclude img/css/static assets)
+        // Fallback: regex for any CDN link
         if found_link.is_none() {
             let re = regex::Regex::new(r#"(https?://[a-z0-9\-]+\.1fichier\.com/[^\s"<>]+)"#).unwrap();
             for m in re.find_iter(&post_html) {
                 let candidate = m.as_str();
+                push_log("INFO", &format!("1fichier: regex candidate: {}", candidate));
                 if !candidate.contains("img.1fichier.com")
                     && !candidate.ends_with(".css")
                     && !candidate.ends_with(".js")
@@ -3830,11 +3826,14 @@ async fn download_1fichier(
             return Err("OPEN_BROWSER".to_string());
         }
 
-        found_link.unwrap()
+        let link = found_link.unwrap();
+        push_log("INFO", &format!("1fichier: download link extracted: {}", link));
+        link
     }
     };
 
     emit_progress("downloading", 0, "Starting download...");
+    push_log("INFO", &format!("1fichier: starting download from: {}", download_link));
 
     // Step 3: Download the file
     let dl_resp = client.get(&download_link)
