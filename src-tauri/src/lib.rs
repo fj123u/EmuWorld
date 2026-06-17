@@ -3662,7 +3662,8 @@ async fn download_1fichier(
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .redirect(reqwest::redirect::Policy::limited(10))
-        .timeout(std::time::Duration::from_secs(600))
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .read_timeout(std::time::Duration::from_secs(300))
         .cookie_store(true)
         .build()
         .map_err(|e| format!("Client build error: {}", e))?;
@@ -3763,12 +3764,6 @@ async fn download_1fichier(
 
     let post_html = post_resp.text().await.map_err(|e| e.to_string())?;
     push_log("INFO", &format!("1fichier: POST HTML len={}", post_html.len()));
-    // Log in chunks of 500 to see the full response
-    for (i, chunk) in post_html.as_bytes().chunks(500).enumerate() {
-        if i < 6 {
-            push_log("INFO", &format!("1fichier: POST HTML chunk {}: {}", i, String::from_utf8_lossy(chunk)));
-        }
-    }
 
     // Extract direct download link from response
     {
@@ -3780,7 +3775,6 @@ async fn download_1fichier(
         let mut found_link = None;
         for el in doc.select(&link_sel) {
             if let Some(href) = el.value().attr("href") {
-                push_log("INFO", &format!("1fichier: found <a.ok> href={}", href));
                 if href.contains("1fichier.com") && !href.contains("/dir/") && href.starts_with("http") {
                     found_link = Some(href.to_string());
                     break;
@@ -3793,7 +3787,6 @@ async fn download_1fichier(
             let re = regex::Regex::new(r#"(https?://[a-z0-9\-]+\.1fichier\.com/[^\s"<>]+)"#).unwrap();
             for m in re.find_iter(&post_html) {
                 let candidate = m.as_str();
-                push_log("INFO", &format!("1fichier: regex candidate: {}", candidate));
                 if !candidate.contains("img.1fichier.com")
                     && !candidate.ends_with(".css")
                     && !candidate.ends_with(".js")
