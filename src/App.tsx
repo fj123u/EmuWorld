@@ -1417,6 +1417,19 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.5.0", date: "2026-06-17", changes: [
+      "⬇️ Téléchargement 1fichier fonctionnel: countdown 60s avec barre de progression + download direct",
+      "⚡ Détection instantanée du rate-limit 1fichier: ouverture navigateur immédiate au lieu de 60s d'attente inutile",
+      "❌ Bouton annuler sur tous les downloads (Vimm + 1fichier) pendant le téléchargement ou le countdown",
+      "🔧 Fix timeout downloads: les gros fichiers (>10 min) ne sont plus coupés à 0.5 MB/s",
+      "📂 Collections Switch intégrées (1010 jeux) + résolution des noms en temps réel par batch",
+      "📂 Noms des collections de base persistés (Wii U + Switch) — disponibles sans re-fetch",
+      "🔍 Fix recherche collections: les points et underscores matchent désormais les espaces",
+      "🐛 Fix RGS visible derrière une collection ouverte",
+      "🐛 Fix résultats Vimm périmés (race condition avec recherche rapide)",
+      "🎮 RetroArch auto-installé quand on installe un core retroarch-*",
+      "📋 Logging détaillé sur toutes les actions majeures",
+    ] },
     { version: "2.4.1", date: "2026-06-16", changes: [
       "🔐 Fix OAuth Google/Discord: deep-link direct + polling de session — plus de chargement infini",
       "🔐 Fix inscription email: désactivation de la confirmation obligatoire + redirect corrigé",
