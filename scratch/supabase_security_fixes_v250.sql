@@ -24,8 +24,11 @@ CREATE POLICY "Authenticated can view activity" ON activity_feed
       auth.uid() = user_id
       OR EXISTS (
         SELECT 1 FROM friendships
-        WHERE (user_id = auth.uid() AND friend_id = activity_feed.user_id AND status = 'accepted')
-           OR (user_id = activity_feed.user_id AND friend_id = auth.uid() AND status = 'accepted')
+        WHERE status = 'accepted'
+          AND (
+            (requester_id = auth.uid() AND addressee_id = activity_feed.user_id)
+            OR (requester_id = activity_feed.user_id AND addressee_id = auth.uid())
+          )
       )
     )
   );
@@ -52,8 +55,8 @@ CREATE POLICY "Users can send messages to friends" ON messages
       SELECT 1 FROM friendships
       WHERE status = 'accepted'
         AND (
-          (user_id = auth.uid() AND friend_id = receiver_id)
-          OR (user_id = receiver_id AND friend_id = auth.uid())
+          (requester_id = auth.uid() AND addressee_id = receiver_id)
+          OR (requester_id = receiver_id AND addressee_id = auth.uid())
         )
     )
   );
