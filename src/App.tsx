@@ -1708,6 +1708,9 @@ export default function App() {
   const [newPseudo, setNewPseudo] = useState("");
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
+  // Announcements system
+  const [announcement, setAnnouncement] = useState<{ id: string; title: string; message: string; type: string; link_url?: string; link_label?: string } | null>(null);
+
   // Fetch profile from Supabase
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -1757,6 +1760,24 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, [fetchProfile]);
+
+  // Fetch announcements at startup
+  useEffect(() => {
+    const APP_VERSION = "2.5.1";
+    const dismissed = localStorage.getItem("emuworld_dismissed_announcements") || "";
+    supabase.from("announcements").select("*").eq("active", true).then(({ data }) => {
+      if (!data || data.length === 0) return;
+      const now = new Date().toISOString();
+      const valid = data.filter((a: { id: string; expires_at?: string; min_version?: string; max_version?: string }) => {
+        if (a.expires_at && a.expires_at < now) return false;
+        if (a.min_version && APP_VERSION < a.min_version) return false;
+        if (a.max_version && APP_VERSION > a.max_version) return false;
+        if (dismissed.includes(a.id)) return false;
+        return true;
+      });
+      if (valid.length > 0) setAnnouncement(valid[0]);
+    });
+  }, []);
 
   // Listen for deep-link OAuth callbacks
   useEffect(() => {
@@ -10023,6 +10044,31 @@ export default function App() {
           >
             <Download size={20} />
           </button>
+        )}
+
+        {announcement && (
+          <div className="modal-backdrop" onClick={() => {
+            localStorage.setItem("emuworld_dismissed_announcements", (localStorage.getItem("emuworld_dismissed_announcements") || "") + announcement.id + ",");
+            setAnnouncement(null);
+          }}>
+            <motion.div className="install-choice-modal" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} onClick={(e) => e.stopPropagation()} style={{ borderLeft: `4px solid ${announcement.type === "critical" ? "#ef4444" : announcement.type === "warning" ? "#f59e0b" : "var(--accent)"}` }}>
+              <h3 style={{ marginBottom: 12 }}>{announcement.type === "critical" ? "⚠️" : announcement.type === "warning" ? "⚠️" : "ℹ️"} {announcement.title}</h3>
+              <p style={{ color: "var(--text-secondary)", marginBottom: 16, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+                {announcement.message}
+              </p>
+              {announcement.link_url && (
+                <a href={announcement.link_url} target="_blank" rel="noopener noreferrer" className="btn btn--primary gamepad-nav-item" style={{ marginBottom: 8, display: "inline-flex" }}>
+                  {announcement.link_label || announcement.link_url}
+                </a>
+              )}
+              <button className="btn gamepad-nav-item" onClick={() => {
+                localStorage.setItem("emuworld_dismissed_announcements", (localStorage.getItem("emuworld_dismissed_announcements") || "") + announcement.id + ",");
+                setAnnouncement(null);
+              }} style={{ marginTop: 8 }}>
+                {t("common.close")}
+              </button>
+            </motion.div>
+          </div>
         )}
 
         {showEmailConfirmModal && (
