@@ -300,6 +300,16 @@ body {
   text-transform: lowercase;
   opacity: 0.85;
 }
+.titlebar__version {
+  position: absolute;
+  right: 140px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  opacity: 0.5;
+  pointer-events: none;
+  user-select: none;
+}
 
 /* Update-available pill — slips in next to the clock when a newer
    version is detected. Shows download progress while installing. */

@@ -5196,6 +5196,7 @@ export default function App() {
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
+        <span className="titlebar__version" data-tauri-drag-region>v2.5.1</span>
         {updateAvailable && (
           <button
             className="titlebar__update"
