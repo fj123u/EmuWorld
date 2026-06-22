@@ -675,6 +675,58 @@ const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
   );
 };
 
+const EMU_LOGO_URL: Record<string, string> = {
+  "mesen": "https://avatars.githubusercontent.com/u/9798512?s=200",
+  "mgba": "https://raw.githubusercontent.com/mgba-emu/mgba/master/res/mgba-256.png",
+  "snes9x": "https://avatars.githubusercontent.com/u/6520071?s=200",
+  "project64": "https://avatars.githubusercontent.com/u/7526194?s=200",
+  "dolphin": "https://raw.githubusercontent.com/dolphin-emu/dolphin/master/Data/dolphin-emu.png",
+  "melonds": "https://raw.githubusercontent.com/melonDS-emu/melonDS/master/res/icon/melon_256x256.png",
+  "azahar": "https://avatars.githubusercontent.com/u/199702953?s=200",
+  "cemu": "https://avatars.githubusercontent.com/u/28238632?s=200",
+  "ryubing": "https://git.ryujinx.app/avatars/aa8ff6e2e1d06d4d2f5ec72eda33d3db5b9fd2b8a5eab9d5eb4fdbc5ef61dab0?size=200",
+  "duckstation": "https://raw.githubusercontent.com/stenzek/duckstation/master/data/resources/images/duck.png",
+  "pcsx2": "https://avatars.githubusercontent.com/u/6278711?s=200",
+  "rpcs3": "https://avatars.githubusercontent.com/u/5765698?s=200",
+  "ppsspp": "https://avatars.githubusercontent.com/u/3479125?s=200",
+  "flycast": "https://avatars.githubusercontent.com/u/44587292?s=200",
+  "xemu": "https://avatars.githubusercontent.com/u/69767480?s=200",
+  "xenia": "https://avatars.githubusercontent.com/u/54044194?s=200",
+};
+
+const RETROARCH_LOGO = "https://raw.githubusercontent.com/libretro/RetroArch/master/media/retroarch-96x96.png";
+
+const EmuLogo = ({ id, consoleName, size = 40 }: { id: string; consoleName: string; size?: number }) => {
+  const [failed, setFailed] = useState(false);
+  const url = EMU_LOGO_URL[id];
+
+  if (id.startsWith("retroarch-")) {
+    return (
+      <img
+        className="emu-logo"
+        src={RETROARCH_LOGO}
+        alt="RetroArch"
+        style={{ width: size, height: size, objectFit: "contain", borderRadius: 8 }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
+  if (!url || failed) {
+    return <ConsoleLogo name={consoleName} size={size} />;
+  }
+
+  return (
+    <img
+      className="emu-logo"
+      src={url}
+      alt={id}
+      style={{ width: size, height: size, objectFit: "contain", borderRadius: 8 }}
+      onError={() => setFailed(true)}
+    />
+  );
+};
+
 /* Short human-readable playtime (e.g. "1h 30m", "24m", "45s"). */
 const formatPlaytime = (seconds: number): string => {
   if (!seconds) return "";
@@ -5816,7 +5868,7 @@ export default function App() {
                 const renderEmuCard = (emu: EmulatorInfo) => (
                   <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                     <div className="emu-card__header">
-                      <div className="emu-card__icon"><ConsoleLogo name={emu.console} size={40} /></div>
+                      <div className="emu-card__icon"><EmuLogo id={emu.id} consoleName={emu.console} size={40} /></div>
                       <div className="emu-card__info">
                         <div className="emu-card__name">{emu.name}</div>
                         <div className="emu-card__console">{emu.console}</div>
@@ -6810,7 +6862,7 @@ export default function App() {
                     return (
                     <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                       <div className="emu-card__header">
-                        <div className="emu-card__icon"><ConsoleLogo name={emu.console} size={40} /></div>
+                        <div className="emu-card__icon"><EmuLogo id={emu.id} consoleName={emu.console} size={40} /></div>
                         <div className="emu-card__info">
                           <div className="emu-card__name">{emu.name}</div>
                           <div className="emu-card__console">{emu.console}</div>
