@@ -1978,8 +1978,9 @@ export default function App() {
             updated_at: new Date().toISOString(),
           });
           setProfile({ id: data.user.id, username: loginPseudo, public_profile: false, avatar_url: null } as any);
+          setUser(data.user);
           setShowLoginModal(false);
-          setShowEmailConfirmModal(true);
+          showToast(t('toast.connected'), 'success');
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
