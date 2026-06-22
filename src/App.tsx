@@ -700,16 +700,8 @@ const EmuLogo = ({ id, consoleName, size = 40 }: { id: string; consoleName: stri
   const [failed, setFailed] = useState(false);
   const url = EMU_LOGO_URL[id];
 
-  if (id.startsWith("retroarch-")) {
-    return (
-      <img
-        className="emu-logo"
-        src={RETROARCH_LOGO}
-        alt="RetroArch"
-        style={{ width: size, height: size, objectFit: "contain", borderRadius: 8 }}
-        onError={() => setFailed(true)}
-      />
-    );
+  if (id.startsWith("retroarch")) {
+    return <ConsoleLogo name={consoleName} size={size} />;
   }
 
   if (!url || failed) {
