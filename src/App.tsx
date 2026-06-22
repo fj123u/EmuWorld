@@ -409,12 +409,28 @@ const BRAND_EMOJI_FALLBACK: Record<string, string> = {
   "Multi-System": "🔄",
 };
 
-const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
-  const slug = BRAND_REPRESENTATIVE_CONSOLE[brand];
-  const emoji = BRAND_EMOJI_FALLBACK[brand] || "🎮";
-  const [failed, setFailed] = useState(false);
+const BRAND_CARBON_SLUG: Record<string, string | null> = {
+  "Nintendo": "nes",
+  "Sony": "psx",
+  "Sega": "megadrive",
+  "Microsoft": "xbox",
+  "Atari": "atari",
+  "NEC": "pcengine",
+  "SNK": "neogeo",
+  "Panasonic": "3do",
+  "Commodore": "amiga",
+  "Arcade": "arcade",
+  "Arcade & Retro": "arcade",
+  "Multi-System": "retroarch",
+};
 
-  if (!slug || failed) {
+const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
+  const carbonSlug = BRAND_CARBON_SLUG[brand];
+  const retroarchSlug = BRAND_REPRESENTATIVE_CONSOLE[brand];
+  const emoji = BRAND_EMOJI_FALLBACK[brand] || "🎮";
+  const [level, setLevel] = useState<0 | 1 | 2>(0);
+
+  if (level === 2 || (!carbonSlug && !retroarchSlug)) {
     return (
       <span
         className="brand-logo brand-logo--emoji"
@@ -425,13 +441,26 @@ const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
       </span>
     );
   }
+
+  if (level === 1 && retroarchSlug) {
+    return (
+      <img
+        className="brand-logo"
+        src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(retroarchSlug)}.png`}
+        alt={brand}
+        style={{ height: size, width: size * 1.6, objectFit: "contain", filter: "brightness(0) invert(1)" }}
+        onError={() => setLevel(2)}
+      />
+    );
+  }
+
   return (
     <img
       className="brand-logo"
-      src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(slug)}.png`}
+      src={`https://raw.githubusercontent.com/fabricecaruso/es-theme-carbon/master/art/logos/${carbonSlug}.svg`}
       alt={brand}
       style={{ height: size, width: size * 1.6, objectFit: "contain" }}
-      onError={() => setFailed(true)}
+      onError={() => setLevel(retroarchSlug ? 1 : 2)}
     />
   );
 };
@@ -540,12 +569,78 @@ const CONSOLE_RETROARCH_SLUG: Record<string, string> = {
   "CD-i": "Philips - CD-i",
 };
 
-const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
-  const slug = CONSOLE_RETROARCH_SLUG[name];
-  const emoji = CONSOLE_ICONS[name] || "🎮";
-  const [failed, setFailed] = useState(false);
+const CONSOLE_CARBON_SLUG: Record<string, string> = {
+  "NES": "nes",
+  "Nes": "nes",
+  "Famicom": "nes",
+  "Super Nintendo": "snes",
+  "SNES": "snes",
+  "Super Nes": "snes",
+  "Nintendo 64": "n64",
+  "N64": "n64",
+  "Game Boy": "gb",
+  "Game Boy Color": "gbc",
+  "GBC": "gbc",
+  "Game Boy Advance": "gba",
+  "GBA": "gba",
+  "Nintendo DS": "nds",
+  "NDS": "nds",
+  "Nintendo 3DS": "3ds",
+  "3DS": "3ds",
+  "GameCube": "gc",
+  "Gamecube": "gc",
+  "GameCube / Wii": "gc",
+  "GameCube - Wii": "gc",
+  "Wii": "wii",
+  "Wii U": "wiiu",
+  "WiiU": "wiiu",
+  "Nintendo Switch": "switch",
+  "Switch": "switch",
+  "Virtual Boy": "virtualboy",
+  "VirtualBoy": "virtualboy",
+  "PlayStation 1": "psx",
+  "PS1": "psx",
+  "PlayStation": "psx",
+  "PlayStation 2": "ps2",
+  "PS2": "ps2",
+  "PlayStation 3": "ps3",
+  "PS3": "ps3",
+  "PSP": "psp",
+  "PlayStation Portable": "psp",
+  "Mega Drive": "megadrive",
+  "Genesis": "genesis",
+  "Master System": "mastersystem",
+  "Game Gear": "gamegear",
+  "Saturn": "saturn",
+  "Dreamcast": "dreamcast",
+  "Sega CD": "segacd",
+  "Sega 32X": "sega32x",
+  "32X": "sega32x",
+  "Xbox": "xbox",
+  "Xbox 360": "xbox360",
+  "Atari 2600": "atari2600",
+  "Atari 5200": "atari5200",
+  "Atari 7800": "atari7800",
+  "Jaguar": "atarijaguar",
+  "Lynx": "atarilynx",
+  "PC Engine": "pcengine",
+  "TurboGrafx-16": "pcengine",
+  "TG16": "pcengine",
+  "TurboGrafx-CD": "pcenginecd",
+  "Neo-Geo": "neogeo",
+  "Arcade": "arcade",
+  "WonderSwan": "wonderswan",
+  "DOS / Win 3.x": "dos",
+  "Multi-System": "retroarch",
+};
 
-  if (!slug || failed) {
+const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
+  const carbonSlug = CONSOLE_CARBON_SLUG[name];
+  const retroarchSlug = CONSOLE_RETROARCH_SLUG[name];
+  const emoji = CONSOLE_ICONS[name] || "🎮";
+  const [level, setLevel] = useState<0 | 1 | 2>(0);
+
+  if (level === 2 || (!carbonSlug && !retroarchSlug)) {
     return (
       <span
         className="console-logo console-logo--emoji"
@@ -556,13 +651,26 @@ const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
       </span>
     );
   }
+
+  if (level === 1 && retroarchSlug) {
+    return (
+      <img
+        className="console-logo"
+        src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(retroarchSlug)}.png`}
+        alt={name}
+        style={{ width: size * 1.6, height: size, objectFit: "contain", filter: "brightness(0) invert(1)" }}
+        onError={() => setLevel(2)}
+      />
+    );
+  }
+
   return (
     <img
       className="console-logo"
-      src={`https://raw.githubusercontent.com/libretro/retroarch-assets/master/xmb/monochrome/png/${encodeURIComponent(slug)}.png`}
+      src={`https://raw.githubusercontent.com/fabricecaruso/es-theme-carbon/master/art/logos/${carbonSlug}.svg`}
       alt={name}
       style={{ width: size * 1.6, height: size, objectFit: "contain" }}
-      onError={() => setFailed(true)}
+      onError={() => setLevel(retroarchSlug ? 1 : 2)}
     />
   );
 };
