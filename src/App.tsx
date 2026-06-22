@@ -634,7 +634,7 @@ const CONSOLE_CARBON_SLUG: Record<string, string> = {
   "Multi-System": "retroarch",
 };
 
-const ConsoleLogo = ({ name, size = 48 }: { name: string; size?: number }) => {
+const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
   const carbonSlug = CONSOLE_CARBON_SLUG[name];
   const retroarchSlug = CONSOLE_RETROARCH_SLUG[name];
   const emoji = CONSOLE_ICONS[name] || "🎮";
