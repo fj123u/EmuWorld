@@ -5816,7 +5816,7 @@ export default function App() {
                 const renderEmuCard = (emu: EmulatorInfo) => (
                   <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                     <div className="emu-card__header">
-                      <div className="emu-card__icon">{emu.icon}</div>
+                      <div className="emu-card__icon"><ConsoleLogo name={emu.console} size={40} /></div>
                       <div className="emu-card__info">
                         <div className="emu-card__name">{emu.name}</div>
                         <div className="emu-card__console">{emu.console}</div>
@@ -6810,7 +6810,7 @@ export default function App() {
                     return (
                     <motion.div key={emu.id} className="emu-card" data-emu-id={emu.id}>
                       <div className="emu-card__header">
-                        <div className="emu-card__icon">{emu.icon}</div>
+                        <div className="emu-card__icon"><ConsoleLogo name={emu.console} size={40} /></div>
                         <div className="emu-card__info">
                           <div className="emu-card__name">{emu.name}</div>
                           <div className="emu-card__console">{emu.console}</div>
