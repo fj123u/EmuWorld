@@ -1831,15 +1831,15 @@ export default function App() {
     try {
       const { error } = await supabase
         .from('profiles')
-        .upsert({ 
-          id: user.id, 
-          username: newPseudo,
+        .update({
+          username: newPseudo.trim(),
           updated_at: new Date().toISOString()
-        });
-      
+        })
+        .eq('id', user.id);
+
       if (error) throw error;
       await fetchProfile(user.id);
-      showToast('Username updated! ✨', 'success');
+      showToast(t('toast.usernameUpdated'), 'success');
     } catch (e: any) {
       showToast(`Update error: ${e.message}`, 'error');
     } finally {
