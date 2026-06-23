@@ -1379,26 +1379,40 @@ fn normalize_console_folder(folder: &str) -> String {
 /// Detect if a ROM file is a game update or DLC (should be hidden from the library)
 fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
     let lower = name.to_lowercase();
-    
-    // Keyword-based detection (DLC, UPD, etc.)
-    if lower.contains("upd") || lower.contains("dlc") || lower.contains("patch") || lower.contains("update") {
-        return true;
-    }
-    
+
+    // "Incl. DLC" / "+ DLC" / "with DLC" patterns mean base game bundled with DLC — keep it
+    let has_bundled_dlc = lower.contains("incl") && lower.contains("dlc")
+        || lower.contains("+ dlc")
+        || lower.contains("+dlc")
+        || lower.contains("with dlc")
+        || lower.contains("all dlc")
+        || lower.contains("dlcs");
+
     // Switch Title ID detection: Extract hex IDs from brackets
-    // Base game IDs MUST end in 000. 
+    // Base game IDs MUST end in 000.
     // Updates end in 800, DLCs end in 001-7FF.
     if let Some(id) = extract_title_id(name) {
-        // Switch check
         if id.starts_with("010") && !id.ends_with("000") {
-            return true; 
+            return true;
         }
         // Wii U check: Base=00050000, Update=0005000E, DLC=0005000C
         if id.starts_with("0005000E") || id.starts_with("0005000C") {
             return true;
         }
     }
-    
+
+    // Keyword-based detection — but skip if bundled DLC pattern detected
+    if !has_bundled_dlc {
+        if lower.contains("dlc") || lower.contains("update") || lower.contains("patch") {
+            return true;
+        }
+    }
+
+    // "upd" alone (not part of "update" already caught, but standalone like "[UPD]")
+    if !has_bundled_dlc && lower.contains("[upd]") {
+        return true;
+    }
+
     // Additional Switch specific: Check for version strings in brackets like [v65536]
     // Base games are usually [v0].
     if lower.contains("[v0]") {
@@ -1407,12 +1421,7 @@ fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
         // likely an update like [v65536]
         return true;
     }
-    
-    // Folder-based: if path contains "update" or "dlc" folder (common in multi-folder dumps)
-    if (lower.contains("update") || lower.contains("dlc")) || (lower.contains("patch") && !lower.contains("game")) {
-        return true;
-    }
-    
+
     false
 }
 
