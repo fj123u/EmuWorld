@@ -676,10 +676,8 @@ const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
 };
 
 const EMU_LOGO_URL: Record<string, string> = {
-  "mesen": "https://avatars.githubusercontent.com/u/9798512?s=200",
+  "mesen": "https://raw.githubusercontent.com/SourMesen/Mesen2/master/UI/Assets/Icon.png",
   "mgba": "https://raw.githubusercontent.com/mgba-emu/mgba/master/res/mgba-256.png",
-  "snes9x": "https://avatars.githubusercontent.com/u/6520071?s=200",
-  "project64": "https://avatars.githubusercontent.com/u/7526194?s=200",
   "dolphin": "https://raw.githubusercontent.com/dolphin-emu/dolphin/master/Data/dolphin-emu.png",
   "melonds": "https://raw.githubusercontent.com/melonDS-emu/melonDS/master/res/icon/melon_256x256.png",
   "azahar": "https://avatars.githubusercontent.com/u/199702953?s=200",
