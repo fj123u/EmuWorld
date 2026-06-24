@@ -631,7 +631,8 @@ const CONSOLE_CARBON_SLUG: Record<string, string> = {
   "Arcade": "arcade",
   "WonderSwan": "wonderswan",
   "DOS / Win 3.x": "dos",
-  "Multi-System": "retroarch",
+  "CD-i": "cdi",
+  "CDi": "cdi",
 };
 
 const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
@@ -680,16 +681,15 @@ const EMU_LOGO_URL: Record<string, string> = {
   "mgba": "https://raw.githubusercontent.com/mgba-emu/mgba/master/res/mgba-256.png",
   "dolphin": "https://raw.githubusercontent.com/dolphin-emu/dolphin/master/Data/dolphin-emu.png",
   "melonds": "https://raw.githubusercontent.com/melonDS-emu/melonDS/master/res/icon/melon_256x256.png",
-  "azahar": "https://avatars.githubusercontent.com/u/199702953?s=200",
-  "cemu": "https://avatars.githubusercontent.com/u/28238632?s=200",
-  "ryubing": "https://git.ryujinx.app/avatars/aa8ff6e2e1d06d4d2f5ec72eda33d3db5b9fd2b8a5eab9d5eb4fdbc5ef61dab0?size=200",
+  "azahar": "https://raw.githubusercontent.com/azahar-emu/azahar/master/dist/azahar.svg",
+  "cemu": "https://raw.githubusercontent.com/cemu-project/Cemu/main/src/resource/logo_icon.png",
   "duckstation": "https://raw.githubusercontent.com/stenzek/duckstation/master/data/resources/images/duck.png",
   "pcsx2": "https://avatars.githubusercontent.com/u/6278711?s=200",
-  "rpcs3": "https://avatars.githubusercontent.com/u/5765698?s=200",
-  "ppsspp": "https://avatars.githubusercontent.com/u/3479125?s=200",
-  "flycast": "https://avatars.githubusercontent.com/u/44587292?s=200",
-  "xemu": "https://avatars.githubusercontent.com/u/69767480?s=200",
-  "xenia": "https://avatars.githubusercontent.com/u/54044194?s=200",
+  "rpcs3": "https://raw.githubusercontent.com/RPCS3/rpcs3/master/rpcs3/rpcs3.png",
+  "ppsspp": "https://raw.githubusercontent.com/hrydgard/ppsspp/master/icons/hicolor/256x256/apps/ppsspp.png",
+  "flycast": "https://raw.githubusercontent.com/flyinghead/flycast/master/shell/linux/flycast.png",
+  "xemu": "https://raw.githubusercontent.com/xemu-project/xemu/master/ui/icons/xemu.svg",
+  "xenia": "https://raw.githubusercontent.com/xenia-canary/xenia-canary/canary_experimental/assets/icon/256.png",
 };
 
 const RETROARCH_LOGO = "https://raw.githubusercontent.com/libretro/RetroArch/master/media/retroarch-96x96.png";
@@ -698,7 +698,18 @@ const EmuLogo = ({ id, consoleName, size = 40 }: { id: string; consoleName: stri
   const [failed, setFailed] = useState(false);
   const url = EMU_LOGO_URL[id];
 
-  if (id.startsWith("retroarch")) {
+  if (id === "retroarch") {
+    return (
+      <img
+        className="emu-logo"
+        src="https://raw.githubusercontent.com/libretro/RetroArch/master/media/retroarch-96x96.png"
+        alt="RetroArch"
+        style={{ width: size, height: size, objectFit: "contain", borderRadius: 8 }}
+      />
+    );
+  }
+
+  if (id.startsWith("retroarch-")) {
     return <ConsoleLogo name={consoleName} size={size} />;
   }
 
