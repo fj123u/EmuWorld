@@ -2197,17 +2197,36 @@ fn clean_game_name(name: &str) -> String {
     let re_catalog = Regex::new(r"^[A-Za-z0-9]{2,6}\d{2,5}\s*-\s*").unwrap();
     cleaned = re_catalog.replace(&cleaned, "").to_string();
 
-    // Strip common scene keywords
+    // Strip scene group after " - " at the end (e.g. "Pokemon Sword - kaze-nico")
+    if let Some(pos) = cleaned.rfind(" - ") {
+        let after = &cleaned[pos + 3..];
+        if after.split_whitespace().count() <= 3 {
+            cleaned = cleaned[..pos].to_string();
+        }
+    }
+
+    // Strip version patterns like V1.3.2, v1 3 2, V2 0 etc.
+    let re_version = Regex::new(r"(?i)\bV\d[\d .]*\d\b|\bV\d+\b").unwrap();
+    cleaned = re_version.replace_all(&cleaned, "").to_string();
+
+    // Strip "Incl. N DLCs" / "Incl DLC" / "+ 2 DLC" patterns as a whole before keyword strip
+    let re_incl_dlc = Regex::new(r"(?i)\b(incl\.?\s*\d*\s*dlcs?|with\s+\d*\s*dlcs?|\+\s*\d*\s*dlcs?|all\s+dlcs?)\b").unwrap();
+    cleaned = re_incl_dlc.replace_all(&cleaned, "").to_string();
+
+    // Strip common scene keywords and region/format tags
     let scene_keywords = vec![
         "PROPER", "REPACK", "NSW", "MULTi", "READNFO", "INTERNAL", "D0WNLOAD",
-        "BigBlueBox", "Kaze-Nico", "kaze-nico", "v1.1", "v1.0", "Update", "DLC", "Patch",
-        "Collection", "v0", "v65536", "nsw2u", "NKA", "NC", "NT",
-        "decrypted", "encrypted", "trimmed", "undub"
+        "BigBlueBox", "Kaze-Nico", "kaze-nico", "Update", "DLC", "DLCs", "Patch",
+        "Collection", "nsw2u", "NKA", "NC", "NT",
+        "decrypted", "encrypted", "trimmed", "undub",
+        "Eur", "USA", "EUR", "JPN", "World",
+        "SuperXCi", "SuperNSP", "XCI", "NSP", "NSZ",
     ];
     for kw in scene_keywords {
-        let re = Regex::new(&format!(r"(?i)\b{}\b", kw)).unwrap();
+        let re = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(kw))).unwrap();
         cleaned = re.replace_all(&cleaned, "").to_string();
     }
+
 
     // Final cleanup
     cleaned = cleaned
