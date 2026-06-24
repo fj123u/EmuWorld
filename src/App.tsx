@@ -1579,6 +1579,17 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.5.2", date: "2026-06-24", changes: [
+      "🎨 Logos émulateurs: vrais logos officiels (Dolphin, mGBA, DuckStation, etc.) dans les cartes",
+      "🎨 Logos consoles: SVG couleur es-theme-carbon pour toutes les consoles (NES, SNES, Switch, PS3…)",
+      "🎨 RetroArch: chaque variante affiche le logo de sa console cible au lieu du logo générique",
+      "🎨 Visibilité améliorée: filtre brightness + taille augmentée sur fond sombre",
+      "🐛 Fix ROMs bundled DLC: les fichiers 'Incl. 2 DLCs' ne sont plus filtrés",
+      "🐛 Fix covers: meilleur nettoyage des noms (versions, tags scene, régions, SuperXCi)",
+      "🐛 Fix covers: ajout Title IDs Pokemon Sword/Shield/BDSP/Let's Go pour tinfoil.media",
+      "🐛 Fix profil: modification du pseudo fonctionne à nouveau",
+      "🐛 Fix inscription: suppression du modal confirmation email (quota Supabase dépassé)",
+    ] },
     { version: "2.5.1", date: "2026-06-17", changes: [
       "🔒 Audit sécurité: 18 vulnérabilités corrigées (P03-P29, N01, Bug 9-12)",
       "🛡️ DPAPI: les credentials B2 et RetroAchievements sont chiffrés sur disque (Windows)",
@@ -5358,7 +5369,7 @@ export default function App() {
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
-        <span className="titlebar__version" data-tauri-drag-region>v2.5.1</span>
+        <span className="titlebar__version" data-tauri-drag-region>v2.5.2</span>
         {updateAvailable && (
           <button
             className="titlebar__update"
