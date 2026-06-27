@@ -4608,9 +4608,16 @@ async fn download_vimm_rom(
     console: String,
 ) -> Result<String, String> {
     push_log("INFO", &format!("Téléchargement: {} ({})", game_name, console));
+    if !game_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err("Invalid game_id".to_string());
+    }
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
-    let dest_dir = roms_dir.join(&console);
+    let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
+    let dest_dir = roms_dir.join(&safe_console);
+    if !dest_dir.starts_with(&roms_dir) {
+        return Err("Invalid console directory".to_string());
+    }
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
     }
