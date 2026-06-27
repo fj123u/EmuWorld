@@ -301,6 +301,12 @@ fn get_config() -> AppConfig {
 
 #[tauri::command]
 fn save_config(config: AppConfig) -> Result<(), String> {
+    // Block UNC paths and traversal attempts
+    for dir in [&config.roms_directory, &config.emulators_directory, &config.covers_directory] {
+        if dir.starts_with("\\\\") || dir.starts_with("//") || dir.contains("..") {
+            return Err("Invalid directory path (UNC and .. are not allowed)".to_string());
+        }
+    }
     let path = config_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
