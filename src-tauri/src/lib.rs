@@ -3588,6 +3588,7 @@ async fn scrape_1fichier_dir(url: String) -> Result<Vec<RgsFile>, String> {
         .map_err(|e| e.to_string())?;
 
     // Ensure the AF cookie is set to avoid reloads/redirects
+    // AF cookie = 1fichier adult-filter consent flag (not auth/session)
     let response = client.get(&url)
         .header("Cookie", "AF=3186111")
         .send()
