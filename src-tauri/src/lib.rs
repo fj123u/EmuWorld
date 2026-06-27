@@ -728,7 +728,8 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
             println!("[Extract] Using 7z: {}", sz_path.display());
             let mut sz_cmd = Command::new(sz_path);
             sz_cmd.args(&["x", "-y", &format!("-o{}", install_dir.display())])
-                .arg(archive_path);
+                .arg(archive_path)
+                .current_dir(sz_path.parent().unwrap_or(install_dir));
             #[cfg(target_os = "windows")]
             {
                 use std::os::windows::process::CommandExt;
