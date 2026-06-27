@@ -5416,7 +5416,7 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     let filepath = base.join(&filename);
     let path_str = filepath.to_string_lossy().to_string();
 
-    let safe_path = path_str.replace('\\', "/").replace('\'', "_");
+    let safe_path = path_str.replace('\\', "/").replace('\'', "").replace('$', "").replace('`', "");
     let ps_script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()",
         safe_path
