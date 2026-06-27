@@ -4160,10 +4160,8 @@ fn get_myrient_consoles() -> Result<Vec<MyrientConsole>, String> {
 
 #[tauri::command]
 async fn browse_myrient(console_url: String, console_id: String) -> Result<Vec<MyrientFile>, String> {
-    // Validate URL to prevent SSRF — only allow known domains
-    let allowed_domains = ["myrient.erista.me", "myrient.erista.me/"];
-    let is_safe = allowed_domains.iter().any(|d| console_url.starts_with(&format!("https://{}", d)));
-    if !is_safe {
+    // Validate URL to prevent SSRF — only allow exact domain
+    if !console_url.starts_with("https://myrient.erista.me/") {
         return Err("Invalid URL — only myrient.erista.me is allowed".to_string());
     }
 
@@ -4237,14 +4235,22 @@ async fn download_myrient_rom(
     file_name: String,
 ) -> Result<String, String> {
     use tauri::Emitter;
+    if !url.starts_with("https://myrient.erista.me/") {
+        return Err("Invalid URL — only myrient.erista.me is allowed".to_string());
+    }
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
-    let dest_dir = roms_dir.join(&console);
+    let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
+    let safe_file = file_name.replace("..", "").replace('/', "").replace('\\', "");
+    let dest_dir = roms_dir.join(&safe_console);
+    if !dest_dir.starts_with(&roms_dir) {
+        return Err("Invalid console directory".to_string());
+    }
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
     }
 
-    let dest = dest_dir.join(&file_name);
+    let dest = dest_dir.join(&safe_file);
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
