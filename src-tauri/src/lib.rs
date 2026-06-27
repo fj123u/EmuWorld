@@ -5725,12 +5725,27 @@ fn open_path(path: String) -> Result<(), String> {
             || path_lower.starts_with("\\\\")
             || path_lower.starts_with("http")
             || path_lower.starts_with("ftp")
+            || path_lower.contains("..")
         {
             return Err("Type de chemin non autorisé".to_string());
         }
         let p = PathBuf::from(&path);
         if !p.is_dir() {
             return Err("Ce chemin n'est pas un dossier valide".to_string());
+        }
+        let config = get_config();
+        let allowed_roots = [
+            emuworld_base_dir(),
+            PathBuf::from(&config.roms_directory),
+            PathBuf::from(&config.emulators_directory),
+            PathBuf::from(&config.covers_directory),
+        ];
+        let canonical = fs::canonicalize(&p).unwrap_or(p.clone());
+        let is_allowed = allowed_roots.iter().any(|root| {
+            if let Ok(cr) = fs::canonicalize(root) { canonical.starts_with(&cr) } else { false }
+        });
+        if !is_allowed {
+            return Err("Seuls les dossiers EmuWorld peuvent être ouverts".to_string());
         }
         Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
     }
