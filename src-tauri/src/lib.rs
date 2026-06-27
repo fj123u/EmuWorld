@@ -3040,15 +3040,19 @@ async fn download_rom(
 ) -> Result<String, String> {
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
-    let dest_dir = roms_dir.join(&console);
+    let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
+    let dest_dir = roms_dir.join(&safe_console);
+    if !dest_dir.starts_with(&roms_dir) {
+        return Err("Invalid console directory".to_string());
+    }
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create console directory: {}", e))?;
     }
-    
+
     let mut final_url = download_url_arg;
-    let mut final_file_name = if file_name_arg.is_empty() { "game.bin".to_string() } else { file_name_arg };
+    let mut final_file_name = if file_name_arg.is_empty() { "game.bin".to_string() } else { file_name_arg.replace("..", "").replace('/', "").replace('\\', "") };
     let final_store_id = store_id.clone();
-    
+
     // ROM file extensions we care about
     let rom_extensions = [".zip", ".7z", ".iso", ".bin", ".nds", ".gba", ".rvz", ".wbfs", ".chd", ".cue", ".nes", ".sfc", ".smc", ".n64", ".z64", ".gcm", ".nsp", ".xci"];
     
@@ -3743,8 +3747,11 @@ async fn download_1fichier(
     push_log("INFO", &format!("Download 1fichier: {} (console: {}, pwd: {}, queue: {})", url, console, password.is_some(), queue_id));
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
-    let console_folder = normalize_console_folder(&console);
+    let console_folder = normalize_console_folder(&console).replace("..", "").replace('/', "").replace('\\', "");
     let dest_dir = roms_dir.join(&console_folder);
+    if !dest_dir.starts_with(&roms_dir) {
+        return Err("Invalid console directory".to_string());
+    }
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
     }
