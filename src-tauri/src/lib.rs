@@ -5499,6 +5499,12 @@ fn get_screenshots(game_name: String, console: String) -> Vec<ScreenshotEntry> {
 
 #[tauri::command]
 fn delete_screenshot(path: String) -> Result<(), String> {
+    let screenshots_dir = emuworld_base_dir().join("screenshots");
+    let canonical = fs::canonicalize(&path).map_err(|e| format!("Invalid path: {}", e))?;
+    let canonical_base = fs::canonicalize(&screenshots_dir).unwrap_or(screenshots_dir);
+    if !canonical.starts_with(&canonical_base) {
+        return Err("Path must be within the screenshots directory".to_string());
+    }
     fs::remove_file(&path).map_err(|e| format!("Cannot delete screenshot: {}", e))
 }
 
@@ -6124,6 +6130,13 @@ fn export_config() -> Result<String, String> {
 
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if p.extension().and_then(|e| e.to_str()) != Some("json") {
+        return Err("Only .json files can be read".to_string());
+    }
+    if path.contains("..") {
+        return Err("Path traversal not allowed".to_string());
+    }
     std::fs::read_to_string(&path).map_err(|e| format!("Cannot read {}: {}", path, e))
 }
 
