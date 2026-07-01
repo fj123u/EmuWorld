@@ -1915,7 +1915,8 @@ export default function App() {
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log(`[Auth] onAuthStateChange: event=${event}, hasSession=${!!session}, user=${session?.user?.email ?? "none"}`);
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
