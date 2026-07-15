@@ -1377,45 +1377,6 @@ export default function App() {
     }
   }, []);
 
-  // ─── Console dynamic theme ───
-  const CONSOLE_BRAND_THEME: Record<string, string> = {
-    // Nintendo
-    "NES": "nintendo", "Famicom": "nintendo", "SNES": "nintendo", "Super Famicom": "nintendo",
-    "Super Nintendo": "nintendo", "Nintendo 64": "nintendo", "N64": "nintendo",
-    "Game Boy": "nintendo", "Game Boy Color": "nintendo", "GBC": "nintendo",
-    "Game Boy Advance": "nintendo", "GBA": "nintendo",
-    "Nintendo DS": "nintendo", "Nintendo 3DS": "nintendo", "3DS": "nintendo",
-    "GameCube": "nintendo", "GameCube / Wii": "nintendo", "Wii": "nintendo",
-    "Wii U": "nintendo", "Nintendo Switch": "nintendo", "Virtual Boy": "nintendo",
-    // Sony
-    "PlayStation 1": "playstation", "PS1": "playstation",
-    "PlayStation 2": "playstation", "PS2": "playstation",
-    "PlayStation 3": "playstation", "PS3": "playstation",
-    "PlayStation Portable": "playstation", "PSP": "playstation",
-    // Sega
-    "Mega Drive": "sega", "Genesis": "sega", "Master System": "sega",
-    "Game Gear": "sega", "Saturn": "sega", "Dreamcast": "sega",
-    "Sega CD": "sega", "Sega 32X": "sega",
-    // Microsoft
-    "Xbox": "xbox", "Xbox 360": "xbox",
-    // Atari
-    "Atari 2600": "atari", "Atari 5200": "atari", "Atari 7800": "atari",
-    "Jaguar": "atari", "Lynx": "atari",
-    // NEC
-    "TurboGrafx-16": "nec", "TurboGrafx-CD": "nec",
-    // Philips
-    "CD-i": "philips", "CDi": "philips",
-  };
-
-  useEffect(() => {
-    const brand = consoleFilter ? CONSOLE_BRAND_THEME[consoleFilter] ?? null : null;
-    if (brand) {
-      document.documentElement.setAttribute("data-console-theme", brand);
-    } else {
-      document.documentElement.removeAttribute("data-console-theme");
-    }
-  }, [consoleFilter]);
-
   const [bigPictureMode, setBigPictureMode] = useState(false);
   const bigPictureModeRef = useRef(bigPictureMode);
   bigPictureModeRef.current = bigPictureMode;
