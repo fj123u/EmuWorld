@@ -173,7 +173,7 @@
 }
 
 /* ─── Custom accent override ─── */
-[data-accent-hue] {
+[data-accent-hue]:not([data-console-theme]) {
   --neon-purple: hsl(var(--custom-hue), 80%, 65%);
   --neon-purple-soft: hsl(var(--custom-hue), 75%, 55%);
   --neon-purple-glow: hsla(var(--custom-hue), 80%, 65%, 0.35);
@@ -182,6 +182,130 @@
   --accent-blue-deep: hsl(var(--custom-hue), 60%, 25%);
   --accent-blue-soft: hsla(var(--custom-hue), 80%, 65%, 0.15);
   --border-neon: hsla(var(--custom-hue), 80%, 65%, 0.45);
+}
+
+/* ─── Console dynamic themes ─── */
+/* Applied via data-console-theme on <html> when user selects a console filter.
+   Only overrides accent colors — backgrounds stay from the user's chosen theme. */
+
+/* Nintendo — rouge Mario */
+[data-console-theme="nintendo"] {
+  --accent-blue: #e4000f;
+  --accent-blue-ink: #ff6b74;
+  --accent-blue-deep: #7a0008;
+  --accent-blue-soft: rgba(228, 0, 15, 0.15);
+  --border-neon: rgba(228, 0, 15, 0.45);
+  --neon-purple: #e4000f;
+  --neon-purple-soft: #b8000c;
+  --neon-purple-glow: rgba(228, 0, 15, 0.35);
+  --volume-primary: 0 3px 0 #7a0008, 0 6px 14px rgba(228, 0, 15, 0.30);
+  --volume-primary-hover: 0 4px 0 #7a0008, 0 8px 18px rgba(228, 0, 15, 0.38);
+}
+
+/* Sony PlayStation — bleu PS */
+[data-console-theme="playstation"] {
+  --accent-blue: #003791;
+  --accent-blue-ink: #6ea8ff;
+  --accent-blue-deep: #001d4d;
+  --accent-blue-soft: rgba(0, 55, 145, 0.20);
+  --border-neon: rgba(0, 87, 212, 0.55);
+  --neon-purple: #0057d4;
+  --neon-purple-soft: #003791;
+  --neon-purple-glow: rgba(0, 87, 212, 0.40);
+  --volume-primary: 0 3px 0 #001d4d, 0 6px 14px rgba(0, 87, 212, 0.35);
+  --volume-primary-hover: 0 4px 0 #001d4d, 0 8px 18px rgba(0, 87, 212, 0.42);
+}
+
+/* Sega — bleu Sega */
+[data-console-theme="sega"] {
+  --accent-blue: #1b48c4;
+  --accent-blue-ink: #7aa3ff;
+  --accent-blue-deep: #0d2570;
+  --accent-blue-soft: rgba(27, 72, 196, 0.18);
+  --border-neon: rgba(27, 72, 196, 0.50);
+  --neon-purple: #1b48c4;
+  --neon-purple-soft: #1438a0;
+  --neon-purple-glow: rgba(27, 72, 196, 0.38);
+  --volume-primary: 0 3px 0 #0d2570, 0 6px 14px rgba(27, 72, 196, 0.32);
+  --volume-primary-hover: 0 4px 0 #0d2570, 0 8px 18px rgba(27, 72, 196, 0.40);
+}
+
+/* Microsoft Xbox — vert Xbox */
+[data-console-theme="xbox"] {
+  --accent-blue: #107c10;
+  --accent-blue-ink: #5dcf5d;
+  --accent-blue-deep: #064006;
+  --accent-blue-soft: rgba(16, 124, 16, 0.18);
+  --border-neon: rgba(16, 124, 16, 0.50);
+  --neon-purple: #107c10;
+  --neon-purple-soft: #0c6010;
+  --neon-purple-glow: rgba(16, 124, 16, 0.38);
+  --volume-primary: 0 3px 0 #064006, 0 6px 14px rgba(16, 124, 16, 0.32);
+  --volume-primary-hover: 0 4px 0 #064006, 0 8px 18px rgba(16, 124, 16, 0.40);
+}
+
+/* Atari — orange Atari */
+[data-console-theme="atari"] {
+  --accent-blue: #e8650a;
+  --accent-blue-ink: #ffaa5e;
+  --accent-blue-deep: #7a3304;
+  --accent-blue-soft: rgba(232, 101, 10, 0.18);
+  --border-neon: rgba(232, 101, 10, 0.50);
+  --neon-purple: #e8650a;
+  --neon-purple-soft: #c05508;
+  --neon-purple-glow: rgba(232, 101, 10, 0.38);
+  --volume-primary: 0 3px 0 #7a3304, 0 6px 14px rgba(232, 101, 10, 0.32);
+  --volume-primary-hover: 0 4px 0 #7a3304, 0 8px 18px rgba(232, 101, 10, 0.40);
+}
+
+/* NEC (TurboGrafx / PC Engine) — blanc/rouge NEC */
+[data-console-theme="nec"] {
+  --accent-blue: #cc0000;
+  --accent-blue-ink: #ff7070;
+  --accent-blue-deep: #660000;
+  --accent-blue-soft: rgba(204, 0, 0, 0.18);
+  --border-neon: rgba(204, 0, 0, 0.50);
+  --neon-purple: #cc0000;
+  --neon-purple-soft: #aa0000;
+  --neon-purple-glow: rgba(204, 0, 0, 0.38);
+  --volume-primary: 0 3px 0 #660000, 0 6px 14px rgba(204, 0, 0, 0.32);
+  --volume-primary-hover: 0 4px 0 #660000, 0 8px 18px rgba(204, 0, 0, 0.40);
+}
+
+/* Philips CD-i — violet Philips */
+[data-console-theme="philips"] {
+  --accent-blue: #7b2fbe;
+  --accent-blue-ink: #c084fc;
+  --accent-blue-deep: #3d1260;
+  --accent-blue-soft: rgba(123, 47, 190, 0.18);
+  --border-neon: rgba(123, 47, 190, 0.50);
+  --neon-purple: #7b2fbe;
+  --neon-purple-soft: #6322a0;
+  --neon-purple-glow: rgba(123, 47, 190, 0.38);
+  --volume-primary: 0 3px 0 #3d1260, 0 6px 14px rgba(123, 47, 190, 0.32);
+  --volume-primary-hover: 0 4px 0 #3d1260, 0 8px 18px rgba(123, 47, 190, 0.40);
+}
+
+/* Transition douce quand le thème console change */
+html {
+  transition:
+    --accent-blue 400ms ease,
+    --accent-blue-ink 400ms ease,
+    --neon-purple 400ms ease,
+    --neon-purple-glow 400ms ease;
+}
+/* Fallback pour les propriétés non-interpolables : on transite via opacity sur un overlay */
+.console-theme-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  background: var(--accent-blue-soft);
+}
+.console-theme-overlay--flash {
+  opacity: 1;
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
