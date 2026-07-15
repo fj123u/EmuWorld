@@ -1579,6 +1579,15 @@ export default function App() {
   const [selectedRgsConsoleName, setSelectedRgsConsoleName] = useState<string | null>(null);
   const [pendingImportConsole, setPendingImportConsole] = useState<string | null>(null);
   const [changelogs] = useState<ChangelogEntry[]>([
+    { version: "2.5.3", date: "2026-07-15", changes: [
+      "🔒 Sécurité: credentials Supabase déplacés hors du code source (variables d'environnement)",
+      "🔒 Sécurité: 11 vulnérabilités corrigées (audit v2.5.2) — path traversal, injection, DLL hijacking",
+      "🔒 Sécurité: validation game_id numérique dans le store Vimm",
+      "🔒 Sécurité: open_path restreint aux dossiers EmuWorld uniquement",
+      "🔒 Sécurité: protection contre les chemins UNC dans la configuration",
+      "🔒 Sécurité: SSRF corrigé dans le navigateur Myrient",
+      "🐛 Fix auth: logs de debug pour diagnostiquer les déconnexions automatiques",
+    ] },
     { version: "2.5.2", date: "2026-06-24", changes: [
       "🎨 Logos émulateurs: vrais logos officiels (Dolphin, mGBA, DuckStation, etc.) dans les cartes",
       "🎨 Logos consoles: SVG couleur es-theme-carbon pour toutes les consoles (NES, SNES, Switch, PS3…)",
@@ -5370,7 +5379,7 @@ export default function App() {
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
-        <span className="titlebar__version" data-tauri-drag-region>v2.5.2</span>
+        <span className="titlebar__version" data-tauri-drag-region>v2.5.3</span>
         {updateAvailable && (
           <button
             className="titlebar__update"
