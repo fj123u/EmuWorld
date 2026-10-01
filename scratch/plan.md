@@ -126,7 +126,7 @@
 ### 🤖 Intelligence & Automatisation
 
 - [ ] **Auto-config émulateurs** *(moyen)* — détecter le hardware (GPU, CPU) et configurer automatiquement les settings optimaux de chaque émulateur
-- [ ] **ROM health check** *(quick win)* — vérifier l'intégrité des ROMs (checksum), détecter les fichiers corrompus ou incomplets (0 octets)
+- [x] **ROM health check** *(quick win)* — détecter les ROMs vides, les ZIP corrompus et les doublons par empreinte SHA-256, avec suppression sécurisée des fichiers manifestement invalides
 - [ ] **Smart playlists** *(moyen)* — playlists auto-générées : "Pas joué depuis 1 mois", "Sessions courtes (<30min)", "Presque terminé", "Co-op entre amis"
 - [ ] **Game recommendations AI** *(gros)* — recommandations basées sur tes habitudes de jeu (temps, genre, console) via un algo ML simple
 

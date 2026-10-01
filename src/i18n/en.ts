@@ -425,17 +425,23 @@ const en: Translations = {
   // Health check
   health: {
     title: "ROM Integrity",
-    description: "Check that all your ROMs are valid (not empty, not corrupted).",
+    description: "Check for empty files, damaged ZIP archives, and identical copies using SHA-256 fingerprints.",
     check: "Check integrity",
     scanning: "Scanning...",
     allOk: "All ROMs are OK!",
-    issuesFound: "{count} issue(s) found",
-    confirmDelete: "Delete corrupted files?",
+    issuesFound: "{count} issue(s) detected",
+    moreIssues: "...and {count} more",
+    confirmDelete: "Delete the {count} clearly invalid file(s)?",
+    noSafeDelete: "No files can be safely deleted.",
     deleted: "{count} file(s) deleted",
     empty: "Empty file (0 bytes)",
     suspect: "Suspicious file ({size} bytes)",
-    corrupt: "Corrupted archive",
+    corrupt: "Corrupted ZIP archive",
     notFound: "File not found",
+    notFile: "Path does not point to a file",
+    readError: "File cannot be read",
+    duplicate: "Identical copy (SHA-256) of {name} — {checksum}",
+    failed: "Integrity check failed: {error}",
   },
 
   // Guides
