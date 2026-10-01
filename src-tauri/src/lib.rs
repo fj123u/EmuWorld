@@ -5767,83 +5767,202 @@ struct RomHealthIssue {
     console: String,
     issue: String,
     size: u64,
+    can_delete: bool,
+    related_name: Option<String>,
+    sha256: Option<String>,
+}
+
+fn rom_health_issue(
+    rom: &RomFile,
+    issue: &str,
+    size: u64,
+    can_delete: bool,
+    related_name: Option<String>,
+    sha256: Option<String>,
+) -> RomHealthIssue {
+    RomHealthIssue {
+        name: rom.name.clone(),
+        path: rom.path.clone(),
+        console: rom.console.clone(),
+        issue: issue.to_string(),
+        size,
+        can_delete,
+        related_name,
+        sha256,
+    }
+}
+
+fn sha256_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<String> {
+    use sha2::Digest;
+
+    let mut hasher = sha2::Sha256::new();
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            return Ok(format!("{:x}", hasher.finalize()));
+        }
+        hasher.update(&buffer[..bytes_read]);
+    }
 }
 
 #[tauri::command]
-fn check_roms_health() -> Vec<RomHealthIssue> {
+fn check_roms_health() -> Result<Vec<RomHealthIssue>, String> {
     push_log("INFO", "Vérification intégrité des ROMs...");
     let config = get_config();
+    let root = PathBuf::from(&config.roms_directory);
+    if !root.is_dir() {
+        let error = format!("Dossier ROMs introuvable: {}", config.roms_directory);
+        push_log("ERROR", &error);
+        return Err(error);
+    }
+
     let roms = scan_roms(config.roms_directory.clone());
     let mut issues = Vec::new();
+    let mut hashes = std::collections::HashMap::<String, Vec<(RomFile, u64)>>::new();
 
     for rom in &roms {
         let path = PathBuf::from(&rom.path);
-        if !path.exists() {
-            issues.push(RomHealthIssue {
-                name: rom.name.clone(),
-                path: rom.path.clone(),
-                console: rom.console.clone(),
-                issue: "Fichier introuvable".to_string(),
-                size: 0,
-            });
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) => {
+                let issue = if error.kind() == std::io::ErrorKind::NotFound {
+                    push_log("WARN", &format!("ROM introuvable pendant le contrôle: {}", path.display()));
+                    "notFound"
+                } else {
+                    push_log("WARN", &format!("Lecture impossible pour {}: {}", path.display(), error));
+                    "readError"
+                };
+                issues.push(rom_health_issue(&rom, issue, 0, false, None, None));
+                continue;
+            }
+        };
+        if !metadata.is_file() {
+            push_log("WARN", &format!("Le chemin ROM ne pointe pas vers un fichier: {}", path.display()));
+            issues.push(rom_health_issue(&rom, "notFile", metadata.len(), false, None, None));
             continue;
         }
-        let size = fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
+        let size = metadata.len();
         if size == 0 {
-            issues.push(RomHealthIssue {
-                name: rom.name.clone(),
-                path: rom.path.clone(),
-                console: rom.console.clone(),
-                issue: "Fichier vide (0 octets)".to_string(),
-                size,
-            });
-        } else if size < 100 && rom.extension != "a26" {
-            issues.push(RomHealthIssue {
-                name: rom.name.clone(),
-                path: rom.path.clone(),
-                console: rom.console.clone(),
-                issue: format!("Fichier suspect ({} octets)", size),
-                size,
-            });
-        } else if rom.extension == "zip" || rom.extension == "7z" {
-            if rom.extension == "zip" {
-                if let Ok(f) = std::fs::File::open(&path) {
-                    if zip::ZipArchive::new(f).is_err() {
-                        issues.push(RomHealthIssue {
-                            name: rom.name.clone(),
-                            path: rom.path.clone(),
-                            console: rom.console.clone(),
-                            issue: "Archive ZIP corrompue".to_string(),
-                            size,
-                        });
-                    }
+            issues.push(rom_health_issue(&rom, "empty", size, true, None, None));
+            continue;
+        }
+        if size < 100 && rom.extension != "a26" {
+            issues.push(rom_health_issue(&rom, "suspect", size, false, None, None));
+        }
+
+        if rom.extension == "zip" {
+            let archive_result = (|| -> Result<(), (&str, bool, String)> {
+                let file = fs::File::open(&path)
+                    .map_err(|error| ("readError", false, error.to_string()))?;
+                let mut archive = zip::ZipArchive::new(file)
+                    .map_err(|error| ("corrupt", true, error.to_string()))?;
+                for index in 0..archive.len() {
+                    let mut entry = archive.by_index(index)
+                        .map_err(|error| ("corrupt", true, error.to_string()))?;
+                    std::io::copy(&mut entry, &mut std::io::sink())
+                        .map_err(|error| ("corrupt", false, error.to_string()))?;
                 }
+                Ok(())
+            })();
+            if let Err((issue, can_delete, error)) = archive_result {
+                push_log("WARN", &format!("Vérification ZIP impossible pour {}: {}", path.display(), error));
+                issues.push(rom_health_issue(&rom, issue, size, can_delete, None, None));
             }
         }
+
+        let file = match fs::File::open(&path) {
+            Ok(file) => file,
+            Err(error) => {
+                push_log("WARN", &format!("Impossible de calculer le SHA-256 de {}: {}", path.display(), error));
+                issues.push(rom_health_issue(&rom, "readError", size, false, None, None));
+                continue;
+            }
+        };
+        let checksum = match sha256_reader(file) {
+            Ok(checksum) => checksum,
+            Err(error) => {
+                push_log("WARN", &format!("Échec du calcul SHA-256 pour {}: {}", path.display(), error));
+                issues.push(rom_health_issue(&rom, "readError", size, false, None, None));
+                continue;
+            }
+        };
+        hashes.entry(checksum).or_default().push((rom.clone(), size));
     }
-    push_log("INFO", &format!("ROM health check: {} problème(s) détecté(s) sur {} ROMs", issues.len(), roms.len()));
-    issues
+
+    let mut hash_entries = hashes.into_iter().collect::<Vec<_>>();
+    hash_entries.sort_by(|a, b| a.0.cmp(&b.0));
+    for (checksum, mut matching_roms) in hash_entries {
+        if matching_roms.len() < 2 {
+            continue;
+        }
+        matching_roms.sort_by(|a, b| a.0.path.cmp(&b.0.path));
+        let original = &matching_roms[0].0;
+        for (duplicate, size) in matching_roms.iter().skip(1) {
+            issues.push(rom_health_issue(
+                duplicate,
+                "duplicate",
+                *size,
+                false,
+                Some(original.name.clone()),
+                Some(checksum.clone()),
+            ));
+        }
+    }
+    push_log("INFO", &format!("ROM health check terminé: {} problème(s) détecté(s) sur {} ROMs", issues.len(), roms.len()));
+    Ok(issues)
 }
 
 #[tauri::command]
-fn delete_unhealthy_roms(paths: Vec<String>) -> Result<String, String> {
+fn delete_unhealthy_roms(paths: Vec<String>) -> Result<usize, String> {
+    push_log("INFO", &format!("Suppression demandée de {} ROM(s) invalide(s)", paths.len()));
     let config = get_config();
     let roms_root = PathBuf::from(&config.roms_directory);
-    let canonical_root = roms_root.canonicalize().unwrap_or_else(|_| roms_root.clone());
+    let canonical_root = roms_root.canonicalize().map_err(|error| {
+        let message = format!("Impossible de résoudre le dossier ROMs: {}", error);
+        push_log("ERROR", &message);
+        message
+    })?;
     let mut deleted = 0;
-    for p in &paths {
-        let path = PathBuf::from(p);
-        if path.exists() {
-            if let Ok(canonical) = path.canonicalize() {
-                if !canonical.starts_with(&canonical_root) {
-                    continue;
-                }
-            }
-            fs::remove_file(&path).ok();
-            deleted += 1;
+    for raw_path in &paths {
+        let path = PathBuf::from(raw_path);
+        if !path.exists() {
+            continue;
         }
+        let canonical = path.canonicalize().map_err(|error| {
+            let message = format!("Impossible de résoudre {}: {}", path.display(), error);
+            push_log("ERROR", &message);
+            message
+        })?;
+        if !canonical.starts_with(&canonical_root) || !canonical.is_file() {
+            let message = format!("Suppression refusée pour {}", canonical.display());
+            push_log("ERROR", &message);
+            return Err(message);
+        }
+        fs::remove_file(&canonical).map_err(|error| {
+            let message = format!("Échec de suppression de {}: {}", canonical.display(), error);
+            push_log("ERROR", &message);
+            message
+        })?;
+        deleted += 1;
     }
-    Ok(format!("{} fichier(s) supprimé(s)", deleted))
+    push_log("INFO", &format!("Suppression des ROMs invalide(s) terminée: {} fichier(s) supprimé(s)", deleted));
+    Ok(deleted)
+}
+
+#[cfg(test)]
+mod rom_health_tests {
+    use super::sha256_reader;
+    use std::io::Cursor;
+
+    #[test]
+    fn calculates_sha256_fingerprint() {
+        let checksum = sha256_reader(Cursor::new(b"abc")).unwrap();
+        assert_eq!(
+            checksum,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

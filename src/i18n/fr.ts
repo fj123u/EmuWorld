@@ -423,17 +423,23 @@ const fr = {
   // Health check
   health: {
     title: "Intégrité des ROMs",
-    description: "Vérifie que toutes tes ROMs sont valides (pas vides, pas corrompues).",
+    description: "Vérifie les fichiers vides, les archives ZIP endommagées et les copies identiques avec leur empreinte SHA-256.",
     check: "Vérifier l'intégrité",
     scanning: "Scan en cours...",
     allOk: "Toutes les ROMs sont OK !",
-    issuesFound: "{count} problème(s) trouvé(s)",
-    confirmDelete: "Supprimer les fichiers corrompus ?",
+    issuesFound: "{count} problème(s) détecté(s)",
+    moreIssues: "...et {count} autre(s)",
+    confirmDelete: "Supprimer les {count} fichier(s) manifestement invalide(s) ?",
+    noSafeDelete: "Aucun fichier ne peut être supprimé sans risque.",
     deleted: "{count} fichier(s) supprimé(s)",
     empty: "Fichier vide (0 octets)",
     suspect: "Fichier suspect ({size} octets)",
-    corrupt: "Archive corrompue",
+    corrupt: "Archive ZIP corrompue",
     notFound: "Fichier introuvable",
+    notFile: "Le chemin ne pointe pas vers un fichier",
+    readError: "Fichier illisible",
+    duplicate: "Copie identique (SHA-256) de {name} — {checksum}",
+    failed: "Échec de la vérification : {error}",
   },
 
   // Guides

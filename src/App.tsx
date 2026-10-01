@@ -126,6 +126,17 @@ interface RomFile {
   cover?: string;
 }
 
+interface RomHealthIssue {
+  name: string;
+  path: string;
+  console: string;
+  issue: string;
+  size: number;
+  can_delete: boolean;
+  related_name?: string;
+  sha256?: string;
+}
+
 interface AppConfig {
   roms_directory: string;
   emulators_directory: string;
@@ -1390,6 +1401,7 @@ export default function App() {
   const [installing, setInstalling] = useState<string[]>([]);
   const [installChoiceModal, setInstallChoiceModal] = useState<{ standalone: string; retroarch: string } | null>(null);
   const [emuUpdates, setEmuUpdates] = useState<any[]>([]);
+  const [romHealthChecking, setRomHealthChecking] = useState(false);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [sessionRecap, setSessionRecap] = useState<{
@@ -7066,21 +7078,43 @@ export default function App() {
                   <div className="settings__group">
                     <div className="settings__group-title"><ShieldCheck size={16} /> {t("health.title")}</div>
                     <p className="settings__field-desc">{t("health.description")}</p>
-                    <button className="btn btn--primary btn--sm" onClick={async () => {
-                      showToast(t("health.scanning"), "success");
-                      const issues: any[] = await invoke("check_roms_health");
-                      if (issues.length === 0) {
-                        showToast(t("health.allOk"), "success");
-                      } else {
-                        const msg = issues.slice(0, 5).map((i: any) => `${i.name} (${i.console}): ${i.issue}`).join("\n");
-                        const doDelete = confirm(`${issues.length} problème(s) trouvé(s):\n\n${msg}${issues.length > 5 ? `\n...et ${issues.length - 5} autres` : ""}\n\nSupprimer les fichiers corrompus ?`);
-                        if (doDelete) {
-                          await invoke("delete_unhealthy_roms", { paths: issues.map((i: any) => i.path) });
-                          showToast(`${issues.length} fichier(s) supprimé(s)`, "success");
+                    <button className="btn btn--primary btn--sm gamepad-nav-item" disabled={romHealthChecking} onClick={async () => {
+                      setRomHealthChecking(true);
+                      showToast(t("health.scanning"), "info");
+                      try {
+                        const issues = await invoke<RomHealthIssue[]>("check_roms_health");
+                        if (issues.length === 0) {
+                          showToast(t("health.allOk"), "success");
+                          return;
                         }
+                        const visibleIssues = issues.slice(0, 5);
+                        const details = visibleIssues.map((issue) => (
+                          `${issue.name} (${issue.console}): ${t(`health.${issue.issue}`, {
+                            size: issue.size,
+                            name: issue.related_name ?? "",
+                            checksum: issue.sha256 ?? "",
+                          })}`
+                        )).join("\n");
+                        const remaining = issues.length > 5 ? `\n${t("health.moreIssues", { count: issues.length - 5 })}` : "";
+                        const deletable = visibleIssues.filter((issue) => issue.can_delete);
+                        const summary = `${t("health.issuesFound", { count: issues.length })}:\n\n${details}${remaining}`;
+                        if (deletable.length === 0) {
+                          alert(`${summary}\n\n${t("health.noSafeDelete")}`);
+                          return;
+                        }
+                        if (confirm(`${summary}\n\n${t("health.confirmDelete", { count: deletable.length })}`)) {
+                          const deleted = await invoke<number>("delete_unhealthy_roms", {
+                            paths: deletable.map((issue) => issue.path),
+                          });
+                          showToast(t("health.deleted", { count: deleted }), "success");
+                        }
+                      } catch (error) {
+                        showToast(t("health.failed", { error: String(error) }), "error");
+                      } finally {
+                        setRomHealthChecking(false);
                       }
                     }}>
-                      <ShieldCheck size={12} /> {t("health.check")}
+                      <ShieldCheck size={12} /> {romHealthChecking ? t("health.scanning") : t("health.check")}
                     </button>
                   </div>
 
