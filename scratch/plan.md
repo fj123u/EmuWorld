@@ -1,5 +1,21 @@
 # EmuWorld — Plan de route
 
+## Revue du code — 01/10/2026
+
+### Urgence
+
+- [ ] **P1 — Protéger les données locales contre la corruption** (`src-tauri/src/playtime.rs`, `src-tauri/src/cloud_backup.rs`) : `load()` / `load_config()` renvoient silencieusement des valeurs vides par défaut si le fichier est illisible ou invalide, puis les sauvegardes réécrivent directement le fichier. Une action suivante peut donc remplacer l'historique de jeu ou la configuration cloud par des données vides. Distinguer un fichier absent d'une erreur, préserver l'original en cas de corruption, écrire atomiquement (fichier temporaire puis remplacement) et ajouter des tests de récupération.
+- [ ] **P1 — Mettre à jour les dépendances signalées par `npm audit`** : l'audit du 01/10/2026 relève 9 vulnérabilités (6 hautes, 1 modérée, 2 faibles), dont Vite 7.3.1 et plusieurs dépendances transitives ; un correctif est disponible pour chacune. Mettre à jour le lockfile, vérifier la compatibilité, puis faire échouer la CI si de nouvelles vulnérabilités hautes/critique apparaissent.
+- [ ] **P1 — Ajouter des tests automatisés et une CI de validation** : aucun script de test frontend ni workflow de CI sur les pull requests n'a été trouvé (seul le workflow de release existe) et `cargo test` passe avec 0 test. Couvrir d'abord le chargement/sauvegarde, les statistiques et les opérations critiques, puis exécuter au minimum `npm ci`, `npm run build` et `cargo test` sur chaque pull request.
+
+### Travaux importants avant les prochaines grosses fonctionnalités
+
+- [ ] **P2 — Versionner et vérifier le schéma Supabase** : les évolutions SQL sont conservées comme scripts manuels dans `scratch/`. Les convertir en migrations ordonnées et rejouables, puis tester les politiques RLS et les contraintes pour chaque table utilisée par l'app avant déploiement.
+- [ ] **P2 — Découper les deux monolithes après l'ajout de tests** : `src/App.tsx` (~10 000 lignes) et `src-tauri/src/lib.rs` (~6 400 lignes) concentrent trop de responsabilités. Extraire progressivement les domaines (bibliothèque, social, synchronisation, commandes Tauri) sans changer le comportement.
+- [ ] **P2 — Réduire le JavaScript chargé au démarrage** : le build produit un bundle principal d'environ 914 kB (262 kB gzip) et signale un chunk supérieur à 500 kB. Découper les pages lourdes en imports différés et mesurer le résultat sans masquer l'avertissement.
+
+**Bilan :** aucun blocage P0 confirmé lors de cette revue statique. Le risque prioritaire est la perte silencieuse de données locales (P1) ; traiter les tâches P1 avant de consacrer du temps aux nouvelles fonctionnalités V3.
+
 ## 🚀 Ajouts
 
 - [x] **Date / heure dans l'app** *(quick win ~10 min)* — horloge discrète dans la titlebar ou sidebar footer
