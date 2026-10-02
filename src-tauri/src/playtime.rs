@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct GameEntry {
@@ -46,20 +46,38 @@ fn store_path() -> PathBuf {
     path
 }
 
-pub fn load() -> PlaytimeStore {
-    let path = store_path();
-    if let Ok(data) = std::fs::read_to_string(&path) {
-        if let Ok(store) = serde_json::from_str::<PlaytimeStore>(&data) {
-            return store;
-        }
+fn load_from(path: &Path) -> Result<PlaytimeStore, String> {
+    match std::fs::read_to_string(path) {
+        Ok(data) => serde_json::from_str::<PlaytimeStore>(&data)
+            .map_err(|error| format!("Invalid playtime data in {}: {}", path.display(), error)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(PlaytimeStore::default()),
+        Err(error) => Err(format!("Cannot read playtime data from {}: {}", path.display(), error)),
     }
-    PlaytimeStore::default()
+}
+
+pub fn load() -> Result<PlaytimeStore, String> {
+    let path = store_path();
+    load_from(&path).map_err(|error| {
+        crate::push_log("ERROR", &error);
+        error
+    })
+}
+
+fn save_to(path: &Path, store: &PlaytimeStore) -> Result<(), String> {
+    let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
+    crate::atomic_file::write(path, data.as_bytes())
+        .map_err(|error| format!("Cannot save playtime data to {}: {}", path.display(), error))
 }
 
 pub fn save(store: &PlaytimeStore) -> Result<(), String> {
     let path = store_path();
-    let data = serde_json::to_string_pretty(store).map_err(|e| e.to_string())?;
-    std::fs::write(&path, data).map_err(|e| e.to_string())
+    crate::push_log("INFO", "Sauvegarde des données de jeu");
+    save_to(&path, store).map_err(|error| {
+        crate::push_log("ERROR", &error);
+        error
+    })?;
+    crate::push_log("INFO", "Données de jeu sauvegardées");
+    Ok(())
 }
 
 /// Reset the local store entirely. Called on sign-out so the next user
@@ -84,7 +102,7 @@ fn key(console: &str, name: &str) -> String {
 /// Updates total seconds, launches, last-played timestamp, per-emulator totals.
 pub fn record_session(console: &str, name: &str, seconds: u64, emulator_id: &str) -> Result<(), String> {
     crate::push_log("INFO", &format!("Session enregistrée: '{}' ({}) — {}s via {}", name, console, seconds, emulator_id));
-    let mut store = load();
+    let mut store = load()?;
     let now = chrono::Utc::now().to_rfc3339();
     let entry = store.games.entry(key(console, name)).or_insert(GameEntry {
         console: console.to_string(),
@@ -106,7 +124,7 @@ pub fn record_session(console: &str, name: &str, seconds: u64, emulator_id: &str
 }
 
 pub fn toggle_favorite(console: &str, name: &str) -> Result<bool, String> {
-    let mut store = load();
+    let mut store = load()?;
     let k = key(console, name);
     let entry = store.games.entry(k).or_insert(GameEntry {
         console: console.to_string(),
@@ -120,7 +138,7 @@ pub fn toggle_favorite(console: &str, name: &str) -> Result<bool, String> {
 }
 
 pub fn set_rating(console: &str, name: &str, rating: u8) -> Result<(), String> {
-    let mut store = load();
+    let mut store = load()?;
     let k = key(console, name);
     let entry = store.games.entry(k).or_insert(GameEntry {
         console: console.to_string(),
@@ -133,7 +151,7 @@ pub fn set_rating(console: &str, name: &str, rating: u8) -> Result<(), String> {
 }
 
 pub fn set_notes(console: &str, name: &str, notes: &str) -> Result<(), String> {
-    let mut store = load();
+    let mut store = load()?;
     let k = key(console, name);
     let entry = store.games.entry(k).or_insert(GameEntry {
         console: console.to_string(),
@@ -146,7 +164,7 @@ pub fn set_notes(console: &str, name: &str, notes: &str) -> Result<(), String> {
 }
 
 pub fn create_collection(name: &str) -> Result<Vec<GameCollection>, String> {
-    let mut store = load();
+    let mut store = load()?;
     if store.collections.iter().any(|c| c.name == name) {
         return Err(format!("Collection '{}' already exists", name));
     }
@@ -156,14 +174,14 @@ pub fn create_collection(name: &str) -> Result<Vec<GameCollection>, String> {
 }
 
 pub fn delete_collection(name: &str) -> Result<Vec<GameCollection>, String> {
-    let mut store = load();
+    let mut store = load()?;
     store.collections.retain(|c| c.name != name);
     save(&store)?;
     Ok(store.collections)
 }
 
 pub fn rename_collection(old_name: &str, new_name: &str) -> Result<Vec<GameCollection>, String> {
-    let mut store = load();
+    let mut store = load()?;
     if let Some(col) = store.collections.iter_mut().find(|c| c.name == old_name) {
         col.name = new_name.to_string();
     }
@@ -172,7 +190,7 @@ pub fn rename_collection(old_name: &str, new_name: &str) -> Result<Vec<GameColle
 }
 
 pub fn add_to_collection(collection_name: &str, game_key: &str) -> Result<(), String> {
-    let mut store = load();
+    let mut store = load()?;
     if let Some(col) = store.collections.iter_mut().find(|c| c.name == collection_name) {
         if !col.games.contains(&game_key.to_string()) {
             col.games.push(game_key.to_string());
@@ -183,7 +201,7 @@ pub fn add_to_collection(collection_name: &str, game_key: &str) -> Result<(), St
 }
 
 pub fn remove_from_collection(collection_name: &str, game_key: &str) -> Result<(), String> {
-    let mut store = load();
+    let mut store = load()?;
     if let Some(col) = store.collections.iter_mut().find(|c| c.name == collection_name) {
         col.games.retain(|g| g != game_key);
     }
@@ -208,8 +226,12 @@ pub struct ProfileStats {
     pub streak_days: u32,
 }
 
-pub fn compute_stats() -> ProfileStats {
-    let store = load();
+pub fn compute_stats() -> Result<ProfileStats, String> {
+    let store = load()?;
+    Ok(compute_stats_from_store(&store))
+}
+
+pub fn compute_stats_from_store(store: &PlaytimeStore) -> ProfileStats {
     let mut stats = ProfileStats::default();
 
     let mut per_console: HashMap<String, u64> = HashMap::new();
@@ -291,4 +313,80 @@ pub fn compute_stats() -> ProfileStats {
     }
 
     stats
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{compute_stats_from_store, load_from, save_to, GameEntry, PlaytimeStore};
+    use std::collections::HashMap;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_path() -> PathBuf {
+        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("emuworld-playtime-{}-{}.json", std::process::id(), id))
+    }
+
+    #[test]
+    fn missing_file_loads_as_empty_store() {
+        let path = test_path();
+        assert!(load_from(&path).unwrap().games.is_empty());
+    }
+
+    #[test]
+    fn invalid_file_returns_error_without_changing_original() {
+        let path = test_path();
+        let original = b"{not valid json";
+        fs::write(&path, original).unwrap();
+
+        assert!(load_from(&path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn saves_and_reloads_store_atomically() {
+        let path = test_path();
+        let mut store = PlaytimeStore::default();
+        store.games.insert(
+            "Nintendo::Game".to_string(),
+            GameEntry {
+                console: "Nintendo".to_string(),
+                name: "Game".to_string(),
+                seconds: 120,
+                ..Default::default()
+            },
+        );
+
+        save_to(&path, &store).unwrap();
+        let loaded = load_from(&path).unwrap();
+
+        assert_eq!(loaded.games["Nintendo::Game"].seconds, 120);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn computes_stats_from_loaded_store() {
+        let store = PlaytimeStore {
+            games: HashMap::from([(
+                "Nintendo::Game".to_string(),
+                GameEntry {
+                    console: "Nintendo".to_string(),
+                    name: "Game".to_string(),
+                    seconds: 3600,
+                    launches: 2,
+                    ..Default::default()
+                },
+            )]),
+            ..Default::default()
+        };
+
+        let stats = compute_stats_from_store(&store);
+
+        assert_eq!(stats.total_seconds, 3600);
+        assert_eq!(stats.total_launches, 2);
+        assert_eq!(stats.games_played, 1);
+    }
 }
