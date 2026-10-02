@@ -10,7 +10,7 @@ pub fn encrypt_and_write(path: &Path, plaintext: &[u8]) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    fs::write(path, &encrypted).map_err(|e| e.to_string())
+    crate::atomic_file::write(path, &encrypted).map_err(|e| e.to_string())
 }
 
 pub fn read_and_decrypt(path: &Path) -> Result<Vec<u8>, String> {

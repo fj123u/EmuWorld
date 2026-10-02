@@ -4,9 +4,9 @@
 
 ### Urgence
 
-- [ ] **P1 — Protéger les données locales contre la corruption** (`src-tauri/src/playtime.rs`, `src-tauri/src/cloud_backup.rs`) : `load()` / `load_config()` renvoient silencieusement des valeurs vides par défaut si le fichier est illisible ou invalide, puis les sauvegardes réécrivent directement le fichier. Une action suivante peut donc remplacer l'historique de jeu ou la configuration cloud par des données vides. Distinguer un fichier absent d'une erreur, préserver l'original en cas de corruption, écrire atomiquement (fichier temporaire puis remplacement) et ajouter des tests de récupération.
-- [ ] **P1 — Mettre à jour les dépendances signalées par `npm audit`** : l'audit du 01/10/2026 relève 9 vulnérabilités (6 hautes, 1 modérée, 2 faibles), dont Vite 7.3.1 et plusieurs dépendances transitives ; un correctif est disponible pour chacune. Mettre à jour le lockfile, vérifier la compatibilité, puis faire échouer la CI si de nouvelles vulnérabilités hautes/critique apparaissent.
-- [ ] **P1 — Ajouter des tests automatisés et une CI de validation** : aucun script de test frontend ni workflow de CI sur les pull requests n'a été trouvé (seul le workflow de release existe) et `cargo test` passe avec 0 test. Couvrir d'abord le chargement/sauvegarde, les statistiques et les opérations critiques, puis exécuter au minimum `npm ci`, `npm run build` et `cargo test` sur chaque pull request.
+- [x] **P1 — Protéger les données locales contre la corruption** (`src-tauri/src/playtime.rs`, `src-tauri/src/cloud_backup.rs`) : les fichiers absents restent initialisés vides, mais les erreurs de lecture/désérialisation sont remontées au lieu d'être écrasées. Playtime et configuration cloud sont sauvegardés par remplacement atomique ; tests de récupération, round-trip, statistiques et remplacement atomique ajoutés.
+- [x] **P1 — Mettre à jour les dépendances signalées par `npm audit`** : lockfile actualisé ; `npm audit` ne signale plus de vulnérabilité et l'audit est intégré à la CI avec un seuil haut.
+- [x] **P1 — Ajouter des tests automatisés et une CI de validation** : tests Rust de chargement/sauvegarde, corruption et statistiques ; le workflow de pull request exécute `npm ci`, `npm audit`, `npm run build` et `cargo test`.
 
 ### Travaux importants avant les prochaines grosses fonctionnalités
 

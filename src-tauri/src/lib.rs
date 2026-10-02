@@ -228,6 +228,7 @@ mod gamepad;
 mod retroachievements;
 mod cloud_backup;
 mod dpapi;
+mod atomic_file;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -5103,7 +5104,7 @@ fn save_b2_config(key_id: String, app_key: String, bucket_id: String, bucket_nam
 }
 
 #[tauri::command]
-fn get_b2_config() -> cloud_backup::B2Config {
+fn get_b2_config() -> Result<cloud_backup::B2Config, String> {
     cloud_backup::load_config()
 }
 
@@ -5117,7 +5118,7 @@ fn scan_local_saves() -> Vec<cloud_backup::SaveEntry> {
 async fn backup_saves_to_cloud() -> Result<String, String> {
     push_log("INFO", "Cloud backup: démarrage upload saves...");
     let app_config = get_config();
-    let b2_config = cloud_backup::load_config();
+    let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         push_log("WARN", "Cloud backup: B2 non configuré");
         return Err("Backblaze B2 not configured.".to_string());
@@ -5141,7 +5142,7 @@ async fn backup_saves_to_cloud() -> Result<String, String> {
 
 #[tauri::command]
 async fn list_cloud_backups() -> Result<Vec<cloud_backup::CloudFile>, String> {
-    let b2_config = cloud_backup::load_config();
+    let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         return Err("Backblaze B2 not configured.".to_string());
     }
@@ -5154,7 +5155,7 @@ async fn list_cloud_backups() -> Result<Vec<cloud_backup::CloudFile>, String> {
 async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
     push_log("INFO", &format!("Cloud backup: restauration fichier {}", file_id));
     let app_config = get_config();
-    let b2_config = cloud_backup::load_config();
+    let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         return Err("Backblaze B2 not configured.".to_string());
     }
@@ -5176,7 +5177,7 @@ async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn delete_cloud_backup(file_id: String, file_name: String) -> Result<String, String> {
-    let b2_config = cloud_backup::load_config();
+    let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         return Err("Backblaze B2 not configured.".to_string());
     }
@@ -5193,7 +5194,7 @@ async fn delete_cloud_backup(file_id: String, file_name: String) -> Result<Strin
 // ============================================================
 
 #[tauri::command]
-fn get_playtime() -> playtime::PlaytimeStore {
+fn get_playtime() -> Result<playtime::PlaytimeStore, String> {
     playtime::load()
 }
 
@@ -5238,7 +5239,7 @@ fn remove_from_collection(collection_name: String, game_key: String) -> Result<(
 }
 
 #[tauri::command]
-fn get_profile_stats() -> playtime::ProfileStats {
+fn get_profile_stats() -> Result<playtime::ProfileStats, String> {
     playtime::compute_stats()
 }
 
@@ -5296,10 +5297,10 @@ fn check_achievements(
     library_count: u32,
     emulators_installed: u32,
     has_downloaded: bool,
-) -> Vec<achievements::Achievement> {
-    let stats = playtime::compute_stats();
+) -> Result<Vec<achievements::Achievement>, String> {
+    let store = playtime::load()?;
+    let stats = playtime::compute_stats_from_store(&store);
     let consoles_played = {
-        let store = playtime::load();
         let mut consoles: std::collections::HashSet<String> = std::collections::HashSet::new();
         for entry in store.games.values() {
             if entry.seconds > 0 {
@@ -5308,7 +5309,7 @@ fn check_achievements(
         }
         consoles.len() as u32
     };
-    achievements::check_and_unlock(
+    Ok(achievements::check_and_unlock(
         library_count,
         stats.total_seconds,
         stats.total_launches,
@@ -5317,7 +5318,7 @@ fn check_achievements(
         emulators_installed,
         stats.streak_days,
         has_downloaded,
-    )
+    ))
 }
 
 #[tauri::command]
@@ -6282,7 +6283,7 @@ fn export_config() -> Result<String, String> {
     push_log("INFO", "Export de la configuration complète");
     let export = FullExport {
         config: get_config(),
-        playtime: playtime::load(),
+        playtime: playtime::load()?,
     };
     serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
 }

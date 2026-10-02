@@ -75,31 +75,47 @@ fn config_path() -> PathBuf {
     crate::emuworld_base_dir().join("b2_config.json")
 }
 
-pub fn load_config() -> B2Config {
+fn parse_config(data: &[u8], path: &PathBuf) -> Result<B2Config, String> {
+    serde_json::from_slice(data)
+        .map_err(|error| format!("Invalid cloud backup configuration in {}: {}", path.display(), error))
+}
+
+fn load_config_from(path: &PathBuf) -> Result<B2Config, String> {
+    let original = match fs::read(path) {
+        Ok(data) => data,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(B2Config::default()),
+        Err(error) => return Err(format!("Cannot read cloud backup configuration from {}: {}", path.display(), error)),
+    };
+    if parse_config(&original, path).is_ok() {
+        crate::dpapi::migrate_plaintext_if_needed(path);
+    }
+    match crate::dpapi::read_and_decrypt(path) {
+        Ok(plaintext) => parse_config(&plaintext, path),
+        Err(decrypt_error) => parse_config(&original, path).map_err(|parse_error| {
+            format!("Cannot decrypt or parse cloud backup configuration in {}: {}; {}", path.display(), decrypt_error, parse_error)
+        }),
+    }
+}
+
+pub fn load_config() -> Result<B2Config, String> {
     let path = config_path();
-    if !path.exists() {
-        return B2Config::default();
-    }
-    crate::dpapi::migrate_plaintext_if_needed(&path);
-    match crate::dpapi::read_and_decrypt(&path) {
-        Ok(plaintext) => {
-            let json = String::from_utf8_lossy(&plaintext);
-            serde_json::from_str(&json).unwrap_or_default()
-        }
-        Err(_) => {
-            if let Ok(data) = fs::read_to_string(&path) {
-                serde_json::from_str(&data).unwrap_or_default()
-            } else {
-                B2Config::default()
-            }
-        }
-    }
+    load_config_from(&path).map_err(|error| {
+        crate::push_log("ERROR", &error);
+        error
+    })
 }
 
 pub fn save_config(config: &B2Config) -> Result<(), String> {
     let path = config_path();
     let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    crate::dpapi::encrypt_and_write(&path, json.as_bytes())
+    crate::push_log("INFO", "Sauvegarde de la configuration cloud");
+    crate::dpapi::encrypt_and_write(&path, json.as_bytes()).map_err(|error| {
+        let message = format!("Cannot save cloud backup configuration: {}", error);
+        crate::push_log("ERROR", &message);
+        message
+    })?;
+    crate::push_log("INFO", "Configuration cloud sauvegardée");
+    Ok(())
 }
 
 /// Save file extensions we look for
@@ -673,4 +689,40 @@ fn sha1_hash(data: &[u8]) -> String {
     let mut hasher = sha1::Sha1::new();
     hasher.update(data);
     format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{load_config_from, parse_config};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn test_path() -> PathBuf {
+        let id = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        std::env::temp_dir().join(format!("emuworld-b2-{}-{}.json", std::process::id(), id))
+    }
+
+    #[test]
+    fn parses_valid_config() {
+        let config = parse_config(
+            br#"{"key_id":"key","app_key":"secret","bucket_id":"bucket","bucket_name":"saves"}"#,
+            &PathBuf::from("b2_config.json"),
+        )
+        .unwrap();
+        assert_eq!(config.key_id, "key");
+        assert_eq!(config.bucket_name, "saves");
+    }
+
+    #[test]
+    fn corrupt_config_is_reported_and_preserved() {
+        let path = test_path();
+        let original = b"{invalid";
+        fs::write(&path, original).unwrap();
+
+        assert!(load_config_from(&path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), original);
+
+        fs::remove_file(path).unwrap();
+    }
 }
