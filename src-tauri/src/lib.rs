@@ -199,6 +199,12 @@ pub fn push_log(level: &str, msg: &str) {
         if logs.len() > 500 { logs.drain(0..100); }
     }
 
+    // Unit tests exercise real commands (scan, downloads…): keep their log
+    // lines out of the user's daily log file in %LOCALAPPDATA%.
+    if cfg!(test) {
+        return;
+    }
+
     // Write to file
     let log_path = log_file_path();
     let file_entry = format!("[{}] [{}] {}\n", now.format("%Y-%m-%d %H:%M:%S"), level, msg);
@@ -1519,10 +1525,17 @@ fn normalize_console_folder(folder: &str) -> String {
         "wii" => "GameCube / Wii".to_string(),
         "wiiu" | "wii u" => "Wii U".to_string(),
         "nes" | "famicom" => "NES".to_string(),
-        "snes" | "super nintendo" | "super famicom" => "SNES".to_string(),
+        // Must be catalog console names: "SNES", "Game Boy" and "Game Boy
+        // Color" exist nowhere in the catalog, so zipped ROMs in those folders
+        // fell through to the extension match and were filed as Neo-Geo.
+        // Game Boy / Color games are handled by the Game Boy Advance emulators.
+        "snes" | "super nintendo" | "super famicom" | "sfc" => "Super Nintendo".to_string(),
         "gba" | "game boy advance" => "Game Boy Advance".to_string(),
-        "gb" | "game boy" => "Game Boy".to_string(),
-        "gbc" | "game boy color" => "Game Boy Color".to_string(),
+        "gb" | "game boy" | "gbc" | "game boy color" => "Game Boy Advance".to_string(),
+        "arcade" | "mame" | "fbneo" | "fba" => "Arcade".to_string(),
+        "neo geo" | "neogeo" | "neo-geo" => "Neo-Geo".to_string(),
+        "atari 2600" | "atari2600" | "a2600" => "Atari 2600".to_string(),
+        "wonderswan" | "wonderswan color" | "ws" | "wsc" => "WonderSwan".to_string(),
         "switch" | "nintendo switch" => "Nintendo Switch".to_string(),
         "md" | "megadrive" | "mega drive" | "genesis" => "Mega Drive".to_string(),
         "dc" | "dreamcast" => "Dreamcast".to_string(),
@@ -6865,6 +6878,157 @@ mod tests {
         assert_eq!(fs::read(&dest).unwrap(), b"full");
 
         fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Builds a throw-away ROM library on disk and returns its root.
+    fn fake_library(tag: &str, files: &[&str]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("emuworld_scan_{}_{}", tag, std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        for f in files {
+            let p = root.join(f);
+            fs::create_dir_all(p.parent().unwrap()).unwrap();
+            fs::write(&p, b"rom").unwrap();
+        }
+        root
+    }
+
+    fn scanned(root: &std::path::Path) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = scan_roms(root.to_string_lossy().to_string())
+            .into_iter()
+            .map(|r| (r.console, r.name))
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn scan_detects_games_and_skips_noise() {
+        let root = fake_library("main", &[
+            "NES/Super Mario Bros. 3 (Europe).nes",
+            // Multi-track CD: only the .cue is a game, not its .bin tracks.
+            "PlayStation 1/Crash/Crash Bandicoot.cue",
+            "PlayStation 1/Crash/Crash Bandicoot (Track 1).bin",
+            "PlayStation 1/Crash/Crash Bandicoot (Track 2).bin",
+            // Dreamcast: .gdi preferred over .cue in the same folder.
+            "Dreamcast/Shenmue/Shenmue.gdi",
+            "Dreamcast/Shenmue/Shenmue.cue",
+            "Dreamcast/Shenmue/track01.bin",
+            // Switch: base game kept, update and DLC (by title id) hidden.
+            "Nintendo Switch/Zelda [0100000000010000][v0].nsp",
+            "Nintendo Switch/Zelda Update [0100000000010800][v65536].nsp",
+            "Nintendo Switch/Zelda DLC [0100000000011001].nsp",
+            // Markdown outside a Mega Drive folder is not a ROM.
+            "README.md",
+            "Mega Drive/Sonic.md",
+            // Junk shipped by Vimm.
+            "NES/Vimm's Lair.txt",
+            // Unknown extension.
+            "NES/cover.jpg",
+        ]);
+        assert_eq!(scanned(&root), vec![
+            ("Dreamcast".to_string(), "Shenmue".to_string()),
+            ("Mega Drive".to_string(), "Sonic".to_string()),
+            ("NES".to_string(), "Super Mario Bros. 3 (Europe)".to_string()),
+            ("Nintendo Switch".to_string(), "Zelda [0100000000010000][v0]".to_string()),
+            ("PlayStation 1".to_string(), "Crash Bandicoot".to_string()),
+        ]);
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn scan_detects_ps3_folder_games_under_aliases() {
+        let root = fake_library("ps3", &[
+            "PS3/God of War III/PS3_DISC.SFB",
+            "PS3/God of War III/PS3_GAME/USRDIR/EBOOT.BIN",
+        ]);
+        let roms = scan_roms(root.to_string_lossy().to_string());
+        assert_eq!(roms.len(), 1, "exactly one PS3 game, EBOOT.BIN not listed twice: {:?}", roms);
+        assert_eq!(roms[0].console, "PlayStation 3");
+        assert_eq!(roms[0].name, "God of War III");
+        assert!(roms[0].path.ends_with("EBOOT.BIN"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn scan_uses_folder_aliases_for_zipped_roms() {
+        // A .zip carries no console information: the folder name must decide,
+        // including the short aliases people actually use.
+        let root = fake_library("zip", &[
+            "SNES/Chrono Trigger.zip",
+            "GBA/Pokemon Emeraude.zip",
+            "Game Boy/Tetris.zip",
+            "MAME/pacman.zip",
+        ]);
+        let consoles: std::collections::HashMap<String, String> = scan_roms(root.to_string_lossy().to_string())
+            .into_iter().map(|r| (r.name, r.console)).collect();
+        assert_eq!(consoles.get("Chrono Trigger").map(String::as_str), Some("Super Nintendo"));
+        assert_eq!(consoles.get("Pokemon Emeraude").map(String::as_str), Some("Game Boy Advance"));
+        assert_eq!(consoles.get("Tetris").map(String::as_str), Some("Game Boy Advance"));
+        assert_eq!(consoles.get("pacman").map(String::as_str), Some("Arcade"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn scan_of_missing_folder_is_empty() {
+        let missing = std::env::temp_dir().join("emuworld_scan_does_not_exist_42");
+        assert!(scan_roms(missing.to_string_lossy().to_string()).is_empty());
+    }
+
+    #[test]
+    fn every_normalized_folder_name_is_a_catalog_console() {
+        // normalize_console_folder output is compared to catalog consoles:
+        // a name that exists nowhere in the catalog silently breaks detection.
+        let catalog = emulators::get_catalog();
+        let aliases = [
+            "psp", "ps1", "psx", "ps2", "ps3", "n64", "nds", "ds", "3ds", "gc", "gamecube", "wii", "wiiu",
+            "nes", "famicom", "snes", "super famicom", "gba", "gb", "game boy", "gbc", "game boy color",
+            "switch", "md", "genesis", "dc", "vb", "sega cd", "32x", "xbox", "xbox 360", "atari 5200",
+            "atari 7800", "jaguar", "lynx", "tg16", "pc engine", "tgcd", "cdi", "saturn", "gg", "sms",
+        ];
+        for alias in aliases {
+            let normalized = normalize_console_folder(alias);
+            assert!(
+                catalog.iter().any(|e| e.console == normalized),
+                "folder alias {:?} maps to {:?}, which no emulator in the catalog handles",
+                alias, normalized
+            );
+        }
+    }
+
+    #[test]
+    fn catalog_is_consistent() {
+        let catalog = emulators::get_catalog();
+        let mut ids = std::collections::HashSet::new();
+        for e in &catalog {
+            assert!(ids.insert(e.id.clone()), "duplicate emulator id {}", e.id);
+            assert_eq!(e.id, e.id.to_lowercase(), "emulator ids must be lowercase (folder names on disk): {}", e.id);
+            assert!(!e.console.is_empty() && !e.name.is_empty(), "{} has an empty name/console", e.id);
+            assert!(!e.supported_extensions.is_empty(), "{} supports no extension", e.id);
+            for ext in &e.supported_extensions {
+                assert_eq!(ext, &ext.to_lowercase(), "{}: extensions are matched lowercase", e.id);
+                assert!(!ext.starts_with('.'), "{}: extension {:?} must not start with a dot", e.id, ext);
+            }
+        }
+    }
+
+    #[test]
+    fn title_id_filter_handles_switch_and_wiiu() {
+        assert!(!is_update_or_dlc("Mario Odyssey [0100000000010000]", "nsp"));
+        assert!(is_update_or_dlc("Mario Odyssey [0100000000010800]", "nsp"));
+        assert!(is_update_or_dlc("Splatoon [0005000E10176900]", "wux"));
+        assert!(is_update_or_dlc("Splatoon DLC [0005000C10176900]", "wux"));
+        assert!(!is_update_or_dlc("Splatoon [0005000010176900]", "wux"));
+    }
+
+    #[test]
+    fn cover_name_cleaning_strips_tags_and_extensions() {
+        let cleaned = clean_game_name("Halo 2 (France) (En,Ja,Fr,De,Es,It,Zh,Ko).xiso");
+        assert!(cleaned.to_lowercase().starts_with("halo 2"), "got {:?}", cleaned);
+        assert!(!cleaned.contains('('), "got {:?}", cleaned);
+        assert!(!cleaned.to_lowercase().contains("xiso"), "got {:?}", cleaned);
+        let switch = clean_game_name("Pokemon Sword [0100ABF008968000][v0] (Incl. 2 DLCs).nsp");
+        assert!(switch.to_lowercase().starts_with("pokemon sword"), "got {:?}", switch);
+        assert!(!switch.to_lowercase().contains("dlc"), "got {:?}", switch);
     }
 
     #[test]

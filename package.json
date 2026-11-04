@@ -9,7 +9,11 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "clean": "cd src-tauri && cargo clean && cd .. && rm -rf node_modules/.vite"
+    "clean": "cd src-tauri && cargo clean && cd .. && rm -rf node_modules/.vite",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:all": "tsc --noEmit && vitest run && cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.101.0",
@@ -28,10 +32,14 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "jsdom": "^26.1.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
   }
 }

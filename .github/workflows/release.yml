@@ -41,6 +41,14 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      # Never ship an update that fails the test suite: installed apps pick
+      # up releases automatically.
+      - name: Frontend tests
+        run: npm test
+
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
       - name: Sanity-check signing key is present
         shell: bash
         env:

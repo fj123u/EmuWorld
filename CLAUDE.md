@@ -21,6 +21,12 @@ npm run tauri build
 # TypeScript type-check only
 npx tsc --noEmit
 
+# Tests — run before every commit (CI and the pre-push hook run the same)
+npm run test:all     # tsc + frontend tests (Vitest) + Rust tests
+npm test             # frontend only (src/**/*.test.ts[x])
+npm run test:watch   # frontend, re-run on save
+npm run test:rust    # cargo test
+
 # Clean build caches (cargo + vite)
 npm run clean
 ```
@@ -112,10 +118,16 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
 - **i18n** : Every visible text string MUST use `t("section.key")` — never hardcode French or English. Add keys to both `src/i18n/fr.ts` and `src/i18n/en.ts`.
 - **Gamepad** : Every new interactive element (button, input, select, card) MUST have the CSS class `gamepad-nav-item` or be a `.btn` for controller navigation.
 - **Logs** : Every new feature or command MUST include `push_log("INFO"|"WARN"|"ERROR", ...)` calls at entry, on errors, and on completion. This enables debugging via the daily log files in `%LOCALAPPDATA%/EmuWorld/logs/`.
+- **Tests** : Every new feature or bug fix MUST come with a test that fails without it, and `npm run test:all` MUST pass before committing.
+  - Rust logic (scan, parsing, downloads, playtime…) → `#[test]` in the `mod tests` at the end of `lib.rs` (or of the module). Use temp dirs (`fake_library` helper), never the real `%LOCALAPPDATA%`.
+  - UI behaviour → `src/App.test.tsx` (Vitest + Testing Library). The fake backend is `src/test/tauriMock.ts`: when you add or change a `#[tauri::command]` used by the UI, add its handler there **with the exact Rust return shape** (a `Vec` → `[]`, never `null`). Drive backend events with `emit()` from `@tauri-apps/api/event`.
+  - New i18n keys are checked automatically by `src/i18n/i18n.test.ts` (same keys in FR/EN, same `{placeholders}`, every literal `t("…")` key exists).
+  - Never weaken or delete an existing test to make a change pass — fix the code, or explain why the old behaviour was wrong.
 
 ## Workflow After Each Feature/Fix
 
-1. **Commit + push** immediately after implementing
+0. **Run `npm run test:all`** — all green, including the new test for this change
+1. **Commit + push** immediately after implementing (CI re-runs everything on each push)
 2. **Check off** the task in `scratch/plan.md`
 3. **Propose next ideas** — suggest 3-4 options for what to work on next (from plan.md or new ideas)
 4. Always include the `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` trailer

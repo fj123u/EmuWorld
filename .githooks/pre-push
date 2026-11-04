@@ -1,0 +1,13 @@
+#!/bin/sh
+# Blocks a push when the test suite fails, so a regression never reaches
+# GitHub (and the auto-updater). Enabled with:
+#   git config core.hooksPath .githooks
+# Emergency bypass: git push --no-verify
+
+echo "[pre-push] Type-check, frontend tests, Rust tests..."
+if ! npm run --silent test:all; then
+  echo ""
+  echo "[pre-push] Tests failed — push cancelled. Fix them, or bypass with: git push --no-verify"
+  exit 1
+fi
+echo "[pre-push] All tests passed."

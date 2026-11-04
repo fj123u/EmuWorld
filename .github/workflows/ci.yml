@@ -1,8 +1,17 @@
 name: CI
 
+# Runs on every push (main is pushed to directly) and on pull requests, so a
+# change that breaks an existing feature is flagged within minutes.
 on:
+  push:
+    branches: ["**"]
+    tags-ignore: ["v*"] # release.yml runs the same checks before building
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -34,8 +43,11 @@ jobs:
       - name: Audit npm dependencies
         run: npm audit --audit-level=high
 
-      - name: Build frontend
+      - name: Type-check + build frontend
         run: npm run build
 
-      - name: Run Rust tests
+      - name: Frontend tests (UI pages, store flows, translations)
+        run: npm test
+
+      - name: Rust tests (scan, downloads, playtime, catalog)
         run: cargo test --manifest-path src-tauri/Cargo.toml
