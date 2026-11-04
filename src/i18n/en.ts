@@ -150,6 +150,9 @@ const en: Translations = {
     collectionShared: "Collection shared with the community!",
     extracting: "Extracting...",
     done: "Done!",
+    downloadStarted: "Downloading {name}...",
+    downloadSuccess: "{name} downloaded successfully!",
+    downloadFailed: "Failed: {error}",
   },
 
   // Friends
@@ -358,6 +361,7 @@ const en: Translations = {
     friendRequestSent: "Friend request sent!",
     friendRequestAccepted: "Request accepted!",
     friendRemoved: "Friend removed",
+    emulatorInstalled: "Emulator installed successfully!",
   },
 
   // Lobby
@@ -502,6 +506,8 @@ const en: Translations = {
 
   // Library
   library: {
+    romDetected: "📂 {name} detected — refreshing library",
+    romsDetected: "📂 {count} new ROMs detected — refreshing library",
     sortPlaytime: "Playtime",
     sortRating: "Rating",
     sortLastPlayed: "Last played",
@@ -519,6 +525,9 @@ const en: Translations = {
   // Wrap
   wrap: {
     noData: "No data yet this month. Play some games and come back!",
+    dayOne: "{count} day",
+    dayMany: "{count} days",
+    activeDays: "Active days this month",
   },
 
   // Marketplace extra

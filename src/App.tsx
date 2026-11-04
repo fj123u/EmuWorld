@@ -1332,6 +1332,13 @@ export default function App() {
   const { t, locale, setLocale } = useTranslation();
 
   const [page, setPage] = useState<Page>("discover");
+  // Each page shares the same scroll container: without a reset, opening a
+  // page after scrolling a long one (Stats → Wrap) landed mid-page with the
+  // title hidden.
+  const mainContentRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainContentRef.current?.scrollTo({ top: 0 });
+  }, [page]);
   const [catalog, setCatalog] = useState<EmulatorInfo[]>([]);
   const [installed, setInstalled] = useState<string[]>([]);
   const [roms, setRoms] = useState<RomFile[]>([]);
@@ -1870,9 +1877,12 @@ export default function App() {
   }, [roms, storeRoms]);
 
   // ---- Toast helpers ----
+  // Date.now() alone collided when two toasts fired in the same millisecond
+  // (common at startup): duplicate React keys, and the first timeout removed both.
+  const toastSeqRef = useRef(0);
   const showToast = useCallback(
     (message: string, type: Toast["type"] = "info") => {
-      const id = Date.now();
+      const id = Date.now() * 1000 + (toastSeqRef.current++ % 1000);
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
     },
@@ -2241,18 +2251,25 @@ export default function App() {
   // ROM directory watcher — auto-detect new files
   useEffect(() => {
     invoke("watch_roms_directory").catch(() => {});
+  }, []);
+
+  // Listener kept separate from the watcher start above so a language change
+  // (new `t`) re-subscribes the listener without starting a second watcher.
+  useEffect(() => {
     const unlisten = listen<string[]>("roms-detected", (event) => {
       const names = event.payload;
       if (names.length > 0) {
-        const label = names.length === 1
-          ? names[0]
-          : `${names.length} new ROMs`;
-        showToast(`📂 ${label} detected — refreshing library`, "info");
+        showToast(
+          names.length === 1
+            ? t("library.romDetected", { name: names[0] })
+            : t("library.romsDetected", { count: names.length }),
+          "info"
+        );
         loadData();
       }
     });
     return () => { unlisten.then(f => f()); };
-  }, [loadData, showToast]);
+  }, [loadData, showToast, t]);
 
   // Global screenshot events (from Ctrl+F12 global shortcut registered in Rust)
   useEffect(() => {
@@ -4899,14 +4916,14 @@ export default function App() {
         if (event.payload.status === "done") {
           setInstalling((prev) => prev.filter((id) => id !== event.payload.emulator_id));
           loadData();
-          showToast("Emulator installed successfully!", "success");
+          showToast(t("toast.emulatorInstalled"), "success");
         }
       }
     );
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [loadData, showToast]);
+  }, [loadData, showToast, t]);
 
   useEffect(() => {
     const unlisten = listen<DownloadStats & { file_name?: string; file_id?: string; store_id?: string; status: string }>(
@@ -4938,17 +4955,24 @@ export default function App() {
       "vimm-download-progress",
       (event) => {
         const { game_id, status, progress, downloaded_bytes, total_bytes, speed_bps, eta } = event.payload;
-        if (game_id && status === "downloading") {
-          setDownloadProgress(prev => ({
-            ...prev,
-            [game_id]: {
-              progress: progress || 0,
-              downloaded_bytes: downloaded_bytes || 0,
-              total_bytes: total_bytes || 0,
-              speed_bps: speed_bps || 0,
-              eta: eta || 0,
-            }
-          }));
+        // Keep every status, not only "downloading": the store button and the
+        // download banner switch to "Extracting..." on status === "extracting".
+        // Dropping it left the bar frozen at 99% during long extractions.
+        if (game_id) {
+          setDownloadProgress(prev => {
+            const current = prev[game_id];
+            return {
+              ...prev,
+              [game_id]: {
+                progress: progress ?? current?.progress ?? 0,
+                downloaded_bytes: downloaded_bytes ?? current?.downloaded_bytes ?? 0,
+                total_bytes: total_bytes ?? current?.total_bytes ?? 0,
+                speed_bps: status === "downloading" ? (speed_bps ?? 0) : 0,
+                eta: status === "downloading" ? (eta ?? 0) : 0,
+                status,
+              }
+            };
+          });
         }
       }
     );
@@ -4973,30 +4997,42 @@ export default function App() {
     setVimmSearch("");
   }, []);
 
+  // Synchronous in-flight set: the `downloading` state read inside the
+  // callback is a stale closure, so a fast double-click passed the check
+  // twice and started the same download two or three times in a row.
+  const vimmInFlightRef = useRef<Set<string>>(new Set());
+
   const handleOpenVimmGame = useCallback(async (game: VimmGame) => {
     const targetConsole = selectedVimmConsole?.target_console || "Mixed";
-    if (downloading.includes(game.id)) return;
+    if (vimmInFlightRef.current.has(game.id)) return;
+    vimmInFlightRef.current.add(game.id);
     setDownloading(prev => [...prev, game.id]);
     setDownloadNames(prev => ({ ...prev, [game.id]: game.name }));
-    showToast(`Téléchargement de ${game.name}...`, "info");
+    showToast(t("store.downloadStarted", { name: game.name }), "info");
     try {
       await invoke<string>("download_vimm_rom", {
         gameId: game.id,
         gameName: game.name,
         console: targetConsole,
       });
-      showToast(`${game.name} téléchargé avec succès !`, "success");
+      showToast(t("store.downloadSuccess", { name: game.name }), "success");
       postActivity("game_added", game.name, targetConsole);
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
-      showToast(`Échec : ${err}`, "error");
+      const msg = String(err);
+      if (msg === "Download cancelled by user") {
+        showToast(t("store.cancelled"), "info");
+      } else {
+        showToast(t("store.downloadFailed", { error: msg }), "error");
+      }
     } finally {
+      vimmInFlightRef.current.delete(game.id);
       setDownloading(prev => prev.filter(id => id !== game.id));
       setDownloadNames(prev => { const n = { ...prev }; delete n[game.id]; return n; });
       setDownloadProgress(prev => { const n = { ...prev }; delete n[game.id]; return n; });
     }
-  }, [selectedVimmConsole, showToast, downloading, loadData, triggerHiddenAchievement]);
+  }, [selectedVimmConsole, showToast, loadData, triggerHiddenAchievement, t]);
 
   // Debounced Vimm search — scoped to the currently selected console when available,
   // or global across all Vimm consoles otherwise.
@@ -5750,7 +5786,7 @@ export default function App() {
           </div>
         </aside>
 
-        <main className="main-content">
+        <main className="main-content" ref={mainContentRef}>
           <div className={`dynamic-bg ${bgCover ? "dynamic-bg--visible" : ""}`}>
             {bgCover && <img src={bgCover} alt="" />}
           </div>
@@ -6204,7 +6240,7 @@ export default function App() {
                                     <><RefreshCw size={12} className="animate-spin" /> {downloadProgress[game.id]?.progress || 0}%</>
                                   )
                                 ) : (
-                                  <><Download size={12} /> Download</>
+                                  <><Download size={12} /> {t("store.download")}</>
                                 )}
                               </button>
                               {downloading.includes(game.id) && downloadProgress[game.id]?.status !== "done" && (
@@ -8094,8 +8130,8 @@ export default function App() {
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                             <div className="wrap-card__icon">📅</div>
-                            <div className="wrap-card__value">{daysPlayed} jours</div>
-                            <div className="wrap-card__label">Jours actifs ce mois</div>
+                            <div className="wrap-card__value">{t(daysPlayed === 1 ? "wrap.dayOne" : "wrap.dayMany", { count: daysPlayed })}</div>
+                            <div className="wrap-card__label">{t("wrap.activeDays")}</div>
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
                             <div className="wrap-card__icon">⚡</div>

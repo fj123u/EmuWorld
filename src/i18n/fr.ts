@@ -148,6 +148,9 @@ const fr = {
     collectionShared: "Collection partagée avec la communauté !",
     extracting: "Extraction...",
     done: "Terminé !",
+    downloadStarted: "Téléchargement de {name}...",
+    downloadSuccess: "{name} téléchargé avec succès !",
+    downloadFailed: "Échec : {error}",
   },
 
   // Friends
@@ -356,6 +359,7 @@ const fr = {
     friendRequestSent: "Demande d'ami envoyée !",
     friendRequestAccepted: "Demande acceptée !",
     friendRemoved: "Ami supprimé",
+    emulatorInstalled: "Émulateur installé avec succès !",
   },
 
   // Lobby
@@ -500,6 +504,8 @@ const fr = {
 
   // Library
   library: {
+    romDetected: "📂 {name} détecté — actualisation de la bibliothèque",
+    romsDetected: "📂 {count} nouvelles ROMs détectées — actualisation de la bibliothèque",
     sortPlaytime: "Temps joué",
     sortRating: "Note",
     sortLastPlayed: "Dernier joué",
@@ -517,6 +523,9 @@ const fr = {
   // Wrap
   wrap: {
     noData: "Pas encore de données ce mois-ci. Joue un peu et reviens !",
+    dayOne: "{count} jour",
+    dayMany: "{count} jours",
+    activeDays: "Jours actifs ce mois",
   },
 
   // Marketplace extra

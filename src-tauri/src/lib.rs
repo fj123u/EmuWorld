@@ -50,6 +50,110 @@ fn cancelled_downloads() -> &'static Mutex<std::collections::HashSet<String>> {
     CANCELLED_DOWNLOADS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
 }
 
+static ACTIVE_DOWNLOADS: OnceLock<Mutex<std::collections::HashSet<String>>> = OnceLock::new();
+
+/// IDs of downloads currently in flight. Two tasks writing the same file at
+/// once corrupt it, so a second request for the same ID is refused.
+fn active_downloads() -> &'static Mutex<std::collections::HashSet<String>> {
+    ACTIVE_DOWNLOADS.get_or_init(|| Mutex::new(std::collections::HashSet::new()))
+}
+
+/// Registers `id` as in flight for as long as the guard lives. On drop it
+/// also clears any cancel flag for `id`: a cancel that arrives after the last
+/// chunk (or before the first) would otherwise linger and instantly cancel
+/// the *next* download of the same game.
+struct ActiveDownloadGuard {
+    id: String,
+}
+
+impl ActiveDownloadGuard {
+    fn acquire(id: &str) -> Option<Self> {
+        let mut active = active_downloads().lock().ok()?;
+        if !active.insert(id.to_string()) {
+            return None;
+        }
+        // Drop any stale cancel request left over from a previous attempt.
+        cancelled_downloads().lock().map(|mut s| s.remove(id)).ok();
+        Some(Self { id: id.to_string() })
+    }
+}
+
+impl Drop for ActiveDownloadGuard {
+    fn drop(&mut self) {
+        active_downloads().lock().map(|mut s| s.remove(&self.id)).ok();
+        cancelled_downloads().lock().map(|mut s| s.remove(&self.id)).ok();
+    }
+}
+
+/// A download written to `<dest>.part` and only renamed to `dest` once
+/// complete. If the transfer fails or is cancelled, the guard deletes the
+/// partial file on drop, so a truncated ROM never lands in the ROMs folder
+/// where the library scanner would list it as a playable game.
+struct PartialDownload {
+    part: PathBuf,
+    finished: bool,
+}
+
+impl PartialDownload {
+    fn new(dest: &std::path::Path) -> Self {
+        let mut part = dest.as_os_str().to_owned();
+        part.push(".part");
+        Self { part: PathBuf::from(part), finished: false }
+    }
+
+    fn path(&self) -> &std::path::Path {
+        &self.part
+    }
+
+    /// Moves the finished file into place. The write handle must be closed first.
+    fn commit(mut self, dest: &std::path::Path) -> Result<(), String> {
+        if dest.exists() {
+            fs::remove_file(dest).map_err(|e| format!("Cannot replace {}: {}", dest.display(), e))?;
+        }
+        fs::rename(&self.part, dest).map_err(|e| format!("Cannot finalize {}: {}", dest.display(), e))?;
+        self.finished = true;
+        Ok(())
+    }
+}
+
+impl Drop for PartialDownload {
+    fn drop(&mut self) {
+        if !self.finished {
+            let _ = fs::remove_file(&self.part);
+        }
+    }
+}
+
+/// Extracts a safe file name from a `Content-Disposition` header.
+/// Prefers RFC 5987 `filename*=UTF-8''…` (percent-decoded) over `filename=`.
+/// The result is reduced to a single path component without Windows-illegal
+/// characters, so a hostile or malformed header can neither escape the
+/// destination folder nor make file creation fail.
+fn filename_from_content_disposition(header: &str) -> Option<String> {
+    let extended = Regex::new(r#"(?i)filename\*\s*=\s*[^']*'[^']*'([^;\s]+)"#).ok()
+        .and_then(|re| re.captures(header).map(|c| c[1].to_string()))
+        .and_then(|enc| urlencoding::decode(&enc).ok().map(|s| s.into_owned()));
+    let plain = || {
+        Regex::new(r#"(?i)(?:^|;)\s*filename\s*=\s*(?:"([^"]*)"|([^;]+))"#).ok()
+            .and_then(|re| re.captures(header).map(|c| {
+                c.get(1).or_else(|| c.get(2)).map(|m| m.as_str().trim().to_string()).unwrap_or_default()
+            }))
+    };
+    extended.or_else(plain).and_then(|raw| safe_file_name(&raw))
+}
+
+/// Reduces an untrusted name to one valid Windows file name (no directories).
+fn safe_file_name(raw: &str) -> Option<String> {
+    let last = raw.rsplit(['/', '\\']).next().unwrap_or(raw);
+    let cleaned: String = sanitize_filename(last).chars().filter(|c| !c.is_control()).collect();
+    let cleaned = cleaned.trim().to_string();
+    if cleaned.is_empty() || cleaned.chars().all(|c| c == '.') {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
 fn cover_urls() -> &'static Mutex<std::collections::HashMap<String, String>> {
     COVER_URLS.get_or_init(|| {
         let path = emuworld_base_dir().join("cover_urls.json");
@@ -102,7 +206,13 @@ pub fn push_log(level: &str, msg: &str) {
         let _ = file.write_all(file_entry.as_bytes());
     }
 
-    // Auto-cleanup: delete log files older than 7 days
+    // Auto-cleanup: delete log files older than 7 days. Done once per app run —
+    // push_log is called hundreds of times during a scan (one line per cover
+    // fetch), and listing the logs folder on every call was pure disk churn.
+    static LOG_CLEANUP_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if LOG_CLEANUP_DONE.swap(true, AtomicOrdering::Relaxed) {
+        return;
+    }
     if let Ok(entries) = fs::read_dir(emuworld_base_dir().join("logs")) {
         let cutoff = now - chrono::Duration::days(7);
         for entry in entries.flatten() {
@@ -1088,10 +1198,37 @@ async fn launch_emulator(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let _ = fs::write(&session_file, serde_json::json!({
-            "game": &name, "console": &console, "emulator": &emulator_id_for_task,
-            "start_epoch": start_epoch
-        }).to_string());
+        let session_json = {
+            let (n, c, e) = (name.clone(), console.clone(), emulator_id_for_task.clone());
+            move |last_seen: u64| serde_json::json!({
+                "game": n, "console": c, "emulator": e,
+                "start_epoch": start_epoch, "last_seen_epoch": last_seen
+            }).to_string()
+        };
+        let _ = fs::write(&session_file, session_json(start_epoch));
+
+        // Heartbeat: refresh `last_seen_epoch` every 30 s while the game runs.
+        // Crash recovery used to count from the game start until the *next*
+        // EmuWorld launch — PC shut down mid-game, app reopened the next
+        // morning, and 14 h of playtime were recorded. It now stops at the
+        // last heartbeat. The mutex makes sure no heartbeat can rewrite the
+        // file after the normal exit path below has removed it.
+        let session_alive = std::sync::Arc::new(Mutex::new(true));
+        {
+            let alive = session_alive.clone();
+            let file = session_file.clone();
+            let contents_for = session_json;
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                let Ok(guard) = alive.lock() else { break };
+                if !*guard { break; }
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = fs::write(&file, contents_for(now));
+            });
+        }
 
         // Wait for the child to exit on a blocking thread, then record the session.
         tauri::async_runtime::spawn_blocking(move || {
@@ -1127,14 +1264,18 @@ async fn launch_emulator(
             }
 
             let elapsed = start.elapsed().as_secs();
+            // Stop the heartbeat and remove the recovery file *before*
+            // recording, so a crash in between can't count the session twice.
+            if let Ok(mut alive) = session_alive.lock() {
+                *alive = false;
+                let _ = fs::remove_file(emuworld_base_dir().join("current_session.json"));
+            }
             // Ignore sessions < 3s (likely the emulator crashed or the user mis-clicked).
             if elapsed >= 3 {
                 if let Err(e) = playtime::record_session(&console, &name, elapsed, &emulator_id_for_task) {
-                    println!("[Playtime] record failed: {}", e);
+                    push_log("ERROR", &format!("Enregistrement de session échoué pour {}: {}", name, e));
                 }
             }
-            // Remove session file on normal exit
-            let _ = fs::remove_file(emuworld_base_dir().join("current_session.json"));
             let _ = app_handle.emit("game-closed", serde_json::json!({
                 "console": console,
                 "name": name,
@@ -1149,6 +1290,20 @@ async fn launch_emulator(
     }
 
     Ok(format!("Launched {}", launched_name))
+}
+
+/// Playtime to credit for a session left behind by a crash: from the game
+/// start to the last heartbeat (not to "now", which may be days later).
+/// Files written before heartbeats existed have no `last_seen_epoch`; their
+/// real duration is unknown, so nothing is credited rather than a guess.
+fn orphan_session_seconds(session: &serde_json::Value) -> u64 {
+    let start = session["start_epoch"].as_u64().unwrap_or(0);
+    let last_seen = session["last_seen_epoch"].as_u64().unwrap_or(0);
+    if start == 0 || last_seen <= start {
+        return 0;
+    }
+    // Same 24 h sanity cap as before: anything longer is a clock problem.
+    (last_seen - start).min(86_400)
 }
 
 fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
@@ -1206,10 +1361,19 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
         return roms;
     }
 
-    // PS3 folder-based game detection: look for directories containing PS3_DISC.SFB
-    let ps3_dir = dir.join("PlayStation 3");
-    if ps3_dir.exists() {
-        if let Ok(entries) = fs::read_dir(&ps3_dir) {
+    // PS3 folder-based game detection: look for directories containing PS3_DISC.SFB.
+    // Accept every folder alias ("PS3", "ps3"…) like the rest of the scan does,
+    // not only a folder literally named "PlayStation 3".
+    let ps3_dirs: Vec<PathBuf> = fs::read_dir(&dir)
+        .map(|rd| rd.flatten()
+            .map(|e| e.path())
+            .filter(|p| p.is_dir() && p.file_name()
+                .map(|n| normalize_console_folder(&n.to_string_lossy()) == "PlayStation 3")
+                .unwrap_or(false))
+            .collect())
+        .unwrap_or_default();
+    for ps3_dir in &ps3_dirs {
+        if let Ok(entries) = fs::read_dir(ps3_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if path.is_dir() && path.join("PS3_DISC.SFB").exists() {
@@ -1406,16 +1570,14 @@ fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
         }
     }
 
-    // Keyword-based detection — but skip if bundled DLC pattern detected
+    // Keyword-based detection — but skip if bundled DLC pattern detected.
+    // Match whole words only: a substring test hid real games from the
+    // library ("Dispatch", "Patchwork Heroes" contain "patch").
     if !has_bundled_dlc {
-        if lower.contains("dlc") || lower.contains("update") || lower.contains("patch") {
+        let is_marker = |w: &str| matches!(w, "dlc" | "update" | "patch" | "upd");
+        if lower.split(|c: char| !c.is_alphanumeric()).any(is_marker) {
             return true;
         }
-    }
-
-    // "upd" alone (not part of "update" already caught, but standalone like "[UPD]")
-    if !has_bundled_dlc && lower.contains("[upd]") {
-        return true;
     }
 
     // Additional Switch specific: Check for version strings in brackets like [v65536]
@@ -2689,7 +2851,6 @@ pub struct RgsSearchResult {
     pub url: Option<String>,
 }
 
-#[allow(dead_code)]
 fn sanitize_filename(name: &str) -> String {
     let mut s = name.to_string();
     let invalid_chars = ['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
@@ -3043,6 +3204,25 @@ async fn download_rom(
     ia_id: Option<String>,
     store_id: Option<String>,
 ) -> Result<String, String> {
+    push_log("INFO", &format!("Download store: {} ({})", _rom_name, console));
+    let rom_name = _rom_name.clone();
+    let result = download_rom_inner(app_handle, download_url_arg, console, _rom_name, file_name_arg, ia_id, store_id).await;
+    match &result {
+        Ok(msg) => push_log("INFO", &format!("Download store terminé: {} — {}", rom_name, msg)),
+        Err(e) => push_log("ERROR", &format!("Download store échoué: {} — {}", rom_name, e)),
+    }
+    result
+}
+
+async fn download_rom_inner(
+    app_handle: tauri::AppHandle,
+    download_url_arg: String,
+    console: String,
+    _rom_name: String,
+    file_name_arg: String,
+    ia_id: Option<String>,
+    store_id: Option<String>,
+) -> Result<String, String> {
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
@@ -3055,7 +3235,7 @@ async fn download_rom(
     }
 
     let mut final_url = download_url_arg;
-    let mut final_file_name = if file_name_arg.is_empty() { "game.bin".to_string() } else { file_name_arg.replace("..", "").replace('/', "").replace('\\', "") };
+    let mut final_file_name = safe_file_name(&file_name_arg).unwrap_or_else(|| "game.bin".to_string());
     let final_store_id = store_id.clone();
 
     // ROM file extensions we care about
@@ -3083,9 +3263,13 @@ async fn download_rom(
                     if let Some(ref f) = best_file {
                         let encoded_f = urlencoding::encode(f);
                         final_url = format!("https://archive.org/download/{}/{}", id, encoded_f);
-                        // Use the resolved filename if we didn't have one
+                        // Use the resolved filename if we didn't have one.
+                        // Archive.org names can include sub-folders
+                        // ("disc/game.iso"): keep only the file name.
                         if final_file_name == "game.bin" {
-                            final_file_name = f.clone();
+                            if let Some(name) = safe_file_name(f) {
+                                final_file_name = name;
+                            }
                         }
                     }
                 }
@@ -3100,7 +3284,9 @@ async fn download_rom(
     
     println!("[Download] ======= Starting download =======");
     println!("[Download] ROM: {} ({})", _rom_name, console);
-    println!("[Download] URL: {}", if final_url.len() > 80 { &final_url[..80] } else { &final_url });
+    // Byte-slicing at 80 panicked when that byte fell inside a multi-byte
+    // character (accented game names in the URL).
+    println!("[Download] URL: {}", final_url.chars().take(80).collect::<String>());
     println!("[Download] File: {}", final_file_name);
     println!("[Download] IA ID: {:?}", ia_id);
     
@@ -3133,10 +3319,13 @@ async fn download_rom(
         }
     }
     
-    let mut total_size = content_length.unwrap_or(0);
+    let known_size = content_length.unwrap_or(0);
+    let mut total_size = known_size;
     if total_size == 0 { total_size = 100 * 1024 * 1024; }
 
-    let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let partial = PartialDownload::new(&dest);
+    let mut file = fs::File::create(partial.path())
+        .map_err(|e| format!("Cannot create {}: {}", final_file_name, e))?;
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
@@ -3170,7 +3359,9 @@ async fn download_rom(
         }
 
         if last_emit.elapsed().as_millis() >= 400 {
-            let progress = (downloaded_bytes as f64 / total_size as f64 * 100.0) as u32;
+            // With an unknown size, total_size is a 100 MB guess: cap so the
+            // bar never shows 250 % on a 250 MB file.
+            let progress = (downloaded_bytes as f64 / total_size as f64 * 100.0).min(99.0) as u32;
             let elapsed_sec = start_time.elapsed().as_secs_f64();
             let speed_bps = if elapsed_sec > 0.0 { downloaded_bytes as f64 / elapsed_sec } else { 0.0 };
             let eta = if speed_bps > 0.0 && total_size > downloaded_bytes {
@@ -3191,7 +3382,16 @@ async fn download_rom(
     }
     
     // Close the file handle before post-processing
+    file.flush().map_err(|e| e.to_string())?;
     drop(file);
+    if known_size > 0 && downloaded_bytes < known_size {
+        return Err(format!(
+            "Incomplete download ({} / {})",
+            format_size(downloaded_bytes),
+            format_size(known_size)
+        ));
+    }
+    partial.commit(&dest)?;
     println!("[Download] Download complete: {} bytes saved to {}", downloaded_bytes, dest.display());
 
     // === ZIP Auto-Extraction ===
@@ -3214,43 +3414,49 @@ async fn download_rom(
 
     if is_zip {
         println!("[Download] Detected ZIP archive, extracting...");
-        match extract_rom_zip(&dest, &dest_dir) {
+        let (zip_path, out_dir) = (dest.clone(), dest_dir.clone());
+        let extraction = tokio::task::spawn_blocking(move || extract_rom_zip(&zip_path, &out_dir))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
+        match extraction {
             Ok(extracted_files) => {
                 println!("[Download] Extracted {} files: {:?}", extracted_files.len(), extracted_files);
                 let _ = fs::remove_file(&dest);
                 println!("[Download] Deleted ZIP archive: {}", dest.display());
             }
             Err(e) => {
-                println!("[Download] ZIP extraction failed: {} — keeping raw file", e);
+                push_log("WARN", &format!("Extraction ZIP échouée, archive conservée ({}): {}", final_file_name, e));
             }
         }
     } else if is_7z {
         println!("[Download] Detected 7z archive, extracting...");
-        let dest_clone = dest.clone();
-        let dest_dir_clone = dest_dir.clone();
-        let handle = app_handle.clone();
-        let file_name_clone = final_file_name.clone();
-        tokio::task::spawn_blocking(move || {
-            use tauri::Emitter;
-            match extract_7z(&dest_clone, &dest_dir_clone) {
-                Ok(()) => {
-                    println!("[Download] Extracted 7z successfully: {}", file_name_clone);
-                    let _ = fs::remove_file(&dest_clone);
-                    let _ = handle.emit("import-extract-done", serde_json::json!({
-                        "file": file_name_clone,
-                        "status": "success"
-                    }));
-                }
-                Err(e) => {
-                    println!("[Download] 7z extraction failed: {} — keeping raw file", e);
-                    let _ = handle.emit("import-extract-done", serde_json::json!({
-                        "file": file_name_clone,
-                        "status": "error",
-                        "message": e
-                    }));
-                }
+        // Awaited (it used to be fire-and-forget): the command reported
+        // "done" and the frontend reloaded the library before the game was
+        // even extracted, so it only showed up after a manual rescan.
+        let (archive, out_dir) = (dest.clone(), dest_dir.clone());
+        let extraction = tokio::task::spawn_blocking(move || extract_7z(&archive, &out_dir))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r);
+        match extraction {
+            Ok(()) => {
+                println!("[Download] Extracted 7z successfully: {}", final_file_name);
+                let _ = fs::remove_file(&dest);
+                let _ = app_handle.emit("import-extract-done", serde_json::json!({
+                    "file": final_file_name,
+                    "status": "success"
+                }));
             }
-        });
+            Err(e) => {
+                push_log("WARN", &format!("Extraction 7z échouée, archive conservée ({}): {}", final_file_name, e));
+                let _ = app_handle.emit("import-extract-done", serde_json::json!({
+                    "file": final_file_name,
+                    "status": "error",
+                    "message": e
+                }));
+            }
+        }
     } else {
         println!("[Download] File is not an archive, keeping as-is");
     }
@@ -3975,24 +4181,27 @@ async fn download_1fichier(
     }
 
     // Extract filename from Content-Disposition or URL
+    // Header names are untrusted: reduce them to one safe path component.
     let file_name = dl_resp.headers()
         .get("content-disposition")
         .and_then(|h| h.to_str().ok())
-        .and_then(|s| {
-            let re = regex::Regex::new(r##"filename\*?=(?:UTF-8''|"?)([^";\r\n]+)"??"##).unwrap();
-            re.captures(s).map(|c| c[1].to_string())
-        })
+        .and_then(filename_from_content_disposition)
         .or_else(|| {
-            download_link.split('/').last()
-                .map(|s| urlencoding::decode(s).unwrap_or_else(|_| s.into()).to_string())
-                .filter(|s| !s.is_empty() && s.contains('.'))
+            download_link.split('?').next().unwrap_or("").rsplit('/').next()
+                .map(|s| urlencoding::decode(s).map(|d| d.into_owned()).unwrap_or_else(|_| s.to_string()))
+                .filter(|s| s.contains('.'))
+                .and_then(|s| safe_file_name(&s))
         })
-        .unwrap_or_else(|| format!("1fichier_download_{}.bin", &queue_id[..8.min(queue_id.len())]));
+        .unwrap_or_else(|| {
+            let short: String = queue_id.chars().filter(|c| c.is_ascii_alphanumeric()).take(8).collect();
+            format!("1fichier_download_{}.bin", short)
+        });
 
     let total_size = dl_resp.content_length().unwrap_or(0);
     let dest_path = dest_dir.join(&file_name);
+    let partial = PartialDownload::new(&dest_path);
 
-    let mut file = fs::File::create(&dest_path)
+    let mut file = fs::File::create(partial.path())
         .map_err(|e| format!("Failed to create file: {}", e))?;
 
     let mut downloaded: u64 = 0;
@@ -4000,18 +4209,23 @@ async fn download_1fichier(
     let start_time = std::time::Instant::now();
     let mut stream = dl_resp;
 
-    while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
-        // Check for cancellation
+    while let Some(chunk) = stream.chunk().await.map_err(|e| {
+        push_log("ERROR", &format!("1fichier: connexion interrompue ({}): {}", file_name, e));
+        e.to_string()
+    })? {
+        // Check for cancellation (the .part file is removed when `partial` drops)
         if cancelled_downloads().lock().map(|s| s.contains(&queue_id)).unwrap_or(false) {
             drop(file);
-            let _ = fs::remove_file(&dest_path);
             cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
             push_log("INFO", &format!("Download annulé: {} (queue: {})", file_name, queue_id));
             emit_progress("cancelled", 0, "Download cancelled");
-            return Err("Download cancelled by user".to_string());
+            return Err(DOWNLOAD_CANCELLED.to_string());
         }
 
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        file.write_all(&chunk).map_err(|e| {
+            push_log("ERROR", &format!("1fichier: écriture disque impossible ({}): {}", file_name, e));
+            e.to_string()
+        })?;
         downloaded += chunk.len() as u64;
 
         // Bandwidth throttling
@@ -4051,44 +4265,58 @@ async fn download_1fichier(
             last_emit_time = std::time::Instant::now();
         }
     }
+    file.flush().map_err(|e| e.to_string())?;
     drop(file);
     cancelled_downloads().lock().map(|mut s| s.remove(&queue_id)).ok();
+
+    if total_size > 0 && downloaded < total_size {
+        push_log("ERROR", &format!("1fichier: téléchargement incomplet {} ({} / {})", file_name, format_size(downloaded), format_size(total_size)));
+        return Err(format!("Incomplete download ({} / {})", format_size(downloaded), format_size(total_size)));
+    }
+    partial.commit(&dest_path).map_err(|e| {
+        push_log("ERROR", &format!("1fichier: {}", e));
+        e
+    })?;
 
     // Auto-extract if ZIP/7z
     let lower = file_name.to_lowercase();
     if lower.ends_with(".zip") || lower.ends_with(".7z") {
         emit_progress("extracting", 95, &format!("Extracting: {}", file_name));
-    }
 
-    if lower.ends_with(".zip") {
-        let zip_path = dest_path.clone();
-        if let Ok(zip_file) = fs::File::open(&zip_path) {
-            if let Ok(mut archive) = zip::ZipArchive::new(zip_file) {
+        let (archive_path, out_dir, is_zip) = (dest_path.clone(), dest_dir.clone(), lower.ends_with(".zip"));
+        let extraction = tokio::task::spawn_blocking(move || -> Result<(), String> {
+            if is_zip {
+                let zip_file = fs::File::open(&archive_path).map_err(|e| e.to_string())?;
+                let mut archive = zip::ZipArchive::new(zip_file).map_err(|e| e.to_string())?;
                 for i in 0..archive.len() {
-                    if let Ok(mut entry) = archive.by_index(i) {
-                        if let Some(safe_name) = entry.enclosed_name() {
-                            let out_path = dest_dir.join(safe_name);
-                            if entry.is_dir() {
-                                let _ = fs::create_dir_all(&out_path);
-                            } else {
-                                if let Some(p) = out_path.parent() {
-                                    let _ = fs::create_dir_all(p);
-                                }
-                                if let Ok(mut outfile) = fs::File::create(&out_path) {
-                                    let _ = std::io::copy(&mut entry, &mut outfile);
-                                }
-                            }
+                    let mut entry = archive.by_index(i).map_err(|e| e.to_string())?;
+                    let Some(safe_name) = entry.enclosed_name() else { continue };
+                    let out_path = out_dir.join(safe_name);
+                    if entry.is_dir() {
+                        fs::create_dir_all(&out_path).map_err(|e| e.to_string())?;
+                    } else {
+                        if let Some(p) = out_path.parent() {
+                            fs::create_dir_all(p).map_err(|e| e.to_string())?;
                         }
+                        let mut outfile = fs::File::create(&out_path).map_err(|e| e.to_string())?;
+                        std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
                     }
                 }
-                let _ = fs::remove_file(&zip_path);
+                Ok(())
+            } else {
+                sevenz_rust::decompress_file(&archive_path, &out_dir).map_err(|e| e.to_string())
             }
-        }
-    } else if lower.ends_with(".7z") {
-        let sz_path = dest_path.clone();
-        let out_dir = dest_dir.clone();
-        if sevenz_rust::decompress_file(&sz_path, &out_dir).is_ok() {
-            let _ = fs::remove_file(&sz_path);
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|r| r);
+
+        // Only delete the archive once everything was written: previously a
+        // failed write (e.g. disk full) was ignored and the archive deleted
+        // anyway, losing the game.
+        match extraction {
+            Ok(()) => { let _ = fs::remove_file(&dest_path); }
+            Err(e) => push_log("WARN", &format!("1fichier: extraction échouée, archive conservée ({}): {}", file_name, e)),
         }
     }
 
@@ -4610,9 +4838,33 @@ async fn download_vimm_rom(
     console: String,
 ) -> Result<String, String> {
     push_log("INFO", &format!("Téléchargement: {} ({})", game_name, console));
-    if !game_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+    if game_id.is_empty() || !game_id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        push_log("WARN", &format!("Download Vimm refusé — game_id invalide: {:?}", game_id));
         return Err("Invalid game_id".to_string());
     }
+    let Some(_active) = ActiveDownloadGuard::acquire(&game_id) else {
+        push_log("WARN", &format!("Download Vimm ignoré — déjà en cours: {} ({})", game_name, game_id));
+        return Err("Download already in progress".to_string());
+    };
+    // Every failure path below used to return silently: the log showed the
+    // download starting and then nothing at all. Log the outcome here once.
+    let result = download_vimm_rom_inner(&app_handle, &game_id, &game_name, &console).await;
+    if let Err(e) = &result {
+        if e != DOWNLOAD_CANCELLED {
+            push_log("ERROR", &format!("Download Vimm échoué: {} ({}) — {}", game_name, game_id, e));
+        }
+    }
+    result
+}
+
+const DOWNLOAD_CANCELLED: &str = "Download cancelled by user";
+
+async fn download_vimm_rom_inner(
+    app_handle: &tauri::AppHandle,
+    game_id: &str,
+    game_name: &str,
+    console: &str,
+) -> Result<String, String> {
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
@@ -4689,18 +4941,24 @@ async fn download_vimm_rom(
         return Err(format!("Vimm download HTTP {}", response.status()));
     }
 
+    // The old parser split on "filename=" and kept everything after it, so a
+    // header carrying both forms (`filename="x.7z"; filename*=UTF-8''x.7z`)
+    // produced a name containing `;` and `*` — illegal on Windows, so file
+    // creation failed. It also let `..\` from the header escape the folder.
     let file_name = response.headers().get("content-disposition")
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| {
-            v.split("filename=").nth(1)
-                .or_else(|| v.split("filename*=UTF-8''").nth(1))
-                .map(|s| s.trim_matches('"').trim().to_string())
+        .and_then(filename_from_content_disposition)
+        .or_else(|| {
+            let base = game_name.replace(|c: char| !c.is_alphanumeric() && c != ' ', "").trim().replace(' ', "_");
+            safe_file_name(&format!("{}.zip", base))
         })
-        .unwrap_or_else(|| format!("{}.zip", game_name.replace(|c: char| !c.is_alphanumeric() && c != ' ', "").trim().replace(' ', "_")));
+        .unwrap_or_else(|| format!("vimm_{}.zip", game_id));
 
     let total_size = response.content_length().unwrap_or(0);
     let dest = dest_dir.join(&file_name);
-    let mut file = fs::File::create(&dest).map_err(|e| e.to_string())?;
+    let partial = PartialDownload::new(&dest);
+    let mut file = fs::File::create(partial.path())
+        .map_err(|e| format!("Cannot create {}: {}", file_name, e))?;
     let mut downloaded_bytes = 0u64;
     let mut last_emit = std::time::Instant::now();
     let start_time = std::time::Instant::now();
@@ -4709,22 +4967,20 @@ async fn download_vimm_rom(
 
     use std::io::Write;
     let mut stream = response;
-    while let Some(chunk) = stream.chunk().await.map_err(|e| e.to_string())? {
-        // Check for cancellation
-        if cancelled_downloads().lock().map(|s| s.contains(&game_id)).unwrap_or(false) {
+    while let Some(chunk) = stream.chunk().await.map_err(|e| format!("Connexion interrompue: {}", e))? {
+        // Check for cancellation (the .part file is removed when `partial` drops)
+        if cancelled_downloads().lock().map(|s| s.contains(game_id)).unwrap_or(false) {
             drop(file);
-            let _ = fs::remove_file(&dest);
-            cancelled_downloads().lock().map(|mut s| s.remove(&game_id)).ok();
             push_log("INFO", &format!("Download Vimm annulé: {} ({})", game_name, game_id));
             let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
                 "game_id": game_id,
                 "status": "cancelled",
                 "progress": 0
             }));
-            return Err("Download cancelled by user".to_string());
+            return Err(DOWNLOAD_CANCELLED.to_string());
         }
 
-        file.write_all(&chunk).map_err(|e| e.to_string())?;
+        file.write_all(&chunk).map_err(|e| format!("Écriture disque impossible: {}", e))?;
         downloaded_bytes += chunk.len() as u64;
 
         let bw_limit = BANDWIDTH_LIMIT_KBPS.load(AtomicOrdering::Relaxed);
@@ -4764,7 +5020,20 @@ async fn download_vimm_rom(
             last_emit = std::time::Instant::now();
         }
     }
+    file.flush().map_err(|e| format!("Écriture disque impossible: {}", e))?;
     drop(file);
+
+    // A connection closed cleanly by the server before the announced size
+    // ends the stream without error; without this check the truncated
+    // archive was kept and reported as a successful download.
+    if total_size > 0 && downloaded_bytes < total_size {
+        return Err(format!(
+            "Téléchargement incomplet ({} / {})",
+            format_size(downloaded_bytes),
+            format_size(total_size)
+        ));
+    }
+    partial.commit(&dest)?;
 
     let lower = file_name.to_lowercase();
     if lower.ends_with(".zip") || lower.ends_with(".7z") {
@@ -4773,18 +5042,26 @@ async fn download_vimm_rom(
             "status": "extracting",
             "progress": 99
         }));
-    }
 
-    if lower.ends_with(".zip") {
-        if let Ok(extracted) = extract_rom_zip(&dest, &dest_dir) {
-            if !extracted.is_empty() { let _ = fs::remove_file(&dest); }
-        }
-    } else if lower.ends_with(".7z") {
-        let dest_c = dest.clone();
-        let dir_c = dest_dir.clone();
-        match extract_7z(&dest_c, &dir_c) {
-            Ok(()) => { let _ = fs::remove_file(&dest); }
-            Err(_) => {}
+        // Extraction of a multi-GB disc image takes minutes and is fully
+        // synchronous: run it off the async runtime so it doesn't stall the
+        // other downloads and commands sharing the worker thread.
+        let (archive, out_dir, is_zip) = (dest.clone(), dest_dir.clone(), lower.ends_with(".zip"));
+        let extraction = tokio::task::spawn_blocking(move || -> Result<bool, String> {
+            if is_zip {
+                extract_rom_zip(&archive, &out_dir).map(|files| !files.is_empty())
+            } else {
+                extract_7z(&archive, &out_dir).map(|()| true)
+            }
+        })
+        .await
+        .map_err(|e| format!("extraction task: {}", e))
+        .and_then(|r| r);
+
+        match extraction {
+            Ok(true) => { let _ = fs::remove_file(&dest); }
+            Ok(false) => push_log("WARN", &format!("Archive vide, conservée telle quelle: {}", file_name)),
+            Err(e) => push_log("WARN", &format!("Extraction échouée, archive conservée ({}): {}", file_name, e)),
         }
     }
 
@@ -6392,15 +6669,15 @@ pub fn run() {
                             let console = session["console"].as_str().unwrap_or_default().to_string();
                             let emulator = session["emulator"].as_str().unwrap_or_default().to_string();
                             let start_epoch = session["start_epoch"].as_u64().unwrap_or(0);
+                            let elapsed = orphan_session_seconds(&session);
                             if start_epoch > 0 && !game.is_empty() {
-                                let now_epoch = std::time::SystemTime::now()
-                                    .duration_since(std::time::UNIX_EPOCH)
-                                    .unwrap_or_default()
-                                    .as_secs();
-                                let elapsed = now_epoch.saturating_sub(start_epoch);
-                                if elapsed >= 3 && elapsed < 86400 {
-                                    let _ = playtime::record_session(&console, &game, elapsed, &emulator);
-                                    push_log("INFO", &format!("Session orpheline récupérée : {} — {}s", game, elapsed));
+                                if elapsed >= 3 {
+                                    match playtime::record_session(&console, &game, elapsed, &emulator) {
+                                        Ok(()) => push_log("INFO", &format!("Session orpheline récupérée : {} — {}s", game, elapsed)),
+                                        Err(e) => push_log("ERROR", &format!("Session orpheline non enregistrée ({}): {}", game, e)),
+                                    }
+                                } else {
+                                    push_log("WARN", &format!("Session orpheline ignorée (durée inconnue) : {}", game));
                                 }
                             }
                         }
@@ -6515,4 +6792,102 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running EmuWorld");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_disposition_plain_quoted() {
+        assert_eq!(
+            filename_from_content_disposition(r#"attachment; filename="Zelda (Europe).7z""#).as_deref(),
+            Some("Zelda (Europe).7z")
+        );
+    }
+
+    #[test]
+    fn content_disposition_both_forms_prefers_extended() {
+        // The old parser returned `Zelda.7z"; filename*=UTF-8''Zelda.7z` here.
+        let h = r#"attachment; filename="Zelda.7z"; filename*=UTF-8''Zelda%20Twilight.7z"#;
+        assert_eq!(filename_from_content_disposition(h).as_deref(), Some("Zelda Twilight.7z"));
+    }
+
+    #[test]
+    fn content_disposition_unquoted_and_case() {
+        assert_eq!(
+            filename_from_content_disposition("Attachment; FileName=game.iso").as_deref(),
+            Some("game.iso")
+        );
+    }
+
+    #[test]
+    fn content_disposition_blocks_traversal() {
+        let h = r#"attachment; filename="..\..\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\evil.bat""#;
+        assert_eq!(filename_from_content_disposition(h).as_deref(), Some("evil.bat"));
+        assert_eq!(filename_from_content_disposition(r#"attachment; filename="..""#), None);
+        assert_eq!(filename_from_content_disposition("attachment"), None);
+    }
+
+    #[test]
+    fn safe_file_name_strips_illegal_chars() {
+        assert_eq!(safe_file_name("a:b*c?.iso").as_deref(), Some("abc.iso"));
+        assert_eq!(safe_file_name("disc/game.iso").as_deref(), Some("game.iso"));
+        assert_eq!(safe_file_name("   "), None);
+    }
+
+    #[test]
+    fn dlc_filter_matches_whole_words_only() {
+        assert!(is_update_or_dlc("Zelda BOTW [Update]", "nsp"));
+        assert!(is_update_or_dlc("Mario Kart 8 DLC Pack", "nsp"));
+        assert!(is_update_or_dlc("Game (Patch 1.2)", "iso"));
+        assert!(!is_update_or_dlc("Dispatch", "nsp"));
+        assert!(!is_update_or_dlc("Patchwork Heroes (Europe)", "iso"));
+        assert!(!is_update_or_dlc("Pokemon Sword Incl. 2 DLCs", "nsp"));
+    }
+
+    #[test]
+    fn partial_download_is_removed_unless_committed() {
+        let dir = std::env::temp_dir().join(format!("emuworld_partial_{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let dest = dir.join("game.iso");
+
+        let p = PartialDownload::new(&dest);
+        fs::write(p.path(), b"half").unwrap();
+        let part_path = p.path().to_path_buf();
+        drop(p);
+        assert!(!part_path.exists(), "a failed download must not leave a .part file");
+        assert!(!dest.exists());
+
+        let p = PartialDownload::new(&dest);
+        fs::write(p.path(), b"full").unwrap();
+        p.commit(&dest).unwrap();
+        assert_eq!(fs::read(&dest).unwrap(), b"full");
+
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn orphan_session_counts_until_last_heartbeat_only() {
+        let s = serde_json::json!({ "start_epoch": 1_000, "last_seen_epoch": 2_800 });
+        assert_eq!(orphan_session_seconds(&s), 1_800);
+        // Legacy file without heartbeat: unknown duration, credit nothing.
+        assert_eq!(orphan_session_seconds(&serde_json::json!({ "start_epoch": 1_000 })), 0);
+        // Clock went backwards / corrupt values.
+        assert_eq!(orphan_session_seconds(&serde_json::json!({ "start_epoch": 5_000, "last_seen_epoch": 4_000 })), 0);
+        assert_eq!(orphan_session_seconds(&serde_json::json!({ "start_epoch": 1, "last_seen_epoch": 999_999 })), 86_400);
+    }
+
+    #[test]
+    fn active_download_guard_rejects_duplicates_and_clears_cancel() {
+        let id = "test_dup_guard";
+        cancelled_downloads().lock().unwrap().insert(id.to_string());
+        let first = ActiveDownloadGuard::acquire(id).expect("first acquire");
+        assert!(!cancelled_downloads().lock().unwrap().contains(id), "stale cancel flag must be cleared");
+        assert!(ActiveDownloadGuard::acquire(id).is_none(), "second concurrent download must be refused");
+        cancelled_downloads().lock().unwrap().insert(id.to_string());
+        drop(first);
+        assert!(!cancelled_downloads().lock().unwrap().contains(id));
+        assert!(ActiveDownloadGuard::acquire(id).is_some());
+    }
 }
