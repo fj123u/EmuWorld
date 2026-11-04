@@ -808,6 +808,31 @@ const RA_SUPPORTED_CONSOLES = new Set([
   "Atari 2600", "WonderSwan",
 ]);
 
+/**
+ * Cover <img> for portrait (3:4) slots. iiDB art is square: cropping it to
+ * 3:4 cut off the sides of the logo, so square or landscape images are shown
+ * whole ("contain") over a blurred copy of themselves. Portrait box art is
+ * unchanged.
+ */
+export const CoverImage = ({ src, alt }: { src: string; alt: string }) => {
+  const [wide, setWide] = useState(false);
+  useEffect(() => setWide(false), [src]);
+  return (
+    <>
+      {wide && <img className="cover-backdrop" src={src} alt="" aria-hidden="true" />}
+      <img
+        src={src}
+        alt={alt}
+        className={wide ? "cover--contain" : undefined}
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          if (img.naturalHeight > 0) setWide(img.naturalWidth / img.naturalHeight >= 0.9);
+        }}
+      />
+    </>
+  );
+};
+
 const DiscoverCover = ({ rom }: { rom: RomFile }) => {
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
@@ -886,7 +911,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
         {cover ? (
-          <img src={cover} alt={rom.name} />
+          <CoverImage src={cover} alt={rom.name} />
         ) : !loading ? (
           <div className="game-card__placeholder">
             <span className="game-card__placeholder-icon">🎮</span>

@@ -48,7 +48,7 @@ EmuWorld/
 ├── src-tauri/                    # Backend Rust (Tauri v2)
 │   ├── src/
 │   │   ├── lib.rs                # Monolithe principal (~4500 lignes) — toutes les commandes Tauri :
-│   │   │                         #   scan ROMs, fetch covers (libretro/tinfoil/Wikipedia/GameTDB),
+│   │   │                         #   scan ROMs, fetch covers (iiDB/tinfoil/libretro/Wikipedia/GameTDB),
 │   │   │                         #   install/launch émulateurs, store (Vimm/RGS), config, overlay,
 │   │   │                         #   screenshots, bandwidth limiter, guides Wikipedia/RA
 │   │   ├── emulators.rs          # Catalogue statique des 25+ émulateurs (URLs, exécutables, extensions)
@@ -109,7 +109,8 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
 - Les IDs d'émulateurs sont toujours en lowercase et correspondent aux noms de dossiers sur disque.
 - La détection de ROMs utilise les extensions fichier matchées contre le catalogue + le nom de dossier parent (avec alias : "PSP" → "PlayStation Portable", "3DS" → "Nintendo 3DS", etc.).
 - Les updates/DLCs sont filtrés par pattern de Title ID (Switch: suffixe non-000, Wii U: préfixe 0005000E/C).
-- Le fetch de covers cascade: cache local (WebP) → tinfoil.media (Switch) → libretro thumbnails → Wikipedia → GameTDB.
+- Le fetch de covers cascade: cache local (WebP) → **iiDB** (`iidb.rs`, iidb.iisu.network, prioritaire) → tinfoil.media (Switch) → libretro thumbnails → Wikipedia → GameTDB.
+- iiDB : appariement strict (titre normalisé identique + bonne plateforme, ou correspondance souple seulement si un seul candidat et sans numéro de suite). En cas de doute → pas de match, la cascade continue : mieux vaut une cover d'une autre source qu'une mauvaise cover. Les visuels iiDB sont carrés : `CoverImage` les affiche entiers sur fond flou dans les cartes 3:4. Nouvelle console → ajouter son nom iiDB dans `iidb::platforms` (un test le vérifie).
 - Les covers sont sauvegardées en WebP (quality 85) pour réduire l'espace disque (~80% vs PNG).
 - Le backend Rust utilise `reqwest` pour HTTP, `zip`/`sevenz-rust` pour l'extraction, `scraper` pour le parsing HTML, `walkdir` pour les scans FS récursifs, `image`/`webp` pour la conversion d'images.
 
@@ -130,4 +131,3 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
 1. **Commit + push** immediately after implementing (CI re-runs everything on each push)
 2. **Check off** the task in `scratch/plan.md`
 3. **Propose next ideas** — suggest 3-4 options for what to work on next (from plan.md or new ideas)
-4. Always include the `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>` trailer

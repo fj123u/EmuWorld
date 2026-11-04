@@ -345,6 +345,7 @@ mod retroachievements;
 mod cloud_backup;
 mod dpapi;
 mod atomic_file;
+mod iidb;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -1775,6 +1776,14 @@ fn save_cover_as_webp(png_bytes: &[u8], dest_dir: &PathBuf, safe_name: &str) -> 
     let img = ImageReader::new(Cursor::new(png_bytes))
         .with_guessed_format().ok()?
         .decode().ok()?;
+    // iiDB art is 1024×1024+ (≈550 KB PNG): cards never show covers that
+    // large, so cap the cached copy at 800 px to keep the cache small.
+    const MAX_COVER_PX: u32 = 800;
+    let img = if img.width() > MAX_COVER_PX || img.height() > MAX_COVER_PX {
+        img.resize(MAX_COVER_PX, MAX_COVER_PX, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
     let encoder = webp::Encoder::from_image(&img).ok()?;
     let webp_data = encoder.encode(85.0);
     let webp_path = dest_dir.join(format!("{}.webp", safe_name));
@@ -1959,6 +1968,35 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         .unwrap_or_else(|_| reqwest::Client::new());
 
     // min_size already computed above
+
+    // === iiDB (iidb.iisu.network) FIRST: largest community art database ===
+    // Strict title + platform match (see iidb.rs); on no match, an API error
+    // or a bad image, fall through to the usual cascade below.
+    match iidb::find_boxart_url(&client, &game_name, &console).await {
+        Ok(Some(url)) => {
+            write_to_boxart_log(&format!("Trying iiDB: {}", url));
+            match client.get(&url).header(reqwest::header::USER_AGENT, iidb::user_agent()).send().await {
+                Ok(resp) if resp.status().is_success() => match resp.bytes().await {
+                    Ok(bytes) if bytes.len() >= min_size => {
+                        if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                            write_to_boxart_log("Result: iiDB Success");
+                            log_event(&url, "Match Found", None);
+                            store_cover_url(&format!("{}::{}", console, game_name), &url);
+                            push_log("INFO", &format!("Cover iiDB trouvée: '{}' ({})", game_name, console));
+                            return Ok(data_url);
+                        }
+                        push_log("WARN", &format!("Cover iiDB illisible pour '{}', repli sur les autres sources", game_name));
+                    }
+                    Ok(bytes) => write_to_boxart_log(&format!("iiDB image too small ({} bytes)", bytes.len())),
+                    Err(e) => push_log("WARN", &format!("Téléchargement cover iiDB échoué ('{}'): {}", game_name, e)),
+                },
+                Ok(resp) => push_log("WARN", &format!("Cover iiDB HTTP {} pour '{}'", resp.status(), game_name)),
+                Err(e) => push_log("WARN", &format!("Téléchargement cover iiDB échoué ('{}'): {}", game_name, e)),
+            }
+        }
+        Ok(None) => write_to_boxart_log("iiDB: no confident match, trying other sources"),
+        Err(e) => push_log("WARN", &format!("iiDB indisponible pour '{}' ({}), repli sur les autres sources", game_name, e)),
+    }
 
     // === SWITCH/WIIU: Try tinfoil.media first (best source for Switch covers) ===
     if console == "Nintendo Switch" {
@@ -6374,9 +6412,9 @@ fn get_installed_version(id: &str) -> Option<String> {
 fn get_cover_url(game_name: String, console: String) -> Option<String> {
     let key = format!("{}::{}", console, game_name);
     let stored = cover_urls().lock().ok().and_then(|map| map.get(&key).cloned());
-    // Only return URLs that Discord can display (libretro thumbnails or tinfoil)
+    // Only return URLs that Discord can display (libretro thumbnails, tinfoil, iiDB)
     if let Some(ref url) = stored {
-        if url.contains("thumbnails.libretro.com") || url.contains("tinfoil.media") {
+        if url.contains("thumbnails.libretro.com") || url.contains("tinfoil.media") || url.contains(iidb::ASSETS_HOST) {
             return stored;
         }
     }

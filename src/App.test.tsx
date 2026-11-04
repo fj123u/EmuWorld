@@ -6,7 +6,7 @@ import { Component, type ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
-import App from "./App";
+import App, { CoverImage } from "./App";
 import { mockBackend, type Handler } from "./test/tauriMock";
 
 class Boundary extends Component<{ onError: (e: Error) => void; children: ReactNode }, { failed: boolean }> {
@@ -201,6 +201,28 @@ describe("Vimm store download", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Télécharger/ }));
     await waitFor(() => expect(backend.count("download_vimm_rom")).toBe(2));
     expect(attempts).toBe(2);
+  });
+});
+
+describe("CoverImage", () => {
+  function loadWith(img: HTMLImageElement, width: number, height: number) {
+    Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
+    Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
+    fireEvent.load(img);
+  }
+
+  it("shows square art (iiDB) whole over a blurred backdrop", () => {
+    const { container } = render(<CoverImage src="data:image/webp;base64,AA" alt="Super Mario Bros. 3" />);
+    loadWith(screen.getByAltText("Super Mario Bros. 3") as HTMLImageElement, 1024, 1024);
+    expect(screen.getByAltText("Super Mario Bros. 3").className).toContain("cover--contain");
+    expect(container.querySelector("img.cover-backdrop")).not.toBeNull();
+  });
+
+  it("leaves portrait box art as it was", () => {
+    const { container } = render(<CoverImage src="data:image/webp;base64,AA" alt="Metroid Prime" />);
+    loadWith(screen.getByAltText("Metroid Prime") as HTMLImageElement, 600, 800);
+    expect(screen.getByAltText("Metroid Prime").className).not.toContain("cover--contain");
+    expect(container.querySelector("img.cover-backdrop")).toBeNull();
   });
 });
 
