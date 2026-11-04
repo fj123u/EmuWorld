@@ -1376,6 +1376,7 @@ export default function App() {
   }, [boxartLogs]);
 
   const { t, locale, setLocale } = useTranslation();
+  const dateLocale = locale === "en" ? "en-GB" : "fr-FR";
 
   const [page, setPage] = useState<Page>("discover");
   // Each page shares the same scroll container: without a reset, opening a
@@ -1935,6 +1936,17 @@ export default function App() {
     []
   );
 
+  // Stable translator for event handlers, callbacks and listeners: it reads the
+  // current locale through a ref, so it never has to be a dependency and a
+  // language change never re-runs effects that call the backend. Render code
+  // keeps using `t` directly.
+  const tRef = useRef(t);
+  tRef.current = t;
+  const tl = useCallback(
+    (key: string, params?: Record<string, string | number>) => tRef.current(key, params),
+    []
+  );
+
   // ---- AUTH STATE ----
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -2051,20 +2063,20 @@ export default function App() {
             refresh_token: refreshToken
           });
           if (error) throw error;
-          showToast('Connected successfully! 🎉', 'success');
+          showToast(tl('toast.connected'), 'success');
           setShowLoginModal(false);
         } else if (code) {
           console.log('[Auth] Detected PKCE Flow (code)');
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-          showToast('Connected successfully! 🎉', 'success');
+          showToast(tl('toast.connected'), 'success');
           setShowLoginModal(false);
         } else {
           console.warn('[Auth] No session data found in callback URL');
         }
       } catch (e: any) {
         console.error('[Auth] Callback error:', e);
-        showToast(`Auth error: ${e.message}`, 'error');
+        showToast(tl('toast.authError', { error: e.message }), 'error');
         setAuthError(e.message);
       }
     });
@@ -2091,7 +2103,7 @@ export default function App() {
       await fetchProfile(user.id);
       showToast(t('toast.usernameUpdated'), 'success');
     } catch (e: any) {
-      showToast(`Update error: ${e.message}`, 'error');
+      showToast(tl('toast.updateError', { error: e.message }), 'error');
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -2137,11 +2149,11 @@ export default function App() {
       // file exactly once and the browser can cache subsequent renders.
       setAvatarCacheKey(Date.now().toString());
       await fetchProfile(user.id);
-      showToast('Avatar updated! 📸', 'success');
+      showToast(tl('toast.avatarUpdated'), 'success');
       triggerHiddenAchievement("change_avatar");
     } catch (e: any) {
       console.error("[EmuWorld] Avatar upload error:", e);
-      showToast(`Upload error: ${e.message}`, 'error');
+      showToast(tl('toast.uploadError', { error: e.message }), 'error');
     } finally {
       setIsUpdatingProfile(false);
     }
@@ -2181,7 +2193,7 @@ export default function App() {
           clearInterval(pollInterval);
           setAuthLoading(false);
           setShowLoginModal(false);
-          showToast('Connected successfully! 🎉', 'success');
+          showToast(tl('toast.connected'), 'success');
         }
       }, 2000);
     } catch (e: any) {
@@ -2195,9 +2207,9 @@ export default function App() {
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
-      showToast('Signed out successfully', 'info');
+      showToast(tl('toast.signedOut'), 'info');
     } catch (e: any) {
-      showToast(`Logout error: ${e.message}`, 'error');
+      showToast(tl('toast.logoutError', { error: e.message }), 'error');
     }
   };
 
@@ -2238,7 +2250,7 @@ export default function App() {
           password: loginPassword,
         });
         if (error) throw error;
-        showToast('Welcome back! 🎮', 'success');
+        showToast(tl('toast.welcomeBack'), 'success');
       }
       setShowLoginModal(false);
     } catch (e: any) {
@@ -2320,13 +2332,13 @@ export default function App() {
   // Global screenshot events (from Ctrl+F12 global shortcut registered in Rust)
   useEffect(() => {
     const u1 = listen<string>("screenshot-taken", () => {
-      showToast("📸 Screenshot saved!", "success");
+      showToast(tl("toast.screenshotSaved"), "success");
     });
     const u2 = listen<string>("screenshot-error", (event) => {
       if (event.payload === "no_game_running") {
-        showToast("No game running — launch a game first", "info");
+        showToast(tl("toast.screenshotNoGame"), "info");
       } else {
-        showToast("Screenshot failed", "error");
+        showToast(tl("toast.screenshotFailed"), "error");
       }
     });
     return () => { u1.then(f => f()); u2.then(f => f()); };
@@ -2406,9 +2418,9 @@ export default function App() {
   const handleSaveRaCredentials = useCallback(async () => {
     try {
       await invoke("save_ra_credentials", { username: raUsername, apiKey: raApiKey });
-      showToast("RetroAchievements credentials saved!", "success");
+      showToast(tl("toast.raSaved"), "success");
     } catch (e: any) {
-      showToast(`Failed to save: ${e}`, "error");
+      showToast(tl("toast.saveFailed", { error: String(e) }), "error");
     }
   }, [raUsername, raApiKey, showToast]);
 
@@ -2420,7 +2432,7 @@ export default function App() {
       const info = await invoke<RAGameInfo>("get_ra_game_progress", { gameName: rom.name, console: rom.console });
       setRaGameInfo(info);
     } catch (e: any) {
-      showToast(`RetroAchievements: ${e}`, "error");
+      showToast(tl("toast.raError", { error: String(e) }), "error");
       setRaModalRom(null);
     } finally {
       setRaLoading(false);
@@ -2434,9 +2446,9 @@ export default function App() {
       const token = await invoke<string>("ra_login", { username: raUsername, password: raPassword });
       setRaToken(token);
       setRaPassword("");
-      showToast("Connecté à RetroAchievements ! Token obtenu.", "success");
+      showToast(tl("toast.raConnected"), "success");
     } catch (e: any) {
-      showToast(`RA Login: ${e}`, "error");
+      showToast(tl("toast.raLoginError", { error: String(e) }), "error");
     } finally {
       setRaLoginLoading(false);
     }
@@ -2445,7 +2457,7 @@ export default function App() {
   const handleConfigureRaEmulators = useCallback(async () => {
     try {
       const configured = await invoke<string[]>("configure_ra_emulators");
-      showToast(`RetroAchievements configuré dans : ${configured.join(", ")}`, "success");
+      showToast(tl("toast.raConfigured", { emulators: configured.join(", ") }), "success");
     } catch (e: any) {
       showToast(`${e}`, "error");
     }
@@ -2455,7 +2467,7 @@ export default function App() {
     setRaDownloadingCores(true);
     try {
       const cores = await invoke<string[]>("download_ra_cores");
-      showToast(`Cores installés : ${cores.join(", ")}`, "success");
+      showToast(tl("toast.coresInstalled", { cores: cores.join(", ") }), "success");
     } catch (e: any) {
       showToast(`${e}`, "error");
     } finally {
@@ -2616,23 +2628,23 @@ export default function App() {
       status: "pending",
     });
     if (error) {
-      if (error.code === "23505") showToast("Demande déjà envoyée", "info");
-      else showToast(`Erreur: ${error.message}`, "error");
+      if (error.code === "23505") showToast(tl("toast.friendRequestAlreadySent"), "info");
+      else showToast(tl("toast.error", { error: error.message }), "error");
     } else {
-      showToast(t("toast.friendRequestSent"), "success");
+      showToast(tl("toast.friendRequestSent"), "success");
       loadFriends();
     }
   }, [user, showToast, loadFriends]);
 
   const acceptFriendRequest = useCallback(async (friendshipId: string) => {
     await supabase.from("friendships").update({ status: "accepted" }).eq("id", friendshipId);
-    showToast(t("toast.friendRequestAccepted"), "success");
+    showToast(tl("toast.friendRequestAccepted"), "success");
     loadFriends();
   }, [showToast, loadFriends]);
 
   const declineFriendRequest = useCallback(async (friendshipId: string) => {
     await supabase.from("friendships").delete().eq("id", friendshipId);
-    showToast("Demande refusée", "info");
+    showToast(tl("toast.friendRequestDeclined"), "info");
     loadFriends();
   }, [showToast, loadFriends]);
 
@@ -2802,11 +2814,11 @@ export default function App() {
 
   const sendChatImage = useCallback(async (file: File) => {
     if (!user || !chatOpen) return;
-    if (file.size > 10 * 1024 * 1024) { showToast("Image trop lourde (max 10 MB)", "error"); return; }
+    if (file.size > 10 * 1024 * 1024) { showToast(tl("toast.imageTooLarge"), "error"); return; }
     const compressed = await compressImage(file);
     const path = `chat/${user.id}/${Date.now()}.jpg`;
     const { error: uploadErr } = await supabase.storage.from("chat-images").upload(path, compressed, { contentType: "image/jpeg" });
-    if (uploadErr) { showToast("Image upload failed", "error"); return; }
+    if (uploadErr) { showToast(tl("toast.imageUploadFailed"), "error"); return; }
     const { data: urlData } = supabase.storage.from("chat-images").getPublicUrl(path);
     const imageUrl = urlData.publicUrl;
     const { data } = await supabase.from("messages").insert({
@@ -2916,7 +2928,7 @@ export default function App() {
   const handleSaveB2Config = useCallback(async () => {
     try {
       await invoke("save_b2_config", { keyId: b2KeyId, appKey: b2AppKey, bucketId: b2BucketId, bucketName: b2BucketName });
-      showToast("Configuration B2 sauvegardée", "success");
+      showToast(tl("toast.b2Saved"), "success");
       const saves = await invoke<typeof localSaves>("scan_local_saves");
       setLocalSaves(saves);
     } catch (e: any) {
@@ -2930,7 +2942,7 @@ export default function App() {
       const result = await invoke<string>("backup_saves_to_cloud");
       showToast(result, "success");
     } catch (e: any) {
-      showToast(`Backup failed: ${e}`, "error");
+      showToast(tl("toast.backupFailed", { error: String(e) }), "error");
     } finally {
       setBackupLoading(false);
     }
@@ -2954,7 +2966,7 @@ export default function App() {
       const result = await invoke<string>("restore_cloud_backup", { fileId });
       showToast(result, "success");
     } catch (e: any) {
-      showToast(`Restore failed: ${e}`, "error");
+      showToast(tl("toast.restoreFailed", { error: String(e) }), "error");
     } finally {
       setBackupLoading(false);
     }
@@ -2965,9 +2977,9 @@ export default function App() {
     try {
       await invoke<string>("delete_cloud_backup", { fileId, fileName });
       setCloudBackups(prev => prev.filter(b => b.file_id !== fileId));
-      showToast("Backup supprimé", "success");
+      showToast(tl("toast.backupDeleted"), "success");
     } catch (e: any) {
-      showToast(`Suppression échouée: ${e}`, "error");
+      showToast(tl("toast.deleteFailed", { error: String(e) }), "error");
     } finally {
       setBackupLoading(false);
     }
@@ -2979,7 +2991,7 @@ export default function App() {
       const games = await invoke<RACompletedGame[]>("get_ra_completed_games");
       setRaCompletedGames(games);
     } catch (e: any) {
-      showToast(`RetroAchievements: ${e}`, "error");
+      showToast(tl("toast.raError", { error: String(e) }), "error");
     } finally {
       setRaProfileLoading(false);
     }
@@ -2993,7 +3005,7 @@ export default function App() {
       const info = await invoke<RAGameInfo>("get_ra_game_progress", { gameName: game.title, console: game.console_name });
       setRaGameInfo(info);
     } catch (e: any) {
-      showToast(`RetroAchievements: ${e}`, "error");
+      showToast(tl("toast.raError", { error: String(e) }), "error");
       setRaModalRom(null);
     } finally {
       setRaLoading(false);
@@ -3070,7 +3082,7 @@ export default function App() {
     try {
       const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
       if (result) {
-        showToast(`${result.icon} Achievement secret débloqué : ${result.name}`, "success");
+        showToast(tl("toast.secretAchievementUnlocked", { icon: result.icon, name: result.name }), "success");
         await loadAchievements();
         syncAchievementToCloud(result);
       }
@@ -3091,7 +3103,7 @@ export default function App() {
       });
       if (newlyUnlocked.length > 0) {
         for (const a of newlyUnlocked) {
-          showToast(`${a.icon} Achievement débloqué : ${a.name}`, "success");
+          showToast(tl("toast.achievementUnlocked", { icon: a.icon, name: a.name }), "success");
           postActivity("achievement_unlocked", undefined, undefined, `${a.icon} ${a.name}`);
           syncAchievementToCloud(a);
         }
@@ -3670,7 +3682,7 @@ export default function App() {
                   completed_at: completed ? new Date().toISOString() : null,
                 }).eq("id", part.id);
                 if (completed) {
-                  showToast(`Challenge "${chal.title}" terminé ! ${chal.badge_icon}`, "success");
+                  showToast(tl("toast.challengeCompleted", { title: chal.title, badge: chal.badge_icon }), "success");
                 }
               }
             }
@@ -3703,10 +3715,10 @@ export default function App() {
       "import-extract-done",
       (event) => {
         if (event.payload.status === "success") {
-          showToast(`Extraction terminée : ${event.payload.file.replace(".7z", "")}`, "success");
+          showToast(tl("toast.extractDone", { file: event.payload.file.replace(".7z", "") }), "success");
           loadData();
         } else {
-          showToast(`Extraction échouée : ${event.payload.message || event.payload.file}`, "error");
+          showToast(tl("toast.extractFailed", { error: event.payload.message || event.payload.file }), "error");
         }
       }
     );
@@ -3723,7 +3735,7 @@ export default function App() {
         setTimeout(() => checkAchievements(), 300);
       }
     } catch (err: any) {
-      showToast(`Favorite failed: ${err}`, "error");
+      showToast(tl("toast.favoriteFailed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast, scheduleCloudSync, triggerHiddenAchievement, checkAchievements]);
 
@@ -3733,7 +3745,7 @@ export default function App() {
       loadPlaytime();
       scheduleCloudSync();
     } catch (err: any) {
-      showToast(`Rating failed: ${err}`, "error");
+      showToast(tl("toast.ratingFailed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast, scheduleCloudSync]);
 
@@ -3893,8 +3905,8 @@ export default function App() {
       comment: reviewDraft.comment.trim() || null,
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id,game_name,game_console" });
-    if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast(t("reviews.submitted") || "Avis publié !", "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("reviews.submitted"), "success");
     handleOpenReviews(rom);
   }, [reviewsModal, user, reviewDraft, showToast, handleOpenReviews]);
 
@@ -3903,7 +3915,7 @@ export default function App() {
     const { rom } = reviewsModal;
     await supabase.from("game_reviews").delete().eq("user_id", user.id).eq("game_name", rom.name).eq("game_console", rom.console);
     setReviewDraft({ rating: 0, comment: "" });
-    showToast(t("reviews.deleted") || "Avis supprimé", "success");
+    showToast(tl("reviews.deleted"), "success");
     handleOpenReviews(rom);
   }, [reviewsModal, user, showToast, handleOpenReviews]);
 
@@ -3988,15 +4000,15 @@ export default function App() {
   }, [user]);
 
   const handleJoinChallenge = useCallback(async (challengeId: string) => {
-    if (!user?.id) { showToast("Connecte-toi pour participer", "error"); return; }
+    if (!user?.id) { showToast(tl("toast.loginToJoin"), "error"); return; }
     const { error } = await supabase.from("challenge_participants").upsert({
       user_id: user.id,
       challenge_id: challengeId,
       progress: 0,
       completed: false,
     }, { onConflict: "user_id,challenge_id" });
-    if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast(t("challenges.joined") || "Tu participes au challenge !", "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("challenges.joined"), "success");
     loadChallenges();
   }, [user, showToast, loadChallenges]);
 
@@ -4052,8 +4064,8 @@ export default function App() {
       title: guideDraft.title.trim(),
       content: guideDraft.content.trim(),
     });
-    if (error) { showToast("Erreur: " + error.message, "error"); return; }
-    showToast(t("guides.published") || "Guide publié !", "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("guides.published"), "success");
     setGuideDraft({ title: "", content: "" });
     handleOpenGuide(rom);
   }, [guideModal, user, guideDraft, showToast, handleOpenGuide]);
@@ -4074,7 +4086,7 @@ export default function App() {
   const handleDeleteGuide = useCallback(async (guideId: string) => {
     if (!user?.id) return;
     await supabase.from("game_guides").delete().eq("id", guideId).eq("user_id", user.id);
-    showToast(t("guides.deleted") || "Guide supprimé", "success");
+    showToast(tl("guides.deleted"), "success");
     if (guideModal) handleOpenGuide(guideModal.rom);
   }, [user, guideModal, showToast, handleOpenGuide]);
 
@@ -4109,8 +4121,8 @@ export default function App() {
       duration_days: versusForm.days,
       ends_at: endsAt,
     });
-    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
-    showToast(`Défi envoyé à ${versusModal.friendName} !`, "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("toast.versusSent", { name: versusModal.friendName }), "success");
     setVersusModal(null);
     setVersusForm({ type: "playtime", game: "", console: "", days: 7, description: "" });
     loadVersusChallenges();
@@ -4160,17 +4172,17 @@ export default function App() {
       game_name: rom.name,
       game_console: rom.console,
     }).select().single();
-    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
     await supabase.from("lobby_members").insert({ lobby_id: data.id, user_id: user.id, is_ready: true });
     setCurrentLobby({ ...data, members: [{ id: "", lobby_id: data.id, user_id: user.id, is_ready: true }] });
-    showToast(t("lobby.created"), "success");
+    showToast(tl("lobby.created"), "success");
   }, [user, showToast]);
 
   const handleInviteToLobby = useCallback(async (friendId: string) => {
     if (!currentLobby) return;
     const { error } = await supabase.from("lobby_members").insert({ lobby_id: currentLobby.id, user_id: friendId });
-    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
-    showToast(t("lobby.inviteSent"), "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("lobby.inviteSent"), "success");
   }, [currentLobby, showToast]);
 
   const handleJoinLobby = useCallback(async (lobbyId: string) => {
@@ -4185,7 +4197,7 @@ export default function App() {
     if (!currentLobby || !user) return;
     const hasRom = roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
     if (!hasRom) {
-      showToast(`Tu n'as pas "${currentLobby.game_name}". Redirige vers le Store...`, "error");
+      showToast(tl("toast.lobbyMissingRom", { game: currentLobby.game_name }), "error");
       setPage("store");
       return;
     }
@@ -4289,20 +4301,20 @@ export default function App() {
       custom_css: {},
     };
     const { error } = await supabase.from("community_themes").insert(themeData);
-    if (error) { showToast(`Erreur: ${error.message}`, "error"); return; }
-    showToast(t("marketplace.published"), "success");
+    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    showToast(tl("marketplace.published"), "success");
     setPublishingTheme(false);
     setNewThemeName("");
     setNewThemeDesc("");
     loadMarketplaceThemes();
   }, [user, newThemeName, newThemeDesc, theme, accentHue, loadMarketplaceThemes]);
 
-  const handleApplyMarketplaceTheme = useCallback(async (t: CommunityTheme) => {
-    setTheme(t.base_theme);
-    if (t.accent_hue !== null) setAccentHue(t.accent_hue);
+  const handleApplyMarketplaceTheme = useCallback(async (th: CommunityTheme) => {
+    setTheme(th.base_theme);
+    if (th.accent_hue !== null) setAccentHue(th.accent_hue);
     else setAccentHue(null);
-    await supabase.rpc("increment_theme_downloads", { theme_id: t.id });
-    showToast(`Thème "${t.name}" appliqué !`, "success");
+    await supabase.rpc("increment_theme_downloads", { theme_id: th.id });
+    showToast(tl("toast.themeApplied", { name: th.name }), "success");
   }, [setTheme, setAccentHue]);
 
   const handleDeleteMarketplaceTheme = useCallback(async (id: string) => {
@@ -4320,7 +4332,7 @@ export default function App() {
       scheduleCloudSync();
       setNotesModal(null);
     } catch (err: any) {
-      showToast(`Notes failed: ${err}`, "error");
+      showToast(tl("toast.notesFailed", { error: String(err) }), "error");
     }
   }, [notesModal, loadPlaytime, showToast, scheduleCloudSync]);
 
@@ -4340,7 +4352,7 @@ export default function App() {
       loadPlaytime();
       if (collectionFilter === name) setCollectionFilter(null);
     } catch (err: any) {
-      showToast(`Delete failed: ${err}`, "error");
+      showToast(tl("toast.deleteFailed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast, collectionFilter]);
 
@@ -4348,9 +4360,9 @@ export default function App() {
     try {
       await invoke("add_to_collection", { collectionName, gameKey: `${rom.console}::${rom.name}` });
       loadPlaytime();
-      showToast(`Ajouté à "${collectionName}"`, "success");
+      showToast(tl("toast.addedToCollection", { name: collectionName }), "success");
     } catch (err: any) {
-      showToast(`Failed: ${err}`, "error");
+      showToast(tl("toast.failed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast]);
 
@@ -4359,7 +4371,7 @@ export default function App() {
       await invoke("remove_from_collection", { collectionName, gameKey: `${rom.console}::${rom.name}` });
       loadPlaytime();
     } catch (err: any) {
-      showToast(`Failed: ${err}`, "error");
+      showToast(tl("toast.failed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast]);
 
@@ -4476,11 +4488,11 @@ export default function App() {
         );
       if (error) throw error;
       await fetchProfile(user.id);
-      showToast(next ? "Profile is now public 🌐" : "Profile is now private 🔒", "success");
+      showToast(tl(next ? "toast.profilePublic" : "toast.profilePrivate"), "success");
       if (next) void syncPlaytimeToCloud();
     } catch (err: any) {
       console.error("[EmuWorld] togglePublic error:", err);
-      showToast(`Update failed: ${err?.message || err}`, "error");
+      showToast(tl("toast.updateFailed", { error: String(err?.message || err) }), "error");
     } finally {
       setIsTogglingPublic(false);
     }
@@ -4527,7 +4539,7 @@ export default function App() {
       const data = await invoke<RgsConsole[]>("get_rgs_consoles", { constructeurId: id });
       setRgsConsoles(data);
     } catch (e: any) {
-      showToast(`Failed to load consoles: ${e}`, "error");
+      showToast(tl("toast.loadConsolesFailed", { error: String(e) }), "error");
     } finally {
       setRgsLoading(false);
     }
@@ -4540,13 +4552,13 @@ export default function App() {
     let url = isString ? urlOrLien : urlOrLien.url;
     const lien = isString ? null : urlOrLien;
 
-    if (!url.startsWith("https://")) { showToast("Lien refusé : HTTPS uniquement.", "error"); return; }
+    if (!url.startsWith("https://")) { showToast(tl("toast.linkHttpsOnly"), "error"); return; }
     try {
       const hostname = new URL(url).hostname.replace(/^www\./, "");
       if (!RGS_ALLOWED_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`))) {
-        showToast(`Domaine non autorisé : ${hostname}`, "error"); return;
+        showToast(tl("toast.domainNotAllowed", { host: hostname }), "error"); return;
       }
-    } catch { showToast("URL invalide", "error"); return; }
+    } catch { showToast(tl("toast.invalidUrl"), "error"); return; }
 
     // Add 1fichier affiliate tag
     if (url.includes("1fichier.com") && !url.includes("af=")) {
@@ -4555,7 +4567,7 @@ export default function App() {
     
     // 1fichier directories: open in system browser (scraping is blocked by anti-bot)
     if (url.includes("1fichier.com/dir/")) {
-      showToast(t("store.openingFolder"), "info");
+      showToast(tl("store.openingFolder"), "info");
       try {
         await openUrl(url).catch(() => window.open(url, "_blank"));
       } catch {
@@ -4570,12 +4582,12 @@ export default function App() {
     if (lien && lien.mot_de_passe) {
       try {
         await navigator.clipboard.writeText(lien.mot_de_passe);
-        showToast(`🔑 Password copied! Opening link...`, "success");
+        showToast(tl("toast.passwordCopiedOpening"), "success");
       } catch {
-        showToast(`Password: ${lien.mot_de_passe}`, "info");
+        showToast(tl("toast.passwordShown", { password: lien.mot_de_passe }), "info");
       }
     } else {
-      showToast("Opening download link...", "info");
+      showToast(tl("toast.openingDownloadLink"), "info");
     }
     
     // Open in system browser to bypass anti-embedding protections
@@ -4589,7 +4601,7 @@ export default function App() {
     // Set pending import state to help the user finalize
     const currentConsole = selectedRgsConsoleName || "Nintendo Switch";
     setPendingImportConsole(currentConsole);
-    showToast(`Once downloaded, click 'Finalize' to move and unzip the game to your ${currentConsole} library!`, "info");
+    showToast(tl("toast.finalizeHint", { console: currentConsole }), "info");
   }, [showToast, selectedRgsConsoleName]);
 
   const handleBatchDownload = useCallback(async (urls: string[], consoleName: string, password?: string) => {
@@ -4770,7 +4782,7 @@ export default function App() {
       if (error) throw error;
       showToast(t("store.collectionShared"), "success");
     } catch (e: any) {
-      showToast(`Error: ${e.message || e}`, "error");
+      showToast(tl("toast.error", { error: String(e.message || e) }), "error");
     }
   }, [linkCollections, user, showToast, t]);
 
@@ -4809,7 +4821,7 @@ export default function App() {
       // Refresh library
       loadData();
     } catch (e: any) {
-      showToast(`Import failed: ${e}`, "error");
+      showToast(tl("toast.importFailed", { error: String(e) }), "error");
     } finally {
       setRgsLoading(false);
     }
@@ -4825,7 +4837,7 @@ export default function App() {
       const data = await invoke<RgsLien[]>("get_rgs_liens", { consoleId: id });
       setRgsLiens(data);
     } catch (e: any) {
-      showToast(`Failed to load links: ${e}`, "error");
+      showToast(tl("toast.loadLinksFailed", { error: String(e) }), "error");
     } finally {
       setRgsLoading(false);
     }
@@ -4892,7 +4904,7 @@ export default function App() {
       }
     } catch (e) {
       console.error("Store search failed:", e);
-      showToast("Store search failed. Check your internet connection.", "error");
+      showToast(tl("toast.storeSearchFailed"), "error");
     } finally {
       setIsSearchingStore(false);
     }
@@ -4911,7 +4923,7 @@ export default function App() {
 
   const handleDownloadRom = async (rom: RomStoreEntry) => {
     if (downloading.includes(rom.id) || downloaded.includes(rom.id)) return;
-    showToast(`Téléchargement de ${rom.name}...`, "info");
+    showToast(tl("toast.romDownloading", { name: rom.name }), "info");
     setDownloading(prev => [...prev, rom.id]);
     setDownloadNames(prev => ({ ...prev, [rom.id]: rom.name }));
     try {
@@ -4923,12 +4935,12 @@ export default function App() {
         iaId: rom.ia_id || null,
         storeId: rom.id,
       });
-      showToast(`${rom.name} téléchargé avec succès !`, "success");
+      showToast(tl("toast.romDownloaded", { name: rom.name }), "success");
       postActivity("game_added", rom.name, rom.console);
       loadData();
       triggerHiddenAchievement("first_download");
     } catch (err: any) {
-      showToast(`Échec du téléchargement : ${err}`, "error");
+      showToast(tl("toast.romDownloadFailed", { error: String(err) }), "error");
     } finally {
       setDownloading(prev => prev.filter(id => id !== rom.id));
       setDownloadNames(prev => { const n = { ...prev }; delete n[rom.id]; return n; });
@@ -5117,39 +5129,39 @@ export default function App() {
       await invoke("install_emulator", { emulatorId: id });
     } catch (err: any) {
       setInstalling((prev) => prev.filter((i) => i !== id));
-      showToast(`Install failed: ${err}`, "error");
+      showToast(tl("toast.installFailed", { error: String(err) }), "error");
     }
   };
 
   const handleUninstall = async (id: string) => {
     try {
       await invoke("uninstall_emulator", { emulatorId: id });
-      showToast("Emulator uninstalled", "success");
+      showToast(tl("toast.emulatorUninstalled"), "success");
       loadData();
     } catch (err: any) {
-      showToast(`Uninstall failed: ${err}`, "error");
+      showToast(tl("toast.uninstallFailed", { error: String(err) }), "error");
     }
   };
 
   const handleDeleteRom = async (rom: RomFile) => {
     try {
       await invoke("delete_rom", { path: rom.path });
-      showToast(`Deleted ${rom.name}`, "success");
+      showToast(tl("toast.romDeleted", { name: rom.name }), "success");
       loadData(); // This will trigger the reactive useEffect to update 'downloaded' state
     } catch (err: any) {
-      showToast(`Delete failed: ${err}`, "error");
+      showToast(tl("toast.deleteFailed", { error: String(err) }), "error");
     }
   };
 
   const handleClearCache = async () => {
-    if (!confirm("Are you sure you want to clear the cover cache? ALL covers will be re-downloaded next time they are viewed.")) return;
+    if (!confirm(tl("toast.confirmClearCache"))) return;
     try {
       await invoke("clear_cover_cache");
-      showToast("Cover cache cleared! Re-scanning...", "success");
+      showToast(tl("toast.cacheClearedRescan"), "success");
       await loadData();
       triggerHiddenAchievement("clear_covers");
     } catch (e: any) {
-      showToast(`Error: ${e.message}`, "error");
+      showToast(tl("toast.error", { error: e.message }), "error");
     }
   };
 
@@ -5163,9 +5175,9 @@ export default function App() {
       a.download = `emuworld-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      showToast("Export sauvegardé !", "success");
+      showToast(tl("toast.exportSaved"), "success");
     } catch (e: any) {
-      showToast(`Erreur export: ${e}`, "error");
+      showToast(tl("toast.exportFailed", { error: String(e) }), "error");
     }
   };
 
@@ -5175,10 +5187,10 @@ export default function App() {
     try {
       const json: string = await invoke("read_text_file", { path: result as string });
       await invoke("import_config", { json });
-      showToast("Import réussi ! Rechargement...", "success");
+      showToast(tl("toast.importDone"), "success");
       await loadData();
     } catch (e: any) {
-      showToast(`Erreur import: ${e}`, "error");
+      showToast(tl("toast.importFailed", { error: String(e) }), "error");
     }
   };
 
@@ -5187,13 +5199,13 @@ export default function App() {
       console.log("handleLaunch triggered for ROM:", rom);
       const emulator = catalog.find(e => e.console === rom.console);
       if (!emulator) {
-        showToast(`No emulator found for ${rom.console}. Check if it's supported!`, "error");
+        showToast(tl("toast.noEmulatorFor", { console: rom.console }), "error");
         return;
       }
 
       // Check if installed
       if (!installed.includes(emulator.id)) {
-        showToast(`Please install the ${rom.console} emulator first!`, "info");
+        showToast(tl("toast.installEmulatorFirst", { console: rom.console }), "info");
         setPage("catalog");
         setConsoleFilter(rom.console);
         setCategoryFilter(null); // Clear category filter to show the console
@@ -5216,7 +5228,7 @@ export default function App() {
         setLaunchSplash({ gameName: rom.name, console: rom.console });
         setTimeout(() => setLaunchSplash(null), 2500);
       }
-      showToast(`Launching ${rom.name}...`, "success");
+      showToast(tl("toast.launching", { name: rom.name }), "success");
       if (rom.name) {
         invoke<string | null>("get_cover_url", { gameName: rom.name, console: rom.console })
           .then((coverUrl) => {
@@ -5228,7 +5240,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error("Launch Exception:", err);
-      showToast(`Launch failed: ${err}`, "error");
+      showToast(tl("toast.launchFailed", { error: String(err) }), "error");
     }
   };
 
@@ -5236,10 +5248,10 @@ export default function App() {
     try {
       await invoke("save_config", { config: newConfig });
       setConfig(newConfig);
-      showToast("Settings saved!", "success");
+      showToast(tl("toast.settingsSaved"), "success");
       loadData();
     } catch (err: any) {
-      showToast(`Save failed: ${err}`, "error");
+      showToast(tl("toast.saveFailed", { error: String(err) }), "error");
     }
   };
 
@@ -5846,35 +5858,37 @@ export default function App() {
                   <p className="main-content__subtitle">
                     {page === "catalog" && (
                       search.trim().length >= 2
-                        ? `${filteredCatalog.length} result${filteredCatalog.length === 1 ? "" : "s"} for "${search}"`
+                        ? t(filteredCatalog.length === 1 ? "library.resultsForOne" : "library.resultsForMany", { count: filteredCatalog.length, query: search })
                         : consoleFilter
-                          ? `${filteredCatalog.length} emulator${filteredCatalog.length === 1 ? "" : "s"} for ${consoleFilter}`
+                          ? t(filteredCatalog.length === 1 ? "library.emusForOne" : "library.emusForMany", { count: filteredCatalog.length, console: consoleFilter })
                           : categoryFilter
-                            ? `Pick a console in ${categoryFilter}`
-                            : `${catalog.length} emulator${catalog.length === 1 ? "" : "s"} — pick a manufacturer`
+                            ? t("library.pickConsoleIn", { manufacturer: categoryFilter })
+                            : t(catalog.length === 1 ? "library.emusPickOne" : "library.emusPickMany", { count: catalog.length })
                     )}
                     {page === "store" && storeMode === "vimm" && (
                       vimmSearch.trim().length >= 2
-                        ? `${vimmGames.length} result${vimmGames.length === 1 ? "" : "s"}${selectedVimmConsole ? ` on ${selectedVimmConsole.name}` : ""}`
+                        ? (selectedVimmConsole
+                          ? t(vimmGames.length === 1 ? "store.subResultsOnOne" : "store.subResultsOnMany", { count: vimmGames.length, console: selectedVimmConsole.name })
+                          : t(vimmGames.length === 1 ? "store.subResultsOne" : "store.subResultsMany", { count: vimmGames.length }))
                         : selectedVimmConsole
-                          ? `Search ${selectedVimmConsole.name} by name`
-                          : "Search or pick a console"
+                          ? t("store.subSearchConsole", { console: selectedVimmConsole.name })
+                          : t("store.subSearchOrPick")
                     )}
-                    {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? `${rgsLiens.length} packs for ${selectedRgsConsoleName}` : selectedConstructeurName ? `${rgsConsoles.length} consoles` : "Browse ROM collections")}
+                    {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? t(rgsLiens.length === 1 ? "store.subPacksOne" : "store.subPacksMany", { count: rgsLiens.length, console: selectedRgsConsoleName }) : selectedConstructeurName ? t(rgsConsoles.length === 1 ? "library.consoleCountOne" : "library.consoleCountMany", { count: rgsConsoles.length }) : t("store.subBrowse"))}
                     {page === "library" && (
                       consoleFilter
-                        ? `${filteredGames.length} game${filteredGames.length === 1 ? "" : "s"} on ${consoleFilter}`
+                        ? t(filteredGames.length === 1 ? "library.gamesOnOne" : "library.gamesOnMany", { count: filteredGames.length, console: consoleFilter })
                         : categoryFilter
-                          ? `Pick a console in ${categoryFilter}`
-                          : `${roms.length} game${roms.length === 1 ? "" : "s"} — pick a manufacturer`
+                          ? t("library.pickConsoleIn", { manufacturer: categoryFilter })
+                          : t(roms.length === 1 ? "library.gamesPickOne" : "library.gamesPickMany", { count: roms.length })
                     )}
-                    {page === "installed" && `${installedCount} installed`}
+                    {page === "installed" && t(installedCount === 1 ? "subtitle.installedCountOne" : "subtitle.installedCountMany", { count: installedCount })}
                     {page === "settings" && t("subtitle.settings")}
                     {page === "leaderboard" && t("subtitle.leaderboard")}
                     {page === "friends" && `${friends.length} ${t("nav.friends").toLowerCase()}`}
                     {page === "stats" && t("subtitle.stats")}
-                    {page === "challenges" && `${challenges.length} challenges actifs`}
-                    {page === "wrap" && "Tes stats du mois en un coup d'œil"}
+                    {page === "challenges" && t(challenges.length === 1 ? "subtitle.challengesOne" : "subtitle.challengesMany", { count: challenges.length })}
+                    {page === "wrap" && t("subtitle.wrap")}
                     {page === "backup" && t("subtitle.backup")}
                     {page === "controller" && (gamepadActive ? t("subtitle.controllerConnected") : t("subtitle.controllerNone"))}
                   </p>
@@ -5882,7 +5896,7 @@ export default function App() {
                 <div className="main-content__actions">
                   {page === "store" && pendingImportConsole && (
                     <button className="btn btn--primary btn--glow gamepad-nav-item" onClick={() => handleImportRom(pendingImportConsole)}>
-                      <CheckCircle size={14} /> Finalize {pendingImportConsole} Download
+                      <CheckCircle size={14} /> {t("store.finalizeDownload", { console: pendingImportConsole })}
                     </button>
                   )}
                   {page === "library" && (
@@ -5923,7 +5937,7 @@ export default function App() {
                         <Camera size={14} />
                       </button>
                       <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
-                        <Download size={14} /> Import ROM
+                        <Download size={14} /> {t("library.importRom")}
                       </button>
                     </div>
                   )}
@@ -6002,7 +6016,7 @@ export default function App() {
                         className={`rgs-breadcrumb__item ${!categoryFilter && !consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
                         onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
                       >
-                        <Globe size={14} /> All Manufacturers
+                        <Globe size={14} /> {t("library.allManufacturers")}
                       </button>
                       {categoryFilter && (
                         <>
@@ -6153,7 +6167,7 @@ export default function App() {
                         {filteredCatalog.length === 0 && (
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
-                            <div className="empty-state__title">No emulators for {consoleFilter}</div>
+                            <div className="empty-state__title">{t("library.noEmulatorsFor", { console: consoleFilter })}</div>
                           </div>
                         )}
                       </>
@@ -6340,7 +6354,7 @@ export default function App() {
                       className={`rgs-breadcrumb__item ${!selectedConstructeur ? 'rgs-breadcrumb__item--active' : ''}`}
                       onClick={() => { setSelectedConstructeur(null); setSelectedConstructeurName(null); setRgsConsoles([]); setRgsLiens([]); setSelectedRgsConsole(null); }}
                     >
-                      <Globe size={14} /> All Manufacturers
+                      <Globe size={14} /> {t("library.allManufacturers")}
                     </button>
                     {selectedConstructeurName && (
                       <>
@@ -6690,9 +6704,9 @@ export default function App() {
                                     e.stopPropagation();
                                     try {
                                       await navigator.clipboard.writeText(lien.mot_de_passe!);
-                                      showToast('🔑 Password copied!', 'success');
+                                      showToast(tl('toast.passwordCopied'), 'success');
                                     } catch {
-                                      showToast(`Password: ${lien.mot_de_passe}`, 'info');
+                                      showToast(tl('toast.passwordShown', { password: lien.mot_de_passe! }), 'info');
                                     }
                                   }}
                                 >
@@ -6741,7 +6755,7 @@ export default function App() {
                         className={`rgs-breadcrumb__item ${!categoryFilter && !consoleFilter ? "rgs-breadcrumb__item--active" : ""}`}
                         onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
                       >
-                        <Globe size={14} /> All Manufacturers
+                        <Globe size={14} /> {t("library.allManufacturers")}
                       </button>
                       {categoryFilter && (
                         <>
@@ -6767,8 +6781,8 @@ export default function App() {
                     {roms.length === 0 ? (
                       <div className="empty-state">
                         <div className="empty-state__icon">📂</div>
-                        <div className="empty-state__title">No ROMs found</div>
-                        <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> Go to Settings</button>
+                        <div className="empty-state__title">{t("library.noRoms")}</div>
+                        <button className="btn btn--primary" onClick={() => setPage("settings")}><FolderOpen size={14} /> {t("library.goToSettings")}</button>
                       </div>
                     ) : search.trim().length >= 2 || sortBy !== "name" || filterMode !== "all" || collectionFilter ? (
                       /* ---- Search/sort/filter bypasses the drill-down ---- */
@@ -6794,10 +6808,10 @@ export default function App() {
                         ) : (
                           <div className="game-list">
                             <div className="game-list__header">
-                              <span className="game-list__col game-list__col--name">Nom</span>
-                              <span className="game-list__col game-list__col--console">Console</span>
-                              <span className="game-list__col game-list__col--time">Temps</span>
-                              <span className="game-list__col game-list__col--rating">Note</span>
+                              <span className="game-list__col game-list__col--name">{t("library.colName")}</span>
+                              <span className="game-list__col game-list__col--console">{t("library.colConsole")}</span>
+                              <span className="game-list__col game-list__col--time">{t("library.colTime")}</span>
+                              <span className="game-list__col game-list__col--rating">{t("library.colRating")}</span>
                               <span className="game-list__col game-list__col--actions"></span>
                             </div>
                             {filteredGames.map(rom => {
@@ -6842,7 +6856,7 @@ export default function App() {
                             <div className="rgs-console-card__info">
                               <div className="rgs-console-card__name">{category}</div>
                               <div className="rgs-console-card__meta">
-                                {consoles.length} console{consoles.length > 1 ? "s" : ""} • {romCount} game{romCount > 1 ? "s" : ""}
+                                {t(consoles.length === 1 ? "library.consoleCountOne" : "library.consoleCountMany", { count: consoles.length })} • {t(romCount === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: romCount })}
                               </div>
                             </div>
                           </motion.div>
@@ -6872,7 +6886,7 @@ export default function App() {
                                 <div className="rgs-console-card__info">
                                   <div className="rgs-console-card__name">{con}</div>
                                   <div className="rgs-console-card__meta">
-                                    {count} game{count > 1 ? "s" : ""}
+                                    {t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}
                                   </div>
                                 </div>
                               </motion.div>
@@ -6903,10 +6917,10 @@ export default function App() {
                         ) : (
                           <div className="game-list">
                             <div className="game-list__header">
-                              <span className="game-list__col game-list__col--name">Nom</span>
-                              <span className="game-list__col game-list__col--console">Console</span>
-                              <span className="game-list__col game-list__col--time">Temps</span>
-                              <span className="game-list__col game-list__col--rating">Note</span>
+                              <span className="game-list__col game-list__col--name">{t("library.colName")}</span>
+                              <span className="game-list__col game-list__col--console">{t("library.colConsole")}</span>
+                              <span className="game-list__col game-list__col--time">{t("library.colTime")}</span>
+                              <span className="game-list__col game-list__col--rating">{t("library.colRating")}</span>
                               <span className="game-list__col game-list__col--actions"></span>
                             </div>
                             {filteredGames.map(rom => {
@@ -7364,7 +7378,7 @@ export default function App() {
                         <button className="btn btn--ghost btn--sm" onClick={async () => {
                           await invoke("clear_logs");
                           setAppLogs([]);
-                          showToast("Logs effacés", "success");
+                          showToast(tl("toast.logsCleared"), "success");
                         }}>
                           <Trash2 size={12} /> Effacer
                         </button>
@@ -7646,7 +7660,7 @@ export default function App() {
                                       <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>{t("versus.decline")}</button>
                                     </div>
                                   )}
-                                  {v.ends_at && <div className="versus-card__timer">Fin : {new Date(v.ends_at).toLocaleDateString("fr-FR")}</div>}
+                                  {v.ends_at && <div className="versus-card__timer">Fin : {new Date(v.ends_at).toLocaleDateString(dateLocale)}</div>}
                                 </div>
                               );
                             })}
@@ -7731,7 +7745,7 @@ export default function App() {
                                 <p className="chat-bubble__text">{msg.content}</p>
                               )}
                               <span className="chat-bubble__time">
-                                {new Date(msg.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                                {new Date(msg.created_at).toLocaleTimeString(dateLocale, { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             </div>
                           ))}
@@ -8135,7 +8149,7 @@ export default function App() {
                   if (s >= 60) return `${Math.floor(s / 60)} min`;
                   return `${s}s`;
                 };
-                const monthName = now.toLocaleDateString(locale === "en" ? "en-GB" : "fr-FR", { month: "long", year: "numeric" });
+                const monthName = now.toLocaleDateString(dateLocale, { month: "long", year: "numeric" });
                 const pctChange = prevMonthComparable && prevTotalSeconds > 0 ? Math.round(((totalSeconds - prevTotalSeconds) / prevTotalSeconds) * 100) : null;
 
                 return (
@@ -8515,7 +8529,7 @@ export default function App() {
                                   <span className="discover-versus__me">Toi: <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong></span>
                                   <span className="discover-versus__them">{opponent?.username || "Adversaire"}: <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong></span>
                                 </div>
-                                {v.ends_at && <div className="discover-versus__timer">Fin : {new Date(v.ends_at).toLocaleDateString("fr-FR")}</div>}
+                                {v.ends_at && <div className="discover-versus__timer">Fin : {new Date(v.ends_at).toLocaleDateString(dateLocale)}</div>}
                               </div>
                             );
                           })}
@@ -9414,7 +9428,7 @@ export default function App() {
                         {r.profiles?.avatar_url && <img src={r.profiles.avatar_url} className="reviews-modal__avatar" alt="" />}
                         <span className="reviews-modal__username">{r.profiles?.username || "Anonyme"}</span>
                         <span className="reviews-modal__review-stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
-                        <span className="reviews-modal__date">{new Date(r.created_at).toLocaleDateString("fr-FR")}</span>
+                        <span className="reviews-modal__date">{new Date(r.created_at).toLocaleDateString(dateLocale)}</span>
                       </div>
                       {r.comment && <p className="reviews-modal__comment">{r.comment}</p>}
                     </div>
@@ -9500,7 +9514,7 @@ export default function App() {
                               <div className="guide-modal__entry-header">
                                 {g.profile?.avatar_url && <img src={g.profile.avatar_url} className="guide-modal__avatar" alt="" />}
                                 <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
-                                <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString("fr-FR")}</span>
+                                <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString(dateLocale)}</span>
                                 <button
                                   className={`guide-modal__vote-btn gamepad-nav-item ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
                                   onClick={() => handleVoteGuide(g.id)}
@@ -9738,7 +9752,7 @@ export default function App() {
                       <div
                         key={a.id}
                         className={`achievement-badge ${a.unlocked ? "achievement-badge--unlocked" : ""} ${a.hidden && !a.unlocked ? "achievement-badge--hidden" : ""}`}
-                        title={a.hidden && !a.unlocked ? "Achievement secret — ???" : a.unlocked ? `${a.name} — ${a.description}\nDébloqué le ${a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString("fr-FR") : ""}` : `${a.name} — ${a.description}`}
+                        title={a.hidden && !a.unlocked ? "Achievement secret — ???" : a.unlocked ? `${a.name} — ${a.description}\nDébloqué le ${a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString(dateLocale) : ""}` : `${a.name} — ${a.description}`}
                       >
                         <span className="achievement-badge__icon">{a.hidden && !a.unlocked ? "❓" : a.icon}</span>
                         <span className="achievement-badge__name">{a.hidden && !a.unlocked ? "???" : a.name}</span>
@@ -9808,7 +9822,7 @@ export default function App() {
                         onClick={async () => {
                           const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
                           await navigator.clipboard.writeText(url);
-                          showToast("Lien copié !", "success");
+                          showToast(tl("toast.linkCopied"), "success");
                         }}
                       >
                         <Copy size={12} /> Copier le lien
