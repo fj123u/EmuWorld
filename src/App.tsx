@@ -177,6 +177,52 @@ interface GameEntry {
   last_emulator_id: string | null;
   rating?: number;
   notes?: string;
+  /** Local month `YYYY-MM` → stats for that month. Empty for history recorded before per-month tracking. */
+  monthly?: Record<string, MonthlyStats>;
+  /** Local dates `YYYY-MM-DD` with play time (sorted, capped by the backend). */
+  active_days?: string[];
+  /** Longest single session ever, in seconds. */
+  longest_session?: number;
+}
+
+interface MonthlyStats {
+  seconds: number;
+  launches: number;
+  longest_session: number;
+}
+
+// Columns added by scratch/supabase_playtime_monthly_migration.sql. Until the
+// migration has run, PostgREST rejects them (PGRST204): we then retry without
+// them so the rest of the playtime still syncs.
+const PLAYTIME_MONTHLY_COLUMNS = ["monthly", "active_days", "longest_session"] as const;
+
+function playtimeGameRow(userId: string, g: GameEntry) {
+  return {
+    user_id: userId,
+    console: g.console,
+    name: g.name,
+    seconds: g.seconds,
+    launches: g.launches,
+    last_played: g.last_played,
+    first_played: g.first_played,
+    favorite: g.favorite,
+    last_emulator_id: g.last_emulator_id,
+    rating: g.rating ?? null,
+    notes: g.notes ?? null,
+    monthly: g.monthly ?? {},
+    active_days: g.active_days ?? [],
+    longest_session: g.longest_session ?? 0,
+  };
+}
+
+async function upsertPlaytimeGames(rows: ReturnType<typeof playtimeGameRow>[]) {
+  const { error } = await supabase.from("playtime_games").upsert(rows, { onConflict: "user_id,console,name" });
+  const missingColumn = error && (error.code === "PGRST204" || PLAYTIME_MONTHLY_COLUMNS.some((c) => error.message?.includes(`'${c}'`)));
+  if (!missingColumn) return error;
+  console.warn("[EmuWorld] playtime_games has no monthly columns yet — run scratch/supabase_playtime_monthly_migration.sql. Syncing without them.");
+  const legacyRows = rows.map(({ monthly: _m, active_days: _d, longest_session: _l, ...rest }) => rest);
+  const retry = await supabase.from("playtime_games").upsert(legacyRows, { onConflict: "user_id,console,name" });
+  return retry.error;
 }
 
 interface GameCollection {
@@ -3528,19 +3574,7 @@ export default function App() {
       const pt = await invoke<PlaytimeStore>("get_playtime");
       console.log("[EmuWorld] syncPlaytimeToCloud · user", user.id, "games", Object.keys(pt.games).length);
 
-      const gameRows = Object.values(pt.games).map((g) => ({
-        user_id: user.id,
-        console: g.console,
-        name: g.name,
-        seconds: g.seconds,
-        launches: g.launches,
-        last_played: g.last_played,
-        first_played: g.first_played,
-        favorite: g.favorite,
-        last_emulator_id: g.last_emulator_id,
-        rating: g.rating ?? null,
-        notes: g.notes ?? null,
-      }));
+      const gameRows = Object.values(pt.games).map((g) => playtimeGameRow(user.id, g));
       const emuRows = Object.entries(pt.emulators).map(([id, seconds]) => ({
         user_id: user.id,
         emulator_id: id,
@@ -3548,9 +3582,7 @@ export default function App() {
       }));
 
       if (gameRows.length > 0) {
-        const { error } = await supabase
-          .from("playtime_games")
-          .upsert(gameRows, { onConflict: "user_id,console,name" });
+        const error = await upsertPlaytimeGames(gameRows);
         if (error) throw error;
       }
       if (emuRows.length > 0) {
@@ -4364,26 +4396,14 @@ export default function App() {
 
         if (cloudIsEmpty && localHasData) {
           // First sign-in with existing local data: push local → cloud
-          const gameRows = Object.values(localPt.games).map((g) => ({
-            user_id: currentId,
-            console: g.console,
-            name: g.name,
-            seconds: g.seconds,
-            launches: g.launches,
-            last_played: g.last_played,
-            first_played: g.first_played,
-            favorite: g.favorite,
-            last_emulator_id: g.last_emulator_id,
-            rating: g.rating ?? null,
-            notes: g.notes ?? null,
-          }));
+          const gameRows = Object.values(localPt.games).map((g) => playtimeGameRow(currentId, g));
           const emuRows = Object.entries(localPt.emulators).map(([id, seconds]) => ({
             user_id: currentId,
             emulator_id: id,
             seconds,
           }));
           if (gameRows.length > 0) {
-            await supabase.from("playtime_games").upsert(gameRows, { onConflict: "user_id,console,name" });
+            await upsertPlaytimeGames(gameRows);
           }
           if (emuRows.length > 0) {
             await supabase.from("playtime_emulators").upsert(emuRows, { onConflict: "user_id,emulator_id" });
@@ -4392,7 +4412,12 @@ export default function App() {
         } else {
           const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
           for (const row of gamesRes.data || []) {
-            cloud.games[`${row.console}::${row.name}`] = {
+            const gameKey = `${row.console}::${row.name}`;
+            // `undefined` (not `null`) means the monthly columns don't exist yet on
+            // this database: keep what this machine already tracked instead of
+            // wiping it on every sign-in.
+            const local = row.monthly === undefined ? localPt?.games[gameKey] : undefined;
+            cloud.games[gameKey] = {
               console: row.console,
               name: row.name,
               seconds: row.seconds || 0,
@@ -4403,6 +4428,9 @@ export default function App() {
               last_emulator_id: row.last_emulator_id,
               rating: row.rating ?? undefined,
               notes: row.notes ?? undefined,
+              monthly: (local ? local.monthly : row.monthly) ?? {},
+              active_days: (local ? local.active_days : row.active_days) ?? [],
+              longest_session: (local ? local.longest_session : row.longest_session) ?? 0,
             };
           }
           for (const row of emusRes.data || []) {
@@ -8064,69 +8092,89 @@ export default function App() {
 
               {page === "wrap" && (() => {
                 const now = new Date();
+                const pad2 = (n: number) => String(n).padStart(2, "0");
+                const monthKeyOf = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+                const monthKey = monthKeyOf(now);
+                const prevMonthKey = monthKeyOf(new Date(now.getFullYear(), now.getMonth() - 1, 1));
                 const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-                const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
 
+                // Only the per-month counters recorded by the backend count here:
+                // lifetime totals (g.seconds / g.launches) would credit this month
+                // with weeks of older play.
                 const allGames = Object.entries(playtime.games).map(([key, g]) => ({ key, ...g }));
-                const games = allGames.filter(g => g.last_played && new Date(g.last_played) >= monthStart);
-                const prevGames = allGames.filter(g => g.last_played && new Date(g.last_played) >= prevMonthStart && new Date(g.last_played) <= prevMonthEnd);
+                const monthSeconds = (key: string) => allGames.reduce((acc, g) => acc + (g.monthly?.[key]?.seconds ?? 0), 0);
+                const games = allGames.flatMap(g => {
+                  const m = g.monthly?.[monthKey];
+                  return m ? [{ key: g.key, name: g.name, console: g.console, seconds: m.seconds, launches: m.launches, longest: m.longest_session }] : [];
+                });
 
-                const totalSeconds = games.reduce((acc, g) => acc + g.seconds, 0);
-                const prevTotalSeconds = prevGames.reduce((acc, g) => acc + g.seconds, 0);
+                const totalSeconds = monthSeconds(monthKey);
+                const prevTotalSeconds = monthSeconds(prevMonthKey);
                 const totalLaunches = games.reduce((acc, g) => acc + g.launches, 0);
-                const topGames = [...games].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
+                const topGames = games.filter(g => g.seconds > 0).sort((a, b) => b.seconds - a.seconds).slice(0, 5);
                 const consoleMap: Record<string, number> = {};
                 games.forEach(g => { consoleMap[g.console] = (consoleMap[g.console] || 0) + g.seconds; });
-                const topConsoles = Object.entries(consoleMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
-                const uniqueGames = games.filter(g => g.launches > 0).length;
+                const topConsoles = Object.entries(consoleMap).filter(([, secs]) => secs > 0).sort((a, b) => b[1] - a[1]).slice(0, 3);
+                const uniqueGames = games.filter(g => g.seconds > 0 || g.launches > 0).length;
+                const daysPlayed = new Set(allGames.flatMap(g => (g.active_days ?? []).filter(d => d.startsWith(`${monthKey}-`)))).size;
+                const longestSession = games.reduce((acc, g) => Math.max(acc, g.longest), 0);
 
-                // Streak: count unique days played this month
-                const daysPlayed = new Set(games.filter(g => g.last_played).map(g => new Date(g.last_played!).toDateString())).size;
-
-                // Longest session estimate
-                const longestSession = games.length > 0 ? Math.max(...games.map(g => g.seconds)) : 0;
+                // History recorded before per-month tracking only has lifetime
+                // totals: we can't tell which month it belongs to, so we leave it
+                // out and say so instead of guessing.
+                const untrackedSeconds = (g: GameEntry) => g.seconds - Object.values(g.monthly ?? {}).reduce((acc, m) => acc + m.seconds, 0);
+                const hasUntrackedHistory = allGames.some(g => untrackedSeconds(g) > 0);
+                const earliestTrackedMonth = allGames.flatMap(g => Object.keys(g.monthly ?? {})).sort()[0] ?? null;
+                const trackingCoversWholeMonth = (key: string) => earliestTrackedMonth !== null && earliestTrackedMonth < key;
+                const monthIsPartial = !trackingCoversWholeMonth(monthKey)
+                  && allGames.some(g => untrackedSeconds(g) > 0 && !!g.last_played && new Date(g.last_played) >= monthStart);
+                const prevMonthComparable = !hasUntrackedHistory || trackingCoversWholeMonth(prevMonthKey);
 
                 const fmtTime = (s: number) => {
                   if (s >= 3600) return `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
                   if (s >= 60) return `${Math.floor(s / 60)} min`;
                   return `${s}s`;
                 };
-                const monthName = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-                const pctChange = prevTotalSeconds > 0 ? Math.round(((totalSeconds - prevTotalSeconds) / prevTotalSeconds) * 100) : null;
+                const monthName = now.toLocaleDateString(locale === "en" ? "en-GB" : "fr-FR", { month: "long", year: "numeric" });
+                const pctChange = prevMonthComparable && prevTotalSeconds > 0 ? Math.round(((totalSeconds - prevTotalSeconds) / prevTotalSeconds) * 100) : null;
 
                 return (
                   <div className="wrap-page">
                     <div className="wrap-page__header">
                       <Gift size={32} />
-                      <h2>Ton Wrap — {monthName}</h2>
+                      <h2>{t("wrap.title", { month: monthName })}</h2>
                       {pctChange !== null && (
                         <span className={`wrap-page__trend ${pctChange >= 0 ? "wrap-page__trend--up" : "wrap-page__trend--down"}`}>
-                          {pctChange >= 0 ? "↗" : "↘"} {Math.abs(pctChange)}% vs mois dernier
+                          {pctChange >= 0 ? "↗" : "↘"} {t("wrap.vsLastMonth", { pct: Math.abs(pctChange) })}
                         </span>
                       )}
                     </div>
+                    {monthIsPartial && (
+                      <p className="wrap-page__notice">{t("wrap.partialNotice")}</p>
+                    )}
                     {totalSeconds === 0 ? (
-                      <div className="wrap-page__empty">
-                        <p>{t("wrap.noData")}</p>
-                      </div>
+                      !monthIsPartial && (
+                        <div className="wrap-page__empty">
+                          <p>{t("wrap.noData")}</p>
+                        </div>
+                      )
                     ) : (
                       <>
                         <div className="wrap-page__cards">
                           <motion.div className="wrap-card wrap-card--hero" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                             <div className="wrap-card__icon">⏱️</div>
                             <div className="wrap-card__value">{fmtTime(totalSeconds)}</div>
-                            <div className="wrap-card__label">Temps de jeu total</div>
+                            <div className="wrap-card__label">{t("wrap.totalPlaytime")}</div>
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
                             <div className="wrap-card__icon">🎮</div>
                             <div className="wrap-card__value">{uniqueGames}</div>
-                            <div className="wrap-card__label">Jeux joués</div>
+                            <div className="wrap-card__label">{t("wrap.gamesPlayed")}</div>
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
                             <div className="wrap-card__icon">🚀</div>
                             <div className="wrap-card__value">{totalLaunches}</div>
-                            <div className="wrap-card__label">Lancements</div>
+                            <div className="wrap-card__label">{t("wrap.launches")}</div>
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
                             <div className="wrap-card__icon">📅</div>
@@ -8136,18 +8184,18 @@ export default function App() {
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
                             <div className="wrap-card__icon">⚡</div>
                             <div className="wrap-card__value">{fmtTime(longestSession)}</div>
-                            <div className="wrap-card__label">Plus longue session</div>
+                            <div className="wrap-card__label">{t("wrap.longestSession")}</div>
                           </motion.div>
                           <motion.div className="wrap-card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
                             <div className="wrap-card__icon">📊</div>
                             <div className="wrap-card__value">{fmtTime(Math.round(totalSeconds / Math.max(1, now.getDate())))}</div>
-                            <div className="wrap-card__label">Moyenne par jour</div>
+                            <div className="wrap-card__label">{t("wrap.dailyAverage")}</div>
                           </motion.div>
                         </div>
 
                         {topGames.length > 0 && (
                           <motion.div className="wrap-page__section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}>
-                            <h3 className="wrap-page__section-title">🏆 Top 5 Jeux</h3>
+                            <h3 className="wrap-page__section-title">{t("wrap.topGames")}</h3>
                             <div className="wrap-page__top-list">
                               {topGames.map((g, i) => (
                                 <motion.div key={g.key} className="wrap-top-item" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.8 + i * 0.1 }}>
@@ -8166,7 +8214,7 @@ export default function App() {
 
                         {topConsoles.length > 0 && (
                           <motion.div className="wrap-page__section" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>
-                            <h3 className="wrap-page__section-title">🕹️ Top Consoles</h3>
+                            <h3 className="wrap-page__section-title">{t("wrap.topConsoles")}</h3>
                             <div className="wrap-page__top-list">
                               {topConsoles.map(([name, secs], i) => (
                                 <motion.div key={name} className="wrap-top-item" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.3 + i * 0.1 }}>

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -20,6 +20,42 @@ pub struct GameEntry {
     pub rating: Option<u8>,
     #[serde(default)]
     pub notes: Option<String>,
+    /// Local month (`YYYY-MM`) → time, launches and longest session recorded
+    /// that month. Empty for history recorded before per-month tracking
+    /// existed: only lifetime totals (`seconds`, `launches`) are known then.
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub monthly: BTreeMap<String, MonthlyStats>,
+    /// Local dates (`YYYY-MM-DD`) with play time, sorted, at most
+    /// `MAX_ACTIVE_DAYS` entries (oldest dropped first).
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub active_days: Vec<String>,
+    /// Longest single session ever recorded for this game, in seconds.
+    #[serde(default, deserialize_with = "null_as_default")]
+    pub longest_session: u64,
+}
+
+/// Aggregates for one game over one calendar month (local time).
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq)]
+pub struct MonthlyStats {
+    #[serde(default)]
+    pub seconds: u64,
+    #[serde(default)]
+    pub launches: u32,
+    #[serde(default)]
+    pub longest_session: u64,
+}
+
+/// Enough to cover the current and previous month plus a year of history,
+/// while keeping playtime.json (and the cloud row) small.
+const MAX_ACTIVE_DAYS: usize = 400;
+
+/// The cloud pull can hand us `null` for columns written by older clients.
+fn null_as_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -118,9 +154,78 @@ pub fn record_session(console: &str, name: &str, seconds: u64, emulator_id: &str
     entry.launches += 1;
     entry.last_played = Some(now);
     entry.last_emulator_id = Some(emulator_id.to_string());
+    let local_end = chrono::Local::now().naive_local();
+    apply_session_stats(entry, local_end, seconds);
+    crate::push_log(
+        "INFO",
+        &format!(
+            "Stats mensuelles mises à jour pour '{}' ({}) — mois {}, plus longue session {}s",
+            name,
+            console,
+            local_end.format("%Y-%m"),
+            entry.longest_session
+        ),
+    );
 
     *store.emulators.entry(emulator_id.to_string()).or_insert(0) += seconds;
     save(&store)
+}
+
+/// Spread a session that ended at `end` (local time) and lasted `seconds`
+/// over the days and months it covered, so a session played across midnight
+/// counts on both days. The launch and the longest-session record go to the
+/// month the session ended in.
+fn apply_session_stats(entry: &mut GameEntry, end: chrono::NaiveDateTime, seconds: u64) {
+    entry.longest_session = entry.longest_session.max(seconds);
+    {
+        let month = entry.monthly.entry(end.format("%Y-%m").to_string()).or_default();
+        month.launches += 1;
+        month.longest_session = month.longest_session.max(seconds);
+    }
+    if seconds == 0 {
+        return;
+    }
+
+    let start = i64::try_from(seconds)
+        .ok()
+        .and_then(chrono::TimeDelta::try_seconds)
+        .and_then(|duration| end.checked_sub_signed(duration));
+    let Some(start) = start else {
+        // Absurd duration: keep the totals right, attribute it to the end day.
+        crate::push_log("WARN", &format!("Durée de session hors limites ({}s), attribuée au jour de fin", seconds));
+        add_time_on_day(entry, end.date(), seconds);
+        return;
+    };
+
+    let mut cursor = start;
+    while cursor < end {
+        let next_midnight = cursor
+            .date()
+            .succ_opt()
+            .and_then(|day| day.and_hms_opt(0, 0, 0))
+            .unwrap_or(end);
+        let segment_end = next_midnight.min(end);
+        if segment_end <= cursor {
+            break; // safety: never loop forever
+        }
+        let segment = (segment_end - cursor).num_seconds().max(0) as u64;
+        if segment > 0 {
+            add_time_on_day(entry, cursor.date(), segment);
+        }
+        cursor = segment_end;
+    }
+}
+
+fn add_time_on_day(entry: &mut GameEntry, day: chrono::NaiveDate, seconds: u64) {
+    entry.monthly.entry(day.format("%Y-%m").to_string()).or_default().seconds += seconds;
+    let day = day.format("%Y-%m-%d").to_string();
+    if let Err(position) = entry.active_days.binary_search(&day) {
+        entry.active_days.insert(position, day);
+    }
+    if entry.active_days.len() > MAX_ACTIVE_DAYS {
+        let excess = entry.active_days.len() - MAX_ACTIVE_DAYS;
+        entry.active_days.drain(..excess);
+    }
 }
 
 pub fn toggle_favorite(console: &str, name: &str) -> Result<bool, String> {
@@ -317,7 +422,11 @@ pub fn compute_stats_from_store(store: &PlaytimeStore) -> ProfileStats {
 
 #[cfg(test)]
 mod tests {
-    use super::{compute_stats_from_store, load_from, save_to, GameEntry, PlaytimeStore};
+    use super::{
+        apply_session_stats, compute_stats_from_store, load_from, save_to, GameEntry, MonthlyStats,
+        PlaytimeStore, MAX_ACTIVE_DAYS,
+    };
+    use chrono::{NaiveDate, NaiveDateTime};
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
@@ -388,5 +497,97 @@ mod tests {
         assert_eq!(stats.total_seconds, 3600);
         assert_eq!(stats.total_launches, 2);
         assert_eq!(stats.games_played, 1);
+    }
+
+    fn at(y: i32, m: u32, d: u32, h: u32, min: u32) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap().and_hms_opt(h, min, 0).unwrap()
+    }
+
+    #[test]
+    fn session_is_counted_in_the_month_it_was_played() {
+        let mut entry = GameEntry::default();
+        apply_session_stats(&mut entry, at(2026, 10, 12, 20, 0), 3600);
+        apply_session_stats(&mut entry, at(2026, 11, 3, 21, 0), 600);
+
+        assert_eq!(
+            entry.monthly["2026-10"],
+            MonthlyStats { seconds: 3600, launches: 1, longest_session: 3600 }
+        );
+        assert_eq!(
+            entry.monthly["2026-11"],
+            MonthlyStats { seconds: 600, launches: 1, longest_session: 600 }
+        );
+        assert_eq!(entry.active_days, vec!["2026-10-12", "2026-11-03"]);
+    }
+
+    #[test]
+    fn session_across_month_change_is_split_at_midnight() {
+        let mut entry = GameEntry::default();
+        // 23:30 on Oct 31 → 00:30 on Nov 1
+        apply_session_stats(&mut entry, at(2026, 11, 1, 0, 30), 3600);
+
+        assert_eq!(entry.monthly["2026-10"].seconds, 1800);
+        assert_eq!(entry.monthly["2026-10"].launches, 0);
+        assert_eq!(entry.monthly["2026-11"].seconds, 1800);
+        assert_eq!(entry.monthly["2026-11"].launches, 1);
+        assert_eq!(entry.monthly["2026-11"].longest_session, 3600);
+        assert_eq!(entry.active_days, vec!["2026-10-31", "2026-11-01"]);
+    }
+
+    #[test]
+    fn longest_session_keeps_the_maximum() {
+        let mut entry = GameEntry::default();
+        apply_session_stats(&mut entry, at(2026, 11, 1, 12, 0), 100);
+        apply_session_stats(&mut entry, at(2026, 11, 2, 12, 0), 500);
+        apply_session_stats(&mut entry, at(2026, 11, 2, 18, 0), 200);
+        apply_session_stats(&mut entry, at(2026, 12, 1, 18, 0), 300);
+
+        assert_eq!(entry.longest_session, 500);
+        assert_eq!(entry.monthly["2026-11"].longest_session, 500);
+        assert_eq!(entry.monthly["2026-11"].launches, 3);
+        assert_eq!(entry.monthly["2026-11"].seconds, 800);
+        assert_eq!(entry.monthly["2026-12"].longest_session, 300);
+        // Same day twice is only one active day
+        assert_eq!(entry.active_days, vec!["2026-11-01", "2026-11-02", "2026-12-01"]);
+    }
+
+    #[test]
+    fn zero_second_session_counts_a_launch_but_no_active_day() {
+        let mut entry = GameEntry::default();
+        apply_session_stats(&mut entry, at(2026, 11, 4, 10, 0), 0);
+
+        assert_eq!(entry.monthly["2026-11"].launches, 1);
+        assert_eq!(entry.monthly["2026-11"].seconds, 0);
+        assert!(entry.active_days.is_empty());
+    }
+
+    #[test]
+    fn active_days_are_capped_dropping_oldest() {
+        let mut entry = GameEntry::default();
+        let first = NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+        for offset in 0..(MAX_ACTIVE_DAYS as u64 + 10) {
+            let day = first + chrono::Days::new(offset);
+            apply_session_stats(&mut entry, day.and_hms_opt(12, 0, 0).unwrap(), 60);
+        }
+
+        assert_eq!(entry.active_days.len(), MAX_ACTIVE_DAYS);
+        assert_eq!(entry.active_days[0], (first + chrono::Days::new(10)).format("%Y-%m-%d").to_string());
+    }
+
+    #[test]
+    fn legacy_and_null_fields_load_as_empty() {
+        let legacy = r#"{"console":"Nintendo","name":"Game","seconds":36000,"launches":40,
+            "last_played":"2026-11-04T10:00:00Z","first_played":null}"#;
+        let entry: GameEntry = serde_json::from_str(legacy).unwrap();
+        assert!(entry.monthly.is_empty());
+        assert!(entry.active_days.is_empty());
+        assert_eq!(entry.longest_session, 0);
+
+        let nulls = r#"{"console":"Nintendo","name":"Game","seconds":1,"launches":1,
+            "last_played":null,"first_played":null,
+            "monthly":null,"active_days":null,"longest_session":null}"#;
+        let entry: GameEntry = serde_json::from_str(nulls).unwrap();
+        assert!(entry.monthly.is_empty());
+        assert_eq!(entry.longest_session, 0);
     }
 }

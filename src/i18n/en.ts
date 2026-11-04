@@ -524,10 +524,20 @@ const en: Translations = {
 
   // Wrap
   wrap: {
+    title: "Your Wrap — {month}",
+    vsLastMonth: "{pct}% vs last month",
+    totalPlaytime: "Playtime this month",
+    gamesPlayed: "Games played",
+    launches: "Launches",
+    longestSession: "Longest session",
+    dailyAverage: "Daily average",
+    topGames: "🏆 Top 5 games",
+    topConsoles: "🕹️ Top consoles",
     noData: "No data yet this month. Play some games and come back!",
     dayOne: "{count} day",
     dayMany: "{count} days",
     activeDays: "Active days this month",
+    partialNotice: "Month-by-month tracking started this month: time played before this update isn't counted here (it's still in your lifetime totals).",
   },
 
   // Marketplace extra

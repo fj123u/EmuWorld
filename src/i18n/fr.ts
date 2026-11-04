@@ -522,10 +522,20 @@ const fr = {
 
   // Wrap
   wrap: {
+    title: "Ton Wrap — {month}",
+    vsLastMonth: "{pct}% vs mois dernier",
+    totalPlaytime: "Temps de jeu du mois",
+    gamesPlayed: "Jeux joués",
+    launches: "Lancements",
+    longestSession: "Plus longue session",
+    dailyAverage: "Moyenne par jour",
+    topGames: "🏆 Top 5 jeux",
+    topConsoles: "🕹️ Top consoles",
     noData: "Pas encore de données ce mois-ci. Joue un peu et reviens !",
     dayOne: "{count} jour",
     dayMany: "{count} jours",
     activeDays: "Jours actifs ce mois",
+    partialNotice: "Le suivi mois par mois a démarré ce mois-ci : le temps joué avant cette mise à jour n'est pas compté ici (il reste dans tes totaux à vie).",
   },
 
   // Marketplace extra
