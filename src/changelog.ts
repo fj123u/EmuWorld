@@ -16,7 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🏆 Animation plein écran avec confettis quand tu débloques un succès",
     "🎨 Couleurs par console: l'accent de l'app prend la couleur de la console parcourue (désactivable)",
     "💾 Gestionnaire de save states: aperçu, nom, duplication, corbeille et reprise directe depuis un slot",
-    "🎁 Partage de save states avec tes amis, ajoutés en un clic dans un nouveau slot",
+    "🎁 Partage de save states avec tes amis, aperçu compris, ajoutés en un clic dans un nouveau slot",
     "🩺 Vérification des ROMs: fichiers vides, ZIP corrompus et doublons",
     "🐛 Fix téléchargements: plus de ROMs tronquées après un échec ou une annulation",
     "🐛 Fix temps de jeu: une fermeture brutale ne compte plus des heures en trop",

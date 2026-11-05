@@ -116,12 +116,13 @@ describe("receiving a save state", () => {
     const imported = { ...state, path: "C:\\RA\\states\\Snes9x\\Zelda (USA).state1", slot: 1, label: null };
     const backend = mockBackend({ import_save_state: () => imported });
     const { db, log } = fakeDb();
-    await importReceivedState(shared, "D:\\Roms\\SNES\\Zelda (USA).sfc", "Avant Ganon · Léo", db);
+    await importReceivedState({ ...shared, thumbnail: "data:image/jpeg;base64,/9j/preview" }, "D:\\Roms\\SNES\\Zelda (USA).sfc", "Avant Ganon · Léo", db);
 
     expect(backend.calls.find((c) => c.cmd === "import_save_state")?.args).toEqual({
       romPath: "D:\\Roms\\SNES\\Zelda (USA).sfc",
       core: "Snes9x",
       url: "https://proj.supabase.co/storage/v1/object/sign/savestates/friend-1/abc.state?token=t",
+      thumbnail: "data:image/jpeg;base64,/9j/preview",
     });
     expect(backend.calls.find((c) => c.cmd === "rename_save_state")?.args).toEqual({ path: imported.path, label: "Avant Ganon · Léo" });
     expect(log).toEqual(["remove savestates/friend-1/abc.state", "delete shared_savestates share-1"]);

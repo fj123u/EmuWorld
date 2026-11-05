@@ -411,10 +411,27 @@ pub fn store_received_state(target_dir: &Path, rom_stem: &str, bytes: &[u8]) -> 
     Ok(target)
 }
 
+/// Largest thumbnail data URL accepted (same limit as the Supabase column).
+const MAX_SHARED_THUMBNAIL_CHARS: usize = 60_000;
+
+/// Saves the JPEG preview that came with a shared state as `<state>.png`,
+/// the thumbnail RetroArch and the manager read.
+pub fn save_received_thumbnail(state: &Path, data_url: &str) -> Result<PathBuf, String> {
+    if data_url.len() > MAX_SHARED_THUMBNAIL_CHARS {
+        return Err("aperçu trop gros".to_string());
+    }
+    let b64 = data_url.strip_prefix("data:image/jpeg;base64,").ok_or("aperçu au mauvais format")?;
+    let jpeg = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+    let img = image::load_from_memory_with_format(&jpeg, image::ImageFormat::Jpeg).map_err(|e| e.to_string())?;
+    let png_path = PathBuf::from(format!("{}.png", state.display()));
+    img.save_with_format(&png_path, image::ImageFormat::Png).map_err(|e| e.to_string())?;
+    Ok(png_path)
+}
+
 /// Downloads a state a friend shared and adds it as a new slot of `rom_path`,
-/// in the folder RetroArch reads for that core.
+/// in the folder RetroArch reads for that core, with its preview if any.
 #[tauri::command]
-pub async fn import_save_state(rom_path: String, core: Option<String>, url: String) -> Result<SaveState, String> {
+pub async fn import_save_state(rom_path: String, core: Option<String>, url: String, thumbnail: Option<String>) -> Result<SaveState, String> {
     push_log("INFO", &format!("Save states: import d'un state partagé pour {} (core {:?})", rom_path, core));
     if !is_shared_state_url(&url) {
         push_log("WARN", "Save states: URL de téléchargement refusée");
@@ -450,6 +467,13 @@ pub async fn import_save_state(rom_path: String, core: Option<String>, url: Stri
         e
     })?;
     push_log("INFO", &format!("Save states: state reçu enregistré dans {}", target.display()));
+    if let Some(data_url) = thumbnail.as_deref() {
+        // A missing preview never fails the import.
+        match save_received_thumbnail(&target, data_url) {
+            Ok(png) => push_log("INFO", &format!("Save states: aperçu enregistré dans {}", png.display())),
+            Err(e) => push_log("WARN", &format!("Save states: aperçu ignoré pour {}: {}", target.display(), e)),
+        }
+    }
     let labels = load_labels(&labels_path());
     list_states(&root, &stem, &labels, layout)
         .into_iter()
@@ -552,6 +576,31 @@ mod tests {
         fs::write(&labels_file, serde_json::to_string(&HashMap::from([(legacy, "Ancien nom")])).unwrap()).unwrap();
         let states = list_states(&root, "Zelda", &load_labels(&labels_file), StatesLayout::default());
         assert_eq!(states[0].label.as_deref(), Some("Ancien nom"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_received_preview_becomes_the_state_thumbnail() {
+        let root = temp_dir("thumb");
+        let state = root.join("Zelda.state1");
+        fs::write(&state, b"s").unwrap();
+        let mut jpeg = Vec::new();
+        image::RgbImage::from_pixel(16, 12, image::Rgb([200, 40, 40]))
+            .write_to(&mut std::io::Cursor::new(&mut jpeg), image::ImageFormat::Jpeg)
+            .unwrap();
+        let data_url = format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&jpeg));
+
+        let png = save_received_thumbnail(&state, &data_url).unwrap();
+        assert_eq!(png, root.join("Zelda.state1.png"));
+        let saved = image::open(&png).unwrap();
+        assert_eq!((saved.width(), saved.height()), (16, 12));
+        // The listing now shows it.
+        let listed = list_states(&root, "Zelda", &HashMap::new(), StatesLayout::default());
+        assert!(listed[0].thumbnail.as_deref().unwrap().starts_with("data:image/png;base64,"));
+
+        assert!(save_received_thumbnail(&state, "data:image/png;base64,AAAA").is_err());
+        assert!(save_received_thumbnail(&state, "data:image/jpeg;base64,not-an-image").is_err());
+        assert!(save_received_thumbnail(&state, &"x".repeat(70_000)).is_err());
         fs::remove_dir_all(&root).ok();
     }
 

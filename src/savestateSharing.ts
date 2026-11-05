@@ -154,7 +154,7 @@ export async function importReceivedState(shared: SharedSaveState, romPath: stri
   }
   let imported: SaveState;
   try {
-    imported = await invoke<SaveState>("import_save_state", { romPath, core: shared.core, url: data.signedUrl });
+    imported = await invoke<SaveState>("import_save_state", { romPath, core: shared.core, url: data.signedUrl, thumbnail: shared.thumbnail });
   } catch (e) {
     log("ERROR", `import du partage ${shared.id} échoué: ${errorText(e)}`);
     throw e;
