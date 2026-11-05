@@ -3,6 +3,7 @@ import {
   everyoneReady,
   findLobbyRom,
   isLobbyOpen,
+  isValidHostCode,
   LOBBY_MAX_AGE_MS,
   parseNetplayCode,
   shouldAutoJoin,
@@ -83,6 +84,26 @@ describe("starting the host's game", () => {
     await startHostNetplay({ launch: async () => ({ method: "ppsspp", nick: null }), findSession, publish });
     expect(findSession).not.toHaveBeenCalled();
     expect(publish).toHaveBeenCalledWith({ method: "ppsspp" });
+  });
+
+  it("waits for the host's code with Dolphin and Azahar", async () => {
+    const publish = vi.fn(async () => {});
+    for (const method of ["dolphin", "azahar"]) {
+      const code = await startHostNetplay({ launch: async () => ({ method, nick: null }), findSession: vi.fn(), publish });
+      expect(code).toEqual({ method });
+    }
+    expect(publish).not.toHaveBeenCalled();
+  });
+
+  it("accepts only codes the emulators can use", () => {
+    expect(isValidHostCode("dolphin", "Ab12Cd34")).toBe(true);
+    expect(isValidHostCode("dolphin", "ab")).toBe(false);
+    expect(isValidHostCode("dolphin", "Ab12 Cd34")).toBe(false);
+    expect(isValidHostCode("azahar", "82.64.1.2:24872")).toBe(true);
+    expect(isValidHostCode("azahar", "Salon de Léo")).toBe(true);
+    expect(isValidHostCode("azahar", "x".repeat(101))).toBe(false);
+    expect(isValidHostCode("azahar", "a\nb")).toBe(false);
+    expect(isValidHostCode("retroarch", "anything")).toBe(false);
   });
 
   it("does not publish a game nobody can join", async () => {

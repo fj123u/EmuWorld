@@ -19,6 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🎁 Partage de save states avec tes amis, aperçu compris, ajoutés en un clic dans un nouveau slot",
     "🩺 Vérification des ROMs: fichiers vides, ZIP corrompus et doublons",
     "🌐 Multijoueur RetroArch réparé : l'hôte lance la partie et ses amis la rejoignent automatiquement via le relais libretro, sans ouvrir de port",
+    "🎮 Multijoueur aussi pour PPSSPP (ad hoc), Dolphin (code NetPlay partagé et pré-rempli chez l'ami) et Azahar (étapes guidées), depuis le lobby",
     "🌐 Lobby : pseudos des joueurs, partie en cours visible, lobbys abandonnés masqués, retour à son lobby après redémarrage, jeu reconnu même dans une autre région",
     "🔐 Fix connexion Google/Discord: retour direct dans l'app, sans passer par une page web (et message clair si la connexion est refusée)",
     "🐛 Fix téléchargements: plus de ROMs tronquées après un échec ou une annulation",

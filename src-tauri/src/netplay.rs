@@ -218,10 +218,11 @@ pub async fn launch_netplay(
     username: String,
     max_players: u32,
     relay: Option<RelaySession>,
+    host_code: Option<String>,
 ) -> Result<NetplayLaunch, String> {
     let is_host = role == "host";
     push_log("INFO", &format!("Netplay: lancement {} ({}) pour le lobby {} — {}", role, emulator_id, lobby_id, rom_path));
-    let result = launch_inner(&emulator_id, &rom_path, is_host, &lobby_id, &username, max_players, relay).await;
+    let result = launch_inner(&emulator_id, &rom_path, is_host, &lobby_id, &username, max_players, relay, host_code).await;
     match &result {
         Ok(l) => push_log("INFO", &format!("Netplay: {} démarré via {} (pseudo {:?})", role, l.method, l.nick)),
         Err(e) => push_log("ERROR", &format!("Netplay: lancement {} impossible: {}", role, e)),
@@ -237,6 +238,7 @@ async fn launch_inner(
     username: &str,
     max_players: u32,
     relay: Option<RelaySession>,
+    host_code: Option<String>,
 ) -> Result<NetplayLaunch, String> {
     let catalog = crate::emulators::get_catalog();
     let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or("Émulateur inconnu")?;
@@ -246,9 +248,12 @@ async fn launch_inner(
         return Err("ROM introuvable".to_string());
     }
 
-    if emu.id == "ppsspp" || emu.id == "dolphin" {
-        legacy_launch(&emu.id, &config.emulators_directory, &final_path, is_host)?;
-        return Ok(NetplayLaunch { method: emu.id.clone(), nick: None });
+    let emus_dir = PathBuf::from(&config.emulators_directory);
+    match emu.id.as_str() {
+        "ppsspp" => return launch_ppsspp(&emus_dir, &final_path, username),
+        "dolphin" => return launch_dolphin(&emus_dir, &final_path, username, is_host, host_code.as_deref()),
+        "azahar" => return launch_azahar(&emus_dir, &emu.executable_name, &final_path),
+        _ => {}
     }
 
     let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
@@ -282,22 +287,191 @@ async fn launch_inner(
     Ok(NetplayLaunch { method: "retroarch".to_string(), nick: Some(nick) })
 }
 
-/// PPSSPP (ad hoc) and Dolphin, unchanged for now (to be reworked: Dolphin
-/// has no netplay command line, PPSSPP's ini editing needs fixing).
-fn legacy_launch(emu_id: &str, emulators_directory: &str, rom: &str, is_host: bool) -> Result<(), String> {
-    if emu_id == "ppsspp" {
-        let dir = PathBuf::from(emulators_directory).join("ppsspp");
-        let exe = crate::find_executable(&dir, "PPSSPPWindows64.exe").ok_or("PPSSPP n'est pas installé")?;
-        let mut c = Command::new(&exe);
-        c.current_dir(exe.parent().unwrap_or(&dir)).arg(rom).arg("--fullscreen");
-        return spawn(c);
+/// Sets `key = value` lines inside `[section]` of an INI file, keeping every
+/// other line. Keys are matched exactly within that section only (the old
+/// code searched "Enable = " anywhere and could rewrite another setting).
+pub fn set_ini_values(ini: &str, section: &str, values: &[(&str, String)]) -> String {
+    let header = format!("[{}]", section);
+    let mut lines: Vec<String> = ini.lines().map(str::to_string).collect();
+    let start = match lines.iter().position(|l| l.trim().eq_ignore_ascii_case(&header)) {
+        Some(i) => i,
+        None => {
+            if lines.last().map_or(false, |l| !l.trim().is_empty()) {
+                lines.push(String::new());
+            }
+            lines.push(header.clone());
+            lines.len() - 1
+        }
+    };
+    for (key, value) in values {
+        let end = lines[start + 1..]
+            .iter()
+            .position(|l| l.trim_start().starts_with('['))
+            .map_or(lines.len(), |i| start + 1 + i);
+        let line = format!("{} = {}", key, value);
+        match (start + 1..end).find(|&i| lines[i].split_once('=').map_or(false, |(k, _)| k.trim() == *key)) {
+            Some(i) => lines[i] = line,
+            None => {
+                // Before trailing blank lines of the section.
+                let mut at = end;
+                while at > start + 1 && lines[at - 1].trim().is_empty() {
+                    at -= 1;
+                }
+                lines.insert(at, line);
+            }
+        }
     }
-    let dir = PathBuf::from(emulators_directory).join("dolphin");
-    let exe = crate::find_executable(&dir, "Dolphin.exe").ok_or("Dolphin n'est pas installé")?;
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
+fn read_ini(path: &Path) -> String {
+    // PPSSPP/Dolphin may write a UTF-8 BOM.
+    fs::read_to_string(path).map(|s| s.trim_start_matches('\u{feff}').to_string()).unwrap_or_default()
+}
+
+fn write_ini(path: &Path, content: &str) -> Result<(), String> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, content).map_err(|e| format!("Impossible d'écrire {}: {}", path.display(), e))
+}
+
+/// PPSSPP's memory stick: `memstick/` next to the exe (portable zip), or the
+/// folder named in `installed.txt` (Documents\PPSSPP when it is empty).
+pub fn ppsspp_memstick(exe_dir: &Path, documents: &Path) -> PathBuf {
+    match fs::read_to_string(exe_dir.join("installed.txt")) {
+        Ok(text) => {
+            let custom = text.trim_start_matches('\u{feff}').trim();
+            if custom.is_empty() { documents.join("PPSSPP") } else { PathBuf::from(custom) }
+        }
+        Err(_) => exe_dir.join("memstick"),
+    }
+}
+
+/// Ad hoc multiplayer: both players reach the same public ad hoc server
+/// (PPSSPP's default), with their EmuWorld name in game. The MAC address is
+/// left to PPSSPP (it picks a random one), never forced.
+pub fn ppsspp_netplay_ini(ini: &str, nick: &str) -> String {
+    let ini = set_ini_values(ini, "Network", &[
+        ("EnableWlan", "True".into()),
+        ("EnableAdhocServer", "False".into()),
+        ("proAdhocServer", PPSSPP_ADHOC_SERVER.into()),
+        ("PortOffset", "10000".into()),
+    ]);
+    set_ini_values(&ini, "SystemParam", &[("NickName", nick.into())])
+}
+
+const PPSSPP_ADHOC_SERVER: &str = "socom.cc";
+
+fn launch_ppsspp(emus_dir: &Path, rom: &str, username: &str) -> Result<NetplayLaunch, String> {
+    let dir = emus_dir.join("ppsspp");
+    let exe = crate::find_executable(&dir.to_path_buf(), "PPSSPPWindows64.exe").ok_or("PPSSPP n'est pas installé")?;
+    let exe_dir = exe.parent().unwrap_or(&dir).to_path_buf();
+    let documents = dirs::document_dir().unwrap_or_else(|| exe_dir.clone());
+    let ini_path = ppsspp_memstick(&exe_dir, &documents).join("PSP").join("SYSTEM").join("ppsspp.ini");
+    write_ini(&ini_path, &ppsspp_netplay_ini(&read_ini(&ini_path), &sanitize_nick(username)))?;
+    push_log("INFO", &format!("Netplay PPSSPP: ad hoc via {} ({})", PPSSPP_ADHOC_SERVER, ini_path.display()));
     let mut c = Command::new(&exe);
-    c.current_dir(exe.parent().unwrap_or(&dir)).arg("-e").arg(rom);
-    let _ = is_host;
-    spawn(c)
+    c.current_dir(&exe_dir).arg(rom).arg("--fullscreen");
+    spawn(c)?;
+    Ok(NetplayLaunch { method: "ppsspp".into(), nick: None })
+}
+
+/// Dolphin's user folder: `User\` next to the exe when portable, else
+/// %APPDATA%\Dolphin Emulator (recent builds) or Documents\Dolphin Emulator.
+pub fn dolphin_user_dir(exe_dir: &Path, appdata: &Path, documents: &Path) -> PathBuf {
+    if exe_dir.join("portable.txt").exists() {
+        return exe_dir.join("User");
+    }
+    let roaming = appdata.join("Dolphin Emulator");
+    if roaming.exists() || !documents.join("Dolphin Emulator").exists() {
+        roaming
+    } else {
+        documents.join("Dolphin Emulator")
+    }
+}
+
+/// A Dolphin traversal host code as typed by the host (letters/digits only).
+pub fn valid_dolphin_code(code: &str) -> bool {
+    (4..=16).contains(&code.len()) && code.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+/// Dolphin.ini for NetPlay through Dolphin's traversal server: the player's
+/// name, the host's code pre-filled on the friend's side, and the ROM folder
+/// in the game list (NetPlay only offers games from that list).
+pub fn dolphin_netplay_ini(ini: &str, nick: &str, host_code: Option<&str>, rom_dir: &str) -> String {
+    let mut netplay = vec![("TraversalChoice", "traversal".to_string()), ("Nickname", nick.to_string())];
+    if let Some(code) = host_code {
+        netplay.push(("HostCode", code.to_string()));
+    }
+    let ini = set_ini_values(ini, "NetPlay", &netplay);
+
+    // [General] ISOPaths = N, ISOPath0..N-1
+    let general: Vec<(String, String)> = {
+        let mut in_general = false;
+        ini.lines()
+            .filter_map(|l| {
+                let t = l.trim();
+                if t.starts_with('[') {
+                    in_general = t.eq_ignore_ascii_case("[General]");
+                    return None;
+                }
+                if !in_general { return None; }
+                let (k, v) = t.split_once('=')?;
+                Some((k.trim().to_string(), v.trim().to_string()))
+            })
+            .collect()
+    };
+    let count: usize = general.iter().find(|(k, _)| k == "ISOPaths").and_then(|(_, v)| v.parse().ok()).unwrap_or(0);
+    let norm = |p: &str| p.trim_end_matches(['\\', '/']).replace('/', "\\").to_lowercase();
+    let known = (0..count).any(|i| {
+        general.iter().any(|(k, v)| k == &format!("ISOPath{}", i) && norm(v) == norm(rom_dir))
+    });
+    if known {
+        return ini;
+    }
+    let new_key = format!("ISOPath{}", count);
+    set_ini_values(&ini, "General", &[
+        ("ISOPaths", (count + 1).to_string()),
+        (new_key.as_str(), rom_dir.to_string()),
+    ])
+}
+
+fn launch_dolphin(emus_dir: &Path, rom: &str, username: &str, is_host: bool, host_code: Option<&str>) -> Result<NetplayLaunch, String> {
+    let dir = emus_dir.join("dolphin");
+    let exe = crate::find_executable(&dir.to_path_buf(), "Dolphin.exe").ok_or("Dolphin n'est pas installé")?;
+    let exe_dir = exe.parent().unwrap_or(&dir).to_path_buf();
+    let code = if is_host {
+        None
+    } else {
+        let code = host_code.map(str::trim).filter(|c| valid_dolphin_code(c)).ok_or("Code Dolphin de l'hôte manquant ou invalide")?;
+        Some(code)
+    };
+    let appdata = dirs::config_dir().unwrap_or_else(|| exe_dir.clone());
+    let documents = dirs::document_dir().unwrap_or_else(|| exe_dir.clone());
+    let ini_path = dolphin_user_dir(&exe_dir, &appdata, &documents).join("Config").join("Dolphin.ini");
+    let rom_dir = Path::new(rom).parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    write_ini(&ini_path, &dolphin_netplay_ini(&read_ini(&ini_path), &sanitize_nick(username), code, &rom_dir))?;
+    push_log("INFO", &format!("Netplay Dolphin: {} via traversal ({})", if is_host { "hôte" } else { "client" }, ini_path.display()));
+    // No game argument: NetPlay is started from Dolphin's window
+    // (Tools → Start NetPlay), the game would otherwise start solo.
+    let mut c = Command::new(&exe);
+    c.current_dir(&exe_dir);
+    spawn(c)?;
+    Ok(NetplayLaunch { method: "dolphin".into(), nick: None })
+}
+
+/// Azahar has no multiplayer command line ("--multiplayer ... not yet
+/// implemented for the Qt frontend"): start the game, the lobby shows the steps.
+fn launch_azahar(emus_dir: &Path, exe_name: &str, rom: &str) -> Result<NetplayLaunch, String> {
+    let dir = emus_dir.join("azahar");
+    let exe = crate::find_executable(&dir.to_path_buf(), exe_name).ok_or("Azahar n'est pas installé")?;
+    let mut c = Command::new(&exe);
+    c.current_dir(exe.parent().unwrap_or(&dir)).arg(rom);
+    spawn(c)?;
+    Ok(NetplayLaunch { method: "azahar".into(), nick: None })
 }
 
 /// Waits until the host's room shows on the public list and returns its relay session.
@@ -386,6 +560,70 @@ mod tests {
         assert_eq!(host_config("x", 9).into_iter().find(|(k, _)| *k == "netplay_max_connections").unwrap().1, "3");
     }
 
+    #[test]
+    fn ini_values_land_in_their_own_section_only() {
+        let ini = "[Graphics]\nEnable = True\nFrameSkip = 0\n\n[Network]\nEnableWlan = False\n\n[SystemParam]\nNickName = PPSSPP\n";
+        let out = set_ini_values(ini, "Network", &[("EnableWlan", "True".into()), ("proAdhocServer", "socom.cc".into())]);
+        assert_eq!(
+            out,
+            "[Graphics]\nEnable = True\nFrameSkip = 0\n\n[Network]\nEnableWlan = True\nproAdhocServer = socom.cc\n\n[SystemParam]\nNickName = PPSSPP\n"
+        );
+        // Missing section is created; running twice changes nothing.
+        let fresh = set_ini_values("", "NetPlay", &[("TraversalChoice", "traversal".into())]);
+        assert_eq!(fresh, "[NetPlay]\nTraversalChoice = traversal\n");
+        assert_eq!(set_ini_values(&out, "Network", &[("EnableWlan", "True".into())]), out);
+    }
+
+    #[test]
+    fn ppsspp_joins_the_default_adhoc_server_without_forcing_a_mac() {
+        let ini = ppsspp_netplay_ini("[SystemParam]\nMacAddress = 1a:2b:3c:4d:5e:6f\nNickName = PPSSPP\n", "Leo");
+        assert!(ini.contains("[Network]\nEnableWlan = True\nEnableAdhocServer = False\nproAdhocServer = socom.cc\nPortOffset = 10000"));
+        assert!(ini.contains("MacAddress = 1a:2b:3c:4d:5e:6f"), "the player's own MAC is kept");
+        assert!(ini.contains("NickName = Leo"));
+        assert!(!ini.contains("01:02:03"), "no fixed (multicast) MAC any more");
+    }
+
+    #[test]
+    fn finds_the_ppsspp_and_dolphin_user_folders() {
+        let root = std::env::temp_dir().join(format!("emuworld_np_dirs_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let exe = root.join("exe");
+        let docs = root.join("docs");
+        let appdata = root.join("appdata");
+        fs::create_dir_all(&exe).unwrap();
+        assert_eq!(ppsspp_memstick(&exe, &docs), exe.join("memstick"));
+        fs::write(exe.join("installed.txt"), "").unwrap();
+        assert_eq!(ppsspp_memstick(&exe, &docs), docs.join("PPSSPP"));
+        fs::write(exe.join("installed.txt"), "E:\\PSP\n").unwrap();
+        assert_eq!(ppsspp_memstick(&exe, &docs), PathBuf::from("E:\\PSP"));
+
+        assert_eq!(dolphin_user_dir(&exe, &appdata, &docs), appdata.join("Dolphin Emulator"));
+        fs::create_dir_all(docs.join("Dolphin Emulator")).unwrap();
+        assert_eq!(dolphin_user_dir(&exe, &appdata, &docs), docs.join("Dolphin Emulator"));
+        fs::write(exe.join("portable.txt"), "").unwrap();
+        assert_eq!(dolphin_user_dir(&exe, &appdata, &docs), exe.join("User"));
+        fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn dolphin_gets_the_host_code_and_the_rom_folder() {
+        let ini = "[General]\nISOPaths = 1\nISOPath0 = D:\\Jeux\\Wii\n[NetPlay]\nTraversalChoice = direct\n";
+        let client = dolphin_netplay_ini(ini, "Leo", Some("Ab12Cd34"), "D:\\Roms\\GameCube");
+        assert!(client.contains("TraversalChoice = traversal"));
+        assert!(client.contains("HostCode = Ab12Cd34"));
+        assert!(client.contains("Nickname = Leo"));
+        assert!(client.contains("ISOPaths = 2") && client.contains("ISOPath1 = D:\\Roms\\GameCube"));
+        // Same folder again (any case / trailing slash): not added twice.
+        let again = dolphin_netplay_ini(&client, "Leo", None, "d:\\roms\\gamecube\\");
+        assert!(again.contains("ISOPaths = 2") && !again.contains("ISOPath2"));
+        // The host has no code to pre-fill.
+        assert!(!dolphin_netplay_ini("", "Host", None, "D:\\Roms").contains("HostCode"));
+
+        assert!(valid_dolphin_code("Ab12Cd34"));
+        assert!(!valid_dolphin_code("ab"));
+        assert!(!valid_dolphin_code("abc\nTraversalChoice=direct"));
+    }
+
     /// Real round trip through libretro's relay with the app's own code: host,
     /// room lookup, client. Opens two RetroArch windows; run by hand:
     /// `EMUWORLD_NETPLAY_ROM=<rom> cargo test live_relay -- --ignored --nocapture`
@@ -395,11 +633,11 @@ mod tests {
         let rom = std::env::var("EMUWORLD_NETPLAY_ROM").expect("EMUWORLD_NETPLAY_ROM");
         let emu = std::env::var("EMUWORLD_NETPLAY_EMU").unwrap_or_else(|_| "mgba".into());
         let lobby = format!("live{:06}", std::process::id() % 1_000_000);
-        let host = launch_inner(&emu, &rom, true, &lobby, "EWtest", 2, None).await.expect("host launch");
+        let host = launch_inner(&emu, &rom, true, &lobby, "EWtest", 2, None, None).await.expect("host launch");
         let nick = host.nick.expect("host nick");
         let relay = find_netplay_session(nick.clone(), Some(60)).await.expect("room on the relay");
         println!("room {} via {}:{} ({})", nick, relay.ip, relay.port, relay.session);
-        launch_inner(&emu, &rom, false, &lobby, "EWfriend", 2, Some(relay)).await.expect("client launch");
+        launch_inner(&emu, &rom, false, &lobby, "EWfriend", 2, Some(relay), None).await.expect("client launch");
         let log = crate::emuworld_base_dir().join("logs").join("netplay_client.log");
         for _ in 0..30 {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;

@@ -19,9 +19,13 @@ const base: LobbyView = {
 };
 
 function renderPanel(props: Partial<Parameters<typeof LobbyPanel>[0]> = {}) {
-  const handlers = { onInvite: vi.fn(), onReady: vi.fn(), onLaunch: vi.fn(), onJoin: vi.fn(), onLeave: vi.fn(), onGetGame: vi.fn() };
+  const handlers = { onInvite: vi.fn(), onReady: vi.fn(), onLaunch: vi.fn(), onJoin: vi.fn(), onLeave: vi.fn(), onGetGame: vi.fn(), onPublishCode: vi.fn() };
   render(
-    <LobbyPanel lobby={base} userId="host" friends={[]} myRomName={base.game_name} busy={null} t={t} {...handlers} {...props} />,
+    <LobbyPanel
+      lobby={base} userId="host" friends={[]} myRomName={base.game_name} busy={null}
+      method={null} hostCode={null} awaitingHostCode={false} t={t}
+      {...handlers} {...props}
+    />,
   );
   return handlers;
 }
@@ -75,6 +79,33 @@ describe("lobby panel", () => {
     const { onGetGame } = renderPanel({ userId: "friend", myRomName: null });
     fireEvent.click(screen.getByRole("button", { name: /Télécharger le jeu/ }));
     expect(onGetGame).toHaveBeenCalled();
+  });
+
+  it("guides a Dolphin host and shares the code it pastes", () => {
+    const ready = { ...base, members: base.members!.map((m) => ({ ...m, is_ready: true })) };
+    const { onPublishCode } = renderPanel({ lobby: ready, method: "dolphin", awaitingHostCode: true });
+    expect(screen.getByText(/Outils → Démarrer NetPlay → onglet « Héberger »/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Lancer le jeu/ }), "already launched").toBeNull();
+
+    const input = screen.getByRole("textbox", { name: "Code NetPlay Dolphin" });
+    const share = screen.getByRole("button", { name: /Partager/ }) as HTMLButtonElement;
+    fireEvent.change(input, { target: { value: "ab" } });
+    expect(share.disabled).toBe(true);
+    fireEvent.change(input, { target: { value: "  Ab12Cd34 " } });
+    fireEvent.click(share);
+    expect(onPublishCode).toHaveBeenCalledWith("Ab12Cd34");
+  });
+
+  it("shows friends the host's code and what to do with it", () => {
+    renderPanel({ userId: "friend", lobby: { ...base, status: "playing" }, method: "dolphin", hostCode: "Ab12Cd34" });
+    expect(screen.getByText("Ab12Cd34")).toBeTruthy();
+    expect(screen.getByText(/Le code de l'hôte est déjà rempli/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Copier/ })).toBeTruthy();
+  });
+
+  it("explains PPSSPP's ad hoc mode once the game runs", () => {
+    renderPanel({ userId: "friend", lobby: { ...base, status: "playing" }, method: "ppsspp" });
+    expect(screen.getByText(/serveur ad hoc de PPSSPP/)).toBeTruthy();
   });
 
   it("only offers friends who are not in the lobby yet", () => {

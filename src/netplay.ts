@@ -16,6 +16,23 @@ export interface NetplayCode {
   method: string;
   relay?: RelaySession | null;
   host_nick?: string | null;
+  /** Dolphin NetPlay host code, or Azahar room (name or address), shared by the host. */
+  host_code?: string | null;
+}
+
+/** Emulators where the host shares a code from the emulator before friends can join. */
+export const MANUAL_CODE_METHODS = ["dolphin", "azahar"] as const;
+
+export function needsHostCode(method: string): boolean {
+  return (MANUAL_CODE_METHODS as readonly string[]).includes(method);
+}
+
+/** What the host may paste: a Dolphin traversal code, or an Azahar room name / address. */
+export function isValidHostCode(method: string, code: string): boolean {
+  const value = code.trim();
+  if (method === "dolphin") return /^[A-Za-z0-9]{4,16}$/.test(value);
+  if (method === "azahar") return value.length > 0 && value.length <= 100 && !/[\u0000-\u001f]/.test(value);
+  return false;
 }
 
 export interface NetplayLaunch {
@@ -88,10 +105,15 @@ export interface HostNetplayDeps {
   publish: (code: NetplayCode) => Promise<void>;
 }
 
-/** Host: start the emulator, wait for the relay room (RetroArch), then publish it. */
+/**
+ * Host: start the emulator, wait for the relay room (RetroArch), then publish
+ * it. Dolphin/Azahar are not published yet: the host first pastes the code
+ * the emulator shows (see `needsHostCode`).
+ */
 export async function startHostNetplay(deps: HostNetplayDeps): Promise<NetplayCode> {
   const launch = await deps.launch("host");
   const code: NetplayCode = { method: launch.method };
+  if (needsHostCode(launch.method)) return code;
   if (launch.method === "retroarch") {
     if (!launch.nick) throw new Error("RetroArch did not report its netplay nickname");
     code.host_nick = launch.nick;

@@ -16,7 +16,7 @@ import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMAT
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
-import { findLobbyRom, isLobbyOpen, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
+import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
@@ -3976,6 +3976,8 @@ export default function App() {
   const [currentLobby, setCurrentLobby] = useState<Lobby | null>(null);
   const [lobbyInvites, setLobbyInvites] = useState<Lobby[]>([]);
   const [lobbyBusy, setLobbyBusy] = useState<"launching" | "joining" | null>(null);
+  // Host launched Dolphin/Azahar and still has to paste the emulator's code.
+  const [hostAwaitingCode, setHostAwaitingCode] = useState<string | null>(null);
   // Lobbies this player already joined the game of: one launch per lobby.
   const joinedLobbiesRef = useRef<Set<string>>(new Set());
   const lobbyLog = useCallback((level: "INFO" | "WARN" | "ERROR", message: string) => {
@@ -4081,10 +4083,10 @@ export default function App() {
     const lobbyId = currentLobby.id;
     setLobbyBusy("launching");
     try {
-      await startHostNetplay({
+      const started = await startHostNetplay({
         launch: () => invoke<NetplayLaunch>("launch_netplay", {
           emulatorId: emu.id, romPath: rom.path, role: "host", lobbyId,
-          username: profile?.username || "Host", maxPlayers: Math.max(2, (currentLobby.members || []).length), relay: null,
+          username: profile?.username || "Host", maxPlayers: Math.max(2, (currentLobby.members || []).length), relay: null, hostCode: null,
         }),
         findSession: (nick) => invoke<RelaySession>("find_netplay_session", { nick, timeoutSecs: 60 }),
         publish: async (code) => {
@@ -4094,8 +4096,14 @@ export default function App() {
           setCurrentLobby(prev => (prev && prev.id === lobbyId ? { ...prev, status: "playing", netplay_code } : prev));
         },
       });
-      lobbyLog("INFO", `partie du lobby ${lobbyId} publiée`);
-      showToast(tl("lobby.hostReady"), "success");
+      if (needsHostCode(started.method)) {
+        setHostAwaitingCode(started.method);
+        lobbyLog("INFO", `lobby ${lobbyId}: ${started.method} lancé, en attente du code de l'hôte`);
+        showToast(tl("lobby.waitingHostCode"), "info");
+      } else {
+        lobbyLog("INFO", `partie du lobby ${lobbyId} publiée`);
+        showToast(tl("lobby.hostReady"), "success");
+      }
     } catch (e) {
       lobbyLog("ERROR", `lancement hôte du lobby ${lobbyId} impossible: ${errorText(e)}`);
       showToast(tl("lobby.launchFailed", { error: errorText(e) }), "error");
@@ -4117,7 +4125,7 @@ export default function App() {
     try {
       await invoke<NetplayLaunch>("launch_netplay", {
         emulatorId: emu.id, romPath: rom.path, role: "client", lobbyId: lobby.id,
-        username: profile?.username || "Player", maxPlayers: 2, relay: code.relay ?? null,
+        username: profile?.username || "Player", maxPlayers: 2, relay: code.relay ?? null, hostCode: code.host_code ?? null,
       });
       lobbyLog("INFO", `partie du lobby ${lobby.id} rejointe (${code.method})`);
       showToast(tl("lobby.joined"), "success");
@@ -4129,6 +4137,23 @@ export default function App() {
       setLobbyBusy(null);
     }
   }, [user, roms, lobbyEmulatorFor, profile, showToast, tl, lobbyLog]);
+
+  // Host of a Dolphin/Azahar game: share the code the emulator shows.
+  const publishHostCode = useCallback(async (hostCode: string) => {
+    if (!currentLobby || !hostAwaitingCode || !isValidHostCode(hostAwaitingCode, hostCode)) return;
+    const lobbyId = currentLobby.id;
+    const netplay_code = JSON.stringify({ method: hostAwaitingCode, host_code: hostCode });
+    const { error } = await supabase.from("lobbies").update({ status: "playing", netplay_code }).eq("id", lobbyId);
+    if (error) {
+      lobbyLog("ERROR", `code de l'hôte non publié pour ${lobbyId}: ${error.message}`);
+      showToast(tl("lobby.launchFailed", { error: error.message }), "error");
+      return;
+    }
+    setHostAwaitingCode(null);
+    setCurrentLobby(prev => (prev && prev.id === lobbyId ? { ...prev, status: "playing", netplay_code } : prev));
+    lobbyLog("INFO", `code ${hostAwaitingCode} de l'hôte publié pour ${lobbyId}`);
+    showToast(tl("lobby.hostReady"), "success");
+  }, [currentLobby, hostAwaitingCode, showToast, tl, lobbyLog]);
 
   // Friends start on their own as soon as the host's game is published.
   useEffect(() => {
@@ -4152,6 +4177,7 @@ export default function App() {
     }
     lobbyLog("INFO", `lobby ${lobbyId} quitté`);
     joinedLobbiesRef.current.delete(lobbyId);
+    setHostAwaitingCode(null);
     setCurrentLobby(null);
   }, [currentLobby, user, showToast, tl, lobbyLog]);
 
@@ -9036,6 +9062,10 @@ export default function App() {
           friends={shareFriends}
           myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
           busy={lobbyBusy}
+          method={hostAwaitingCode ?? parseNetplayCode(currentLobby.netplay_code)?.method ?? null}
+          hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
+          awaitingHostCode={hostAwaitingCode !== null}
+          onPublishCode={publishHostCode}
           t={t}
           onInvite={handleInviteToLobby}
           onReady={handleReadyLobby}

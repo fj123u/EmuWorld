@@ -1550,6 +1550,32 @@ body {
   font-weight: 700;
   color: var(--neon-green);
 }
+.lobby-panel__steps {
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+.lobby-panel__code {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+  font-size: 12px;
+}
+.lobby-panel__code .settings__field-input {
+  flex: 1;
+  min-width: 120px;
+}
+.lobby-panel__code-value {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-weight: 700;
+  user-select: all;
+}
 .lobby-panel__hint {
   font-size: 12px;
   color: var(--text-muted);

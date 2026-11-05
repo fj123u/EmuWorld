@@ -1,8 +1,9 @@
 // Floating panel of the lobby the player is in: game, members and their
 // state, invite, ready, launch (host) / join (friends), leave.
 import { motion } from "framer-motion";
-import { Download, Play, RefreshCw, Wifi } from "lucide-react";
-import { everyoneReady } from "./netplay";
+import { useState } from "react";
+import { Copy, Download, Play, RefreshCw, Send, Wifi } from "lucide-react";
+import { everyoneReady, isValidHostCode } from "./netplay";
 
 export interface LobbyMemberView {
   user_id: string;
@@ -28,6 +29,13 @@ interface Props {
   myRomName: string | null;
   /** What the panel is waiting for, to disable buttons and show progress. */
   busy: "launching" | "joining" | null;
+  /** Emulator of the game in progress ("retroarch", "dolphin"…), once known. */
+  method: string | null;
+  /** Code the host shared (Dolphin / Azahar), shown to friends. */
+  hostCode: string | null;
+  /** The host launched Dolphin/Azahar and still has to share its code. */
+  awaitingHostCode: boolean;
+  onPublishCode: (code: string) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
   onInvite: (friendId: string) => void;
   onReady: () => void;
@@ -37,7 +45,16 @@ interface Props {
   onGetGame: () => void;
 }
 
-export function LobbyPanel({ lobby, userId, friends, myRomName, busy, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame }: Props) {
+/** Steps to follow inside the emulator, when EmuWorld can't do it all. */
+const STEPS: Record<string, { host: string; client: string }> = {
+  dolphin: { host: "lobby.stepsDolphinHost", client: "lobby.stepsDolphinClient" },
+  azahar: { host: "lobby.stepsAzaharHost", client: "lobby.stepsAzaharClient" },
+  ppsspp: { host: "lobby.stepsPpsspp", client: "lobby.stepsPpsspp" },
+};
+
+export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode }: Props) {
+  const [codeDraft, setCodeDraft] = useState("");
+  const [copied, setCopied] = useState(false);
   const members = lobby.members ?? [];
   const isHost = lobby.host_id === userId;
   const me = members.find((m) => m.user_id === userId);
@@ -71,6 +88,39 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, t, onInvit
         ))}
       </div>
       {playing && <div className="lobby-panel__live"><Wifi size={12} /> {t("lobby.playing")}</div>}
+      {method && STEPS[method] && (playing || awaitingHostCode) && (
+        <p className="lobby-panel__steps">{t(isHost ? STEPS[method].host : STEPS[method].client)}</p>
+      )}
+      {isHost && awaitingHostCode && method && (
+        <form
+          className="lobby-panel__code"
+          onSubmit={(e) => { e.preventDefault(); if (isValidHostCode(method, codeDraft)) onPublishCode(codeDraft.trim()); }}
+        >
+          <input
+            className="settings__field-input gamepad-nav-item"
+            aria-label={t(method === "dolphin" ? "lobby.codeLabelDolphin" : "lobby.codeLabelAzahar")}
+            placeholder={t(method === "dolphin" ? "lobby.codeLabelDolphin" : "lobby.codeLabelAzahar")}
+            value={codeDraft}
+            maxLength={100}
+            onChange={(e) => setCodeDraft(e.target.value)}
+          />
+          <button type="submit" className="btn btn--primary btn--sm gamepad-nav-item" disabled={!isValidHostCode(method, codeDraft)}>
+            <Send size={12} /> {t("lobby.shareCode")}
+          </button>
+        </form>
+      )}
+      {!isHost && playing && hostCode && (
+        <div className="lobby-panel__code">
+          <span>{t("lobby.hostCodeTitle")}</span>
+          <code className="lobby-panel__code-value">{hostCode}</code>
+          <button
+            className="btn btn--ghost btn--sm gamepad-nav-item"
+            onClick={() => { navigator.clipboard?.writeText(hostCode).then(() => setCopied(true), () => {}); }}
+          >
+            <Copy size={12} /> {copied ? t("lobby.copied") : t("lobby.copy")}
+          </button>
+        </div>
+      )}
       {busy && (
         <div className="lobby-panel__live">
           <RefreshCw size={12} className="animate-spin" /> {t(busy === "launching" ? "lobby.opening" : "lobby.joining")}
@@ -97,7 +147,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, t, onInvit
             </button>
           )
         )}
-        {isHost && !playing && everyoneReady(members) && (
+        {isHost && !playing && !awaitingHostCode && everyoneReady(members) && (
           <button className="btn btn--success gamepad-nav-item" disabled={busy !== null} onClick={onLaunch}>
             <Play size={14} /> {t("lobby.launch")}
           </button>
