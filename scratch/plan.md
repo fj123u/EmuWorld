@@ -12,7 +12,7 @@
 
 - [ ] **P2 — Versionner et vérifier le schéma Supabase** : les évolutions SQL sont conservées comme scripts manuels dans `scratch/`. Les convertir en migrations ordonnées et rejouables, puis tester les politiques RLS et les contraintes pour chaque table utilisée par l'app avant déploiement.
 - [ ] **P2 — Découper les deux monolithes après l'ajout de tests** : `src/App.tsx` (~10 000 lignes) et `src-tauri/src/lib.rs` (~6 400 lignes) concentrent trop de responsabilités. Extraire progressivement les domaines (bibliothèque, social, synchronisation, commandes Tauri) sans changer le comportement.
-- [ ] **P2 — Réduire le JavaScript chargé au démarrage** : le build produit un bundle principal d'environ 914 kB (262 kB gzip) et signale un chunk supérieur à 500 kB. Découper les pages lourdes en imports différés et mesurer le résultat sans masquer l'avertissement.
+- [x] **P2 — Réduire le JavaScript chargé au démarrage** : mesuré le 06/11/2026 sur le build de prod (968 kB, 279 kB gzip). Composition : code de l'app 299 kB, React DOM 176 kB, Supabase ~180 kB, Framer Motion 120 kB, traductions 46 kB. Coût réel au démarrage : DOMContentLoaded en 18–31 ms, 0 tâche longue (> 50 ms) — le JS est lu sur le disque dans Tauri, il n'y a pas de téléchargement. Découper ne ferait gagner que quelques ms : pas fait volontairement. Le vrai levier reste le découpage du monolithe App.tsx (point suivant), pour la maintenance plus que pour la vitesse.
 
 **Bilan :** aucun blocage P0 confirmé lors de cette revue statique. Le risque prioritaire est la perte silencieuse de données locales (P1) ; traiter les tâches P1 avant de consacrer du temps aux nouvelles fonctionnalités V3.
 
