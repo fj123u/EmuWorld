@@ -490,6 +490,7 @@ const en: Translations = {
     noEmulator: "Install a {console} emulator to play online.",
     dissolvedByHost: "The host closed the lobby.",
     invitedBy: "{friend} invites you to play",
+    inviteGone: "This invitation no longer exists (lobby closed or invitation withdrawn).",
     stepsDolphinHost: "In Dolphin: Tools → Start NetPlay → \"Host\" tab, pick the game then \"Host\". Copy the code shown at the top of the NetPlay window and paste it here.",
     stepsDolphinClient: "In Dolphin: Tools → Start NetPlay → \"Connect\" tab. The host's code is already filled in: click \"Connect\".",
     stepsAzaharHost: "In Azahar: Multiplayer → Host Room (port 24872 must be open on your router). Paste the room name or your address (IP:port) here.",

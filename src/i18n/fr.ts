@@ -488,6 +488,7 @@ const fr = {
     noEmulator: "Installe un émulateur {console} pour jouer en ligne.",
     dissolvedByHost: "L'hôte a fermé le lobby.",
     invitedBy: "{friend} t'invite à jouer",
+    inviteGone: "Cette invitation n'existe plus (lobby fermé ou invitation retirée).",
     stepsDolphinHost: "Dans Dolphin : Outils → Démarrer NetPlay → onglet « Héberger », choisis le jeu puis « Héberger ». Copie le code affiché en haut de la fenêtre NetPlay et colle-le ici.",
     stepsDolphinClient: "Dans Dolphin : Outils → Démarrer NetPlay → onglet « Se connecter ». Le code de l'hôte est déjà rempli : clique sur « Se connecter ».",
     stepsAzaharHost: "Dans Azahar : Multijoueur → Héberger un salon (le port 24872 doit être ouvert sur ta box). Colle ici le nom du salon ou ton adresse (IP:port).",

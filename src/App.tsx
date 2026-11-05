@@ -18,6 +18,7 @@ import { SaveStatesModal } from "./SaveStatesModal";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
+import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -4054,14 +4055,22 @@ export default function App() {
     refreshLobbyMembers(currentLobby.id);
   }, [currentLobby, showToast, tl, lobbyLog, refreshLobbyMembers]);
 
+  // Accepting: the host already created our row (the access rules refuse a
+  // player adding themselves), so this only opens the lobby.
   const handleJoinLobby = useCallback(async (lobbyId: string) => {
     if (!user) return;
-    await supabase.from("lobby_members").upsert({ lobby_id: lobbyId, user_id: user.id, is_ready: false });
-    const { data } = await supabase.from("lobbies").select("*").eq("id", lobbyId).single();
-    if (data) setCurrentLobby({ ...data, members: await loadLobbyMembers(lobbyId) });
     setLobbyInvites(prev => prev.filter(l => l.id !== lobbyId));
-    lobbyLog("INFO", `lobby ${lobbyId} rejoint`);
-  }, [user, loadLobbyMembers, lobbyLog]);
+    try {
+      const lobby = await acceptLobbyInvite<Lobby>(lobbyId, user.id);
+      setCurrentLobby({ ...lobby, members: await loadLobbyMembers(lobbyId) });
+      lobbyLog("INFO", `lobby ${lobbyId} rejoint`);
+    } catch (e) {
+      const gone = e instanceof LobbyInviteGone;
+      lobbyLog(gone ? "WARN" : "ERROR", `invitation au lobby ${lobbyId} inutilisable: ${errorText(e)}`);
+      showToast(gone ? tl("lobby.inviteGone") : tl("lobby.launchFailed", { error: errorText(e) }), gone ? "info" : "error");
+      loadLobbyInvites();
+    }
+  }, [user, loadLobbyMembers, lobbyLog, showToast, tl, loadLobbyInvites]);
 
   const handleReadyLobby = useCallback(async () => {
     if (!currentLobby || !user) return;
