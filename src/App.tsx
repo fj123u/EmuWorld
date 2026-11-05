@@ -12,6 +12,7 @@ import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
+import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
   Search,
   Settings,
@@ -1433,7 +1434,7 @@ export default function App() {
   const [consoleFilter, setConsoleFilter] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState<"name" | "playtime" | "rating" | "last_played" | "launches">("name");
-  const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated">("all");
+  const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated" | SmartPlaylist>("all");
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
   const [theme, setThemeState] = useState<string>(() => localStorage.getItem("emuworld_theme") || "default");
@@ -5343,6 +5344,7 @@ export default function App() {
     if (filterMode === "favorites" && !entry?.favorite) return false;
     if (filterMode === "unplayed" && entry?.launches) return false;
     if (filterMode === "rated" && !entry?.rating) return false;
+    if (isSmartPlaylist(filterMode) && !matchesSmartPlaylist(filterMode, entry)) return false;
     if (collectionFilter) {
       const col = playtime.collections.find(c => c.name === collectionFilter);
       if (col && !col.games.includes(`${g.console}::${g.name}`)) return false;
@@ -5944,6 +5946,13 @@ export default function App() {
                         <option value="favorites">{t("library.filterFavorites")}</option>
                         <option value="unplayed">{t("library.filterUnplayed")}</option>
                         <option value="rated">{t("library.filterRated")}</option>
+                        <optgroup label={t("library.smartPlaylists")}>
+                          {SMART_PLAYLISTS.map(p => (
+                            <option key={p} value={p}>
+                              {t(`library.smart.${p}`)} ({roms.filter(r => matchesSmartPlaylist(p, playtime.games[`${r.console}::${r.name}`])).length})
+                            </option>
+                          ))}
+                        </optgroup>
                       </select>
                       <select className="library-sort-select gamepad-nav-item" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
                         <option value="">Collections</option>
@@ -6858,7 +6867,7 @@ export default function App() {
                         {filteredGames.length === 0 && (
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
-                            <div className="empty-state__title">No matches for "{search}"</div>
+                            <div className="empty-state__title">{search.trim() ? t("library.noMatchSearch", { search }) : t("library.noMatchFilter")}</div>
                           </div>
                         )}
                       </>

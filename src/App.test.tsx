@@ -204,6 +204,35 @@ describe("Vimm store download", () => {
   });
 });
 
+describe("smart playlists", () => {
+  async function openLibraryFilter() {
+    const r = await renderApp();
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    const filter = (await screen.findByDisplayValue("Tous")) as HTMLSelectElement;
+    return { ...r, filter };
+  }
+
+  it("lists the games matching a smart playlist, with live counts", async () => {
+    const { filter, container } = await openLibraryFilter();
+    // Super Mario Bros. 3 has 10 h in the sample playtime; nothing else does.
+    expect(screen.getByRole("option", { name: "Gros temps de jeu (10h+) (1)" })).toBeTruthy();
+    await act(async () => {
+      fireEvent.change(filter, { target: { value: "long" } });
+    });
+    const grid = container.querySelector(".game-grid")!;
+    expect(grid.textContent).toContain("Super Mario Bros. 3");
+    expect(grid.textContent).not.toContain("Tetris");
+  });
+
+  it("explains an empty playlist instead of showing a blank search", async () => {
+    const { filter } = await openLibraryFilter();
+    await act(async () => {
+      fireEvent.change(filter, { target: { value: "stale" } });
+    });
+    expect(screen.getByText("Aucun jeu ne correspond à ce filtre")).toBeTruthy();
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });

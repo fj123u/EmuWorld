@@ -127,7 +127,7 @@
 
 - [ ] **Auto-config émulateurs** *(moyen)* — détecter le hardware (GPU, CPU) et configurer automatiquement les settings optimaux de chaque émulateur
 - [x] **ROM health check** *(quick win)* — détecter les ROMs vides, les ZIP corrompus et les doublons par empreinte SHA-256, avec suppression sécurisée des fichiers manifestement invalides
-- [ ] **Smart playlists** *(moyen)* — playlists auto-générées : "Pas joué depuis 1 mois", "Sessions courtes (<30min)", "Presque terminé", "Co-op entre amis"
+- [x] **Smart playlists** *(moyen)* — playlists auto-générées : "Pas joué depuis 1 mois", "Sessions courtes (<30min)", "Presque terminé", "Co-op entre amis"
 - [ ] **Game recommendations AI** *(gros)* — recommandations basées sur tes habitudes de jeu (temps, genre, console) via un algo ML simple
 
 ### 🎨 UI & Experience
@@ -150,5 +150,5 @@
 
 - [ ] **Plugin system** *(très gros)* — API pour que les utilisateurs créent des extensions (nouveaux émulateurs, sources de covers, intégrations)
 - [ ] **Linux / macOS support** *(gros)* — porter l'app sur les autres OS (Tauri est cross-platform, mais les émulateurs changent)
-- [ ] **Auto-update émulateurs** *(moyen)* — détecter les nouvelles versions des émulateurs installés et proposer la mise à jour
+- [x] **Auto-update émulateurs** *(moyen)* — détecter les nouvelles versions des émulateurs installés et proposer la mise à jour
 - [ ] **Performance monitoring** *(quick win)* — afficher FPS, latence, usage RAM/CPU pendant le jeu dans l'overlay
