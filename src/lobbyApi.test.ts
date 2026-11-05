@@ -70,6 +70,12 @@ describe("lobby access rules (scratch/supabase_lobbies_rls_v2.sql)", () => {
     expect(sql).toContain("DROP FUNCTION IF EXISTS public.are_friends(uuid, uuid);");
   });
 
+  it("applies only to signed-in accounts (anonymous reads get an empty list)", () => {
+    const policies = sql.match(/CREATE POLICY "[^"]+" ON public\.\w+\s+FOR \w+[^\r\n]*/g) ?? [];
+    expect(policies).toHaveLength(8);
+    for (const p of policies) expect(p).toContain("TO authenticated");
+  });
+
   it("drops every older policy and keeps the host from changing hands", () => {
     expect(sql).toMatch(/FOR pol IN[\s\S]*tablename IN \('lobbies', 'lobby_members'\)[\s\S]*DROP POLICY/);
     expect(policy("Host updates the lobby")).toContain("WITH CHECK (host_id = auth.uid())");

@@ -10,7 +10,8 @@
 --   • un membre ne peut changer que son « prêt » (is_ready), rien d'autre ;
 --   • on quitte soi-même, et l'hôte peut retirer les membres de son lobby ;
 --   • l'hôte reste l'hôte (pas de transfert via UPDATE) ;
---   • netplay_code limité à 2000 caractères.
+--   • netplay_code limité à 2000 caractères ;
+--   • règles réservées aux comptes connectés (sans compte : liste vide).
 
 -- 1. Fonctions d'aide, dans un schéma « private » que l'API n'expose pas.
 --    Dans « public », Supabase les rend appelables par tous via /rest/v1/rpc
@@ -68,16 +69,16 @@ ALTER TABLE public.lobby_members ENABLE ROW LEVEL SECURITY;
 
 -- 3. lobbies
 CREATE POLICY "Host and members view the lobby" ON public.lobbies
-  FOR SELECT USING (host_id = auth.uid() OR private.is_lobby_member(id, auth.uid()));
+  FOR SELECT TO authenticated USING (host_id = auth.uid() OR private.is_lobby_member(id, auth.uid()));
 
 CREATE POLICY "Users create their own lobby" ON public.lobbies
-  FOR INSERT WITH CHECK (host_id = auth.uid());
+  FOR INSERT TO authenticated WITH CHECK (host_id = auth.uid());
 
 CREATE POLICY "Host updates the lobby" ON public.lobbies
-  FOR UPDATE USING (host_id = auth.uid()) WITH CHECK (host_id = auth.uid());
+  FOR UPDATE TO authenticated USING (host_id = auth.uid()) WITH CHECK (host_id = auth.uid());
 
 CREATE POLICY "Host deletes the lobby" ON public.lobbies
-  FOR DELETE USING (host_id = auth.uid());
+  FOR DELETE TO authenticated USING (host_id = auth.uid());
 
 ALTER TABLE public.lobbies DROP CONSTRAINT IF EXISTS lobbies_netplay_code_length;
 ALTER TABLE public.lobbies ADD CONSTRAINT lobbies_netplay_code_length
@@ -85,7 +86,7 @@ ALTER TABLE public.lobbies ADD CONSTRAINT lobbies_netplay_code_length
 
 -- 4. lobby_members
 CREATE POLICY "Lobby people view its members" ON public.lobby_members
-  FOR SELECT USING (
+  FOR SELECT TO authenticated USING (
     user_id = auth.uid()
     OR private.is_lobby_member(lobby_id, auth.uid())
     OR private.is_lobby_host(lobby_id, auth.uid())
@@ -93,7 +94,7 @@ CREATE POLICY "Lobby people view its members" ON public.lobby_members
 
 -- Seul l'hôte ajoute : lui-même, ou un ami accepté (invitation, pas encore prêt).
 CREATE POLICY "Host adds itself or invites a friend" ON public.lobby_members
-  FOR INSERT WITH CHECK (
+  FOR INSERT TO authenticated WITH CHECK (
     private.is_lobby_host(lobby_id, auth.uid())
     AND (
       user_id = auth.uid()
@@ -102,10 +103,10 @@ CREATE POLICY "Host adds itself or invites a friend" ON public.lobby_members
   );
 
 CREATE POLICY "Members update their own row" ON public.lobby_members
-  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+  FOR UPDATE TO authenticated USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Members leave, host removes members" ON public.lobby_members
-  FOR DELETE USING (user_id = auth.uid() OR private.is_lobby_host(lobby_id, auth.uid()));
+  FOR DELETE TO authenticated USING (user_id = auth.uid() OR private.is_lobby_host(lobby_id, auth.uid()));
 
 -- Un membre ne peut modifier QUE is_ready (pas déplacer sa ligne vers un
 -- autre lobby en changeant lobby_id).
