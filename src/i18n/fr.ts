@@ -761,6 +761,10 @@ const fr = {
     sizeMb: "{size} Mo",
     hint: "Les captures apparaissent pour les save states créés à partir de maintenant. « Reprendre » ne fonctionne que pour les jeux lancés via RetroArch.",
   },
+  webPanel: {
+    copyLink: "Copier le lien",
+    manageAccount: "Gérer mon compte sur le web",
+  },
 };
 
 export type Translations = typeof fr;

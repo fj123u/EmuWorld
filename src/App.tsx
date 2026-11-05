@@ -19,6 +19,7 @@ import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
 import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
+import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -2043,7 +2044,7 @@ export default function App() {
           email: loginEmail,
           password: loginPassword,
           options: {
-            emailRedirectTo: "https://emuworld.alwaysdata.net/auth-callback.html",
+            emailRedirectTo: authCallbackUrl(),
           },
         });
         if (error) throw error;
@@ -9824,24 +9825,23 @@ export default function App() {
                       <button
                         className="btn btn--ghost btn--sm public-profile-toggle__view"
                         onClick={async () => {
-                          const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
+                          const url = profileUrl(profile.username!);
                           await openUrl(url).catch(() => window.open(url, "_blank"));
                         }}
                       >
-                        <ExternalLink size={12} /> Voir le profil
+                        <ExternalLink size={12} /> {t("friends.viewProfile")}
                       </button>
                       <button
                         className="btn btn--ghost btn--sm"
                         onClick={async () => {
-                          const url = `https://emuworld.alwaysdata.net/#/u/${encodeURIComponent(profile.username!)}`;
-                          await navigator.clipboard.writeText(url);
+                          await navigator.clipboard.writeText(profileUrl(profile.username!));
                           showToast(tl("toast.linkCopied"), "success");
                         }}
                       >
-                        <Copy size={12} /> Copier le lien
+                        <Copy size={12} /> {t("webPanel.copyLink")}
                       </button>
                       <span style={{ fontSize: 11, opacity: 0.4, fontFamily: "monospace" }}>
-                        emuworld.alwaysdata.net/#/u/{profile.username}
+                        {profileUrlLabel(profile.username)}
                       </span>
                     </div>
                   )}
@@ -9881,12 +9881,11 @@ export default function App() {
                   onClick={async () => {
                     const { data: { session } } = await supabase.auth.getSession();
                     if (!session) return;
-                    const url = `https://emuworld.alwaysdata.net/?u=${user?.id || ""}`;
-                    await openUrl(url);
+                    await openUrl(accountUrl());
                   }}
                 >
                   <ExternalLink size={14} />
-                  Manage account on Web
+                  {t("webPanel.manageAccount")}
                 </button>
                 <button
                   className="account-modal__delete-btn btn gamepad-nav-item"

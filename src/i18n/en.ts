@@ -763,6 +763,10 @@ const en: Translations = {
     sizeMb: "{size} MB",
     hint: "Thumbnails appear for save states made from now on. \"Resume\" only works for games launched through RetroArch.",
   },
+  webPanel: {
+    copyLink: "Copy link",
+    manageAccount: "Manage my account on the web",
+  },
 };
 
 export default en;

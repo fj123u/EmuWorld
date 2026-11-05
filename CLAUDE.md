@@ -61,7 +61,7 @@ EmuWorld/
 │   │   └── main.rs               # Entry point Rust (juste le bootstrap Tauri)
 │   ├── Cargo.toml                # Dépendances Rust (reqwest, scraper, image, webp, gilrs, zip, etc.)
 │   └── tauri.conf.json           # Config fenêtre, plugins activés, updater endpoint, bundle NSIS
-├── web-panel/                    # Pages web statiques hébergées sur alwaysdata
+├── web-panel/                    # Pages web statiques sur GitHub Pages (fj123u.github.io/EmuWorld, workflow pages.yml)
 │   ├── index.html                # Profil public (stats, achievements, bibliothèque)
 │   └── auth-callback.html        # Callback OAuth Google/Discord → ferme l'onglet
 ├── .github/workflows/
@@ -100,6 +100,8 @@ EmuWorld/
 **Plugins Tauri**: dialog, fs, shell, deep-link (emuworld:// pour OAuth), single-instance, updater, process, opener, notification, global-shortcut.
 
 ## CI/CD
+
+`.github/workflows/pages.yml` publie `web-panel/` sur GitHub Pages à chaque push qui le modifie ; les liens de l'app passent par `src/webPanel.ts`.
 
 GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les tags `v*`. Build l'installeur Windows NSIS, signe avec `TAURI_SIGNING_PRIVATE_KEY`, upload sur GitHub Release avec `latest.json` pour l'auto-updater in-app.
 

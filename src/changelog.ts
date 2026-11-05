@@ -22,6 +22,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🎮 Multijoueur aussi pour PPSSPP (ad hoc), Dolphin (code NetPlay partagé et pré-rempli chez l'ami) et Azahar (étapes guidées), depuis le lobby",
     "🔒 Lobbys privés : visibles seulement par l'hôte et ses invités, et on ne peut inviter que ses amis",
     "🌐 Lobby : pseudos des joueurs, partie en cours visible, lobbys abandonnés masqués, retour à son lobby après redémarrage, jeu reconnu même dans une autre région",
+    "🌍 Profils publics de retour : le web panel est maintenant sur GitHub Pages (fj123u.github.io/EmuWorld)",
     "🔐 Fix connexion Google/Discord: retour direct dans l'app, sans passer par une page web (et message clair si la connexion est refusée)",
     "🐛 Fix téléchargements: plus de ROMs tronquées après un échec ou une annulation",
     "🐛 Fix temps de jeu: une fermeture brutale ne compte plus des heures en trop",

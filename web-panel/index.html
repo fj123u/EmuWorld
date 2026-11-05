@@ -1132,7 +1132,7 @@
     }
 
     // ============================================================
-    // Routing — hash-based so alwaysdata static hosting works.
+    // Routing — hash-based so static hosting (GitHub Pages) works.
     //   #/              → home (my profile if connected, else leaderboard)
     //   #/u/<username>  → public profile page
     //   #/leaderboard   → top players
@@ -1395,7 +1395,7 @@
               ${streak > 0 ? ` · 🔥 ${streak} day streak` : ''}
               · ${achCount}/${achTotal} achievements
             </div>
-            <div class="profile-hero__url">Share: <code>emuworld.alwaysdata.net/#/u/${esc(profile.username)}</code></div>
+            <div class="profile-hero__url">Share: <code>${esc(location.host + location.pathname)}#/u/${esc(profile.username)}</code></div>
           </div>
         </header>
 
