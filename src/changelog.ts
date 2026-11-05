@@ -8,7 +8,7 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
-  { version: "2.6.0", date: "2026-11-05", changes: [
+  { version: "2.6.0", date: "2026-11-06", changes: [
     "🖼️ Covers: iiDB (iidb.iisu.network) devient la première source — beaucoup plus de jaquettes, repli automatique sur les autres sources",
     "🖼️ Covers carrées affichées en entier sur un fond flou au lieu d'être rognées",
     "🧠 Playlists intelligentes: joués cette semaine, à reprendre, à peine commencés, sessions courtes, gros temps de jeu",
