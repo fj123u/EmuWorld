@@ -100,7 +100,10 @@
   </div>
 
 <script>
-  function getTokens() {
+  // Read the tokens ONCE, then clear them from the address bar. Reading them
+  // again later (deep link, copy button) used to return an empty string
+  // because the URL had already been cleared, so the app got no code.
+  const TOKENS = (() => {
     const hash = window.location.hash;
     const search = window.location.search;
     let tokens = '';
@@ -110,10 +113,14 @@
       history.replaceState(null, '', window.location.pathname);
     }
     return tokens;
+  })();
+
+  function getTokens() {
+    return TOKENS;
   }
 
   function buildDeepLink() {
-    return 'emuworld://auth-callback' + getTokens();
+    return 'emuworld://auth-callback' + TOKENS;
   }
 
   function tryLocalhost(callback) {
@@ -124,8 +131,7 @@
 
   function jump() {
     // Handle email confirmation (signup/recovery) — not an OAuth flow
-    const params = new URLSearchParams(window.location.search);
-    const hash = window.location.hash;
+    const params = new URLSearchParams(TOKENS.replace(/^[?#]/, ''));
     const type = params.get('type');
     if (type === 'signup' || type === 'recovery' || type === 'email_change') {
       document.getElementById('status').innerHTML =

@@ -432,6 +432,32 @@ describe("CoverImage", () => {
   });
 });
 
+describe("Google / Discord sign-in return", () => {
+  it("shows why the provider refused and logs it", async () => {
+    const { backend } = await renderApp();
+    await act(async () => {
+      await emit("oauth-callback", "emuworld://auth-callback?error=access_denied&error_description=User+cancelled+login");
+    });
+    expect(screen.getByText("Erreur d'authentification : User cancelled login")).toBeTruthy();
+    expect(backend.calls.filter((c) => c.cmd === "log_event").map((c) => c.args)).toContainEqual({
+      level: "WARN",
+      message: "OAuth: connexion refusée: User cancelled login",
+    });
+  });
+
+  it("never accepts raw tokens from a link", async () => {
+    const { backend } = await renderApp();
+    await act(async () => {
+      await emit("oauth-callback", "emuworld://auth-callback#access_token=evil&refresh_token=evil");
+    });
+    expect(screen.queryByText(/Connecté/)).toBeNull();
+    expect(backend.calls.filter((c) => c.cmd === "log_event").map((c) => c.args)).toContainEqual({
+      level: "WARN",
+      message: "OAuth: retour sans code ni erreur, ignoré",
+    });
+  });
+});
+
 describe("toasts", () => {
   it("keeps two toasts fired in the same millisecond", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);

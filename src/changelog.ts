@@ -18,6 +18,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "💾 Gestionnaire de save states: aperçu, nom, duplication, corbeille et reprise directe depuis un slot",
     "🎁 Partage de save states avec tes amis, aperçu compris, ajoutés en un clic dans un nouveau slot",
     "🩺 Vérification des ROMs: fichiers vides, ZIP corrompus et doublons",
+    "🔐 Fix connexion Google/Discord: retour direct dans l'app, sans passer par une page web (et message clair si la connexion est refusée)",
     "🐛 Fix téléchargements: plus de ROMs tronquées après un échec ou une annulation",
     "🐛 Fix temps de jeu: une fermeture brutale ne compte plus des heures en trop",
     "🐛 Fix Wrap mensuel: calculé avec les vraies stats du mois",

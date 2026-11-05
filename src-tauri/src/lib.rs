@@ -6521,117 +6521,139 @@ fn oauth_port() -> &'static Mutex<u16> {
     OAUTH_PORT.get_or_init(|| Mutex::new(0))
 }
 
+/// Ports the OAuth loopback server tries, in order. Each one must be listed
+/// in Supabase → Authentication → URL Configuration → Redirect URLs as
+/// `http://127.0.0.1:<port>/callback`.
+const OAUTH_PORTS: [u16; 5] = [17643, 17644, 17645, 17646, 17647];
+/// How long the loopback server waits for the browser to come back.
+const OAUTH_WAIT_SECS: u64 = 300;
+
+#[derive(Debug, PartialEq)]
+enum OAuthCallback {
+    /// `?code=…` (PKCE): forwarded to the app as `emuworld://auth-callback?<query>`.
+    Code(String),
+    /// `?error=…`: the provider or Supabase refused; forwarded the same way so the UI can say why.
+    Error(String),
+    /// Anything else (favicon, stray request, implicit-flow tokens).
+    Ignored,
+}
+
+/// Reads the request line of the browser's redirect. Only the PKCE `code` (or
+/// an `error`) is accepted: a code is useless without the verifier kept by the
+/// app, so a page that calls this port cannot log the user into another
+/// account, unlike raw access tokens.
+fn parse_oauth_callback(request: &str) -> OAuthCallback {
+    let Some(path) = request.lines().next().and_then(|l| {
+        let mut parts = l.split_whitespace();
+        (parts.next() == Some("GET")).then(|| parts.next()).flatten()
+    }) else {
+        return OAuthCallback::Ignored;
+    };
+    let Some(query) = path.strip_prefix("/callback?") else { return OAuthCallback::Ignored };
+    let keys: Vec<&str> = query.split('&').filter_map(|kv| kv.split('=').next()).collect();
+    let clean = query.chars().all(|c| c.is_ascii_alphanumeric() || "-._~%+=&".contains(c));
+    if !clean || query.len() > 2048 {
+        OAuthCallback::Ignored
+    } else if keys.contains(&"code") {
+        OAuthCallback::Code(query.to_string())
+    } else if keys.contains(&"error") {
+        OAuthCallback::Error(query.to_string())
+    } else {
+        OAuthCallback::Ignored
+    }
+}
+
+fn oauth_page(ok: bool) -> String {
+    let (color, title, text) = if ok {
+        ("#4ade80", "✅ Connecté ! · Signed in!", "Tu peux fermer cet onglet et revenir sur EmuWorld. · You can close this tab.")
+    } else {
+        ("#f87171", "❌ Connexion refusée · Sign-in failed", "Retourne sur EmuWorld pour voir le détail. · Go back to EmuWorld for details.")
+    };
+    let body = format!(
+        "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>EmuWorld</title><style>body{{background:#1e1f22;display:grid;place-items:center;min-height:100vh;margin:0;font-family:-apple-system,Segoe UI,sans-serif}}.card{{background:#2b2d31;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:40px;text-align:center;max-width:420px}}h2{{color:{};margin:0 0 8px}}p{{color:#9a9ca0;font-size:14px;margin:0}}</style></head><body><div class=\"card\"><h2>{}</h2><p>{}</p></div><script>setTimeout(()=>window.close(),1500)</script></body></html>",
+        color, title, text
+    );
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    )
+}
+
+/// Starts (or reuses) the loopback server that receives the OAuth redirect
+/// and returns its port; the UI builds `http://127.0.0.1:<port>/callback`.
 #[tauri::command]
 async fn start_oauth_server(app_handle: tauri::AppHandle) -> Result<u16, String> {
     use std::net::TcpListener;
     use tauri::Emitter;
 
-    // Try to bind to a known fixed port first (so the callback page can reach us reliably)
-    // Fall back to nearby ports if occupied
-    let fixed_ports = [17643, 17644, 17645, 17646, 17647];
-    let listener = fixed_ports.iter()
-        .find_map(|p| TcpListener::bind(format!("127.0.0.1:{}", p)).ok())
-        .or_else(|| TcpListener::bind("127.0.0.1:0").ok())
-        .ok_or_else(|| "Failed to bind OAuth server".to_string())?;
-    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
-    *oauth_port().lock().unwrap() = port;
-    push_log("INFO", &format!("OAuth HTTP server started on port {}", port));
+    // A previous sign-in attempt is still waiting: reuse it instead of
+    // burning the next allowed port.
+    {
+        let running = *oauth_port().lock().unwrap();
+        if running != 0 {
+            push_log("INFO", &format!("OAuth: serveur local déjà à l'écoute sur le port {}", running));
+            return Ok(running);
+        }
+    }
 
-    // Spawn a thread that accepts one connection, reads the request, extracts tokens, emits event
+    let listener = OAUTH_PORTS
+        .iter()
+        .find_map(|p| TcpListener::bind(("127.0.0.1", *p)).ok())
+        .ok_or_else(|| {
+            push_log("ERROR", "OAuth: aucun port local libre (17643-17647)");
+            "Aucun port local libre pour la connexion (17643-17647)".to_string()
+        })?;
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    *oauth_port().lock().unwrap() = port;
+    push_log("INFO", &format!("OAuth: serveur local à l'écoute sur 127.0.0.1:{}", port));
+
     let handle = app_handle.clone();
     std::thread::spawn(move || {
-        // Accept connections for up to 120s
-        listener.set_nonblocking(false).ok();
-        let _ = listener.set_ttl(120);
-
-        loop {
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    use std::io::{Read, Write as IoWrite};
-                    let mut buf = [0u8; 4096];
-                    let n = stream.read(&mut buf).unwrap_or(0);
-                    let request = String::from_utf8_lossy(&buf[..n]).to_string();
-
-                    // Parse the GET request path
-                    if let Some(path_line) = request.lines().next() {
-                        let path = path_line.split_whitespace().nth(1).unwrap_or("/");
-
-                        if path.starts_with("/callback") {
-                            // Check if tokens are already in query string (PKCE flow)
-                            let query_in_path = if let Some(q) = path.find('?') {
-                                Some(path[q+1..].to_string())
-                            } else {
-                                None
-                            };
-
-                            if let Some(query) = query_in_path {
-                                // Tokens came in query string — emit directly
-                                let callback_url = format!("emuworld://auth-callback?{}", query);
-                                let _ = handle.emit("oauth-callback", callback_url);
-                                push_log("INFO", "OAuth tokens received via query string");
-                                let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title>
-<style>body{background:#1a1a2e;display:grid;place-items:center;min-height:100vh;margin:0;font-family:-apple-system,sans-serif}
-.card{background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:16px;padding:40px;text-align:center;max-width:380px}
-h2{color:#4ade80;margin:0 0 8px}p{color:#94a3b8;font-size:14px;margin:0}</style></head>
-<body><div class="card"><h2>✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p></div>
-<script>setTimeout(()=>window.close(),1500)</script></body></html>"#;
-                                let response = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                                    html.len(), html
-                                );
-                                let _ = stream.write_all(response.as_bytes());
-                                let _ = stream.flush();
-                                break; // Done
-                            }
-
-                            // No query — tokens may be in hash fragment (implicit flow)
-                            let html = r#"<!DOCTYPE html><html><head><meta charset="utf-8"><title>EmuWorld</title>
-<style>body{background:#1a1a2e;display:grid;place-items:center;min-height:100vh;margin:0;font-family:-apple-system,sans-serif}
-.card{background:#16213e;border:1px solid rgba(99,102,241,0.3);border-radius:16px;padding:40px;text-align:center;max-width:380px}
-h2{color:#4ade80;margin:0 0 8px}p{color:#94a3b8;font-size:14px;margin:0}
-.waiting h2{color:#a78bfa}.waiting p{color:#64748b}</style></head>
-<body><div class="card waiting" id="card"><h2>⏳ Connexion en cours...</h2><p>Transfert vers EmuWorld...</p></div>
-<script>
-const hash = window.location.hash.substring(1);
-const search = window.location.search.substring(1);
-const params = hash || search;
-if (params) {
-    fetch('/token?' + params).then(() => {
-        document.getElementById('card').innerHTML = '<h2 style="color:#4ade80">✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p>';
-        document.getElementById('card').className = 'card';
-        setTimeout(() => window.close(), 1500);
-    });
-} else {
-    document.getElementById('card').innerHTML = '<h2 style="color:#4ade80">✅ Connecté !</h2><p>Tu peux fermer cet onglet.</p>';
-    document.getElementById('card').className = 'card';
-}
-</script></body></html>"#;
-                            let response = format!(
-                                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
-                                html.len(), html
-                            );
-                            let _ = stream.write_all(response.as_bytes());
-                            let _ = stream.flush();
-                        } else if path.starts_with("/token?") {
-                            // Extract tokens from query string
-                            let query = &path[7..]; // skip "/token?"
-                            let callback_url = format!("emuworld://auth-callback#{}", query);
-                            let _ = handle.emit("oauth-callback", callback_url);
-                            push_log("INFO", "OAuth tokens received via HTTP server");
-
-                            let response = "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nAccess-Control-Allow-Origin: *\r\n\r\nOK";
-                            let _ = stream.write_all(response.as_bytes());
-                            let _ = stream.flush();
-                            break; // Done, stop server
-                        } else {
-                            let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n";
-                            let _ = stream.write_all(response.as_bytes());
-                        }
-                    }
+        use std::io::{Read, Write};
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(OAUTH_WAIT_SECS);
+        let mut outcome = "délai dépassé";
+        while std::time::Instant::now() < deadline {
+            let (mut stream, _) = match listener.accept() {
+                Ok(conn) => conn,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    continue;
                 }
-                Err(_) => break,
+                Err(e) => {
+                    push_log("ERROR", &format!("OAuth: erreur du serveur local: {}", e));
+                    outcome = "erreur";
+                    break;
+                }
+            };
+            let _ = stream.set_nonblocking(false);
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(5)));
+            let mut buf = [0u8; 4096];
+            let n = stream.read(&mut buf).unwrap_or(0);
+            let request = String::from_utf8_lossy(&buf[..n]).to_string();
+            match parse_oauth_callback(&request) {
+                OAuthCallback::Code(query) => {
+                    let _ = stream.write_all(oauth_page(true).as_bytes());
+                    let _ = handle.emit("oauth-callback", format!("emuworld://auth-callback?{}", query));
+                    push_log("INFO", "OAuth: code de connexion reçu par le serveur local");
+                    outcome = "code reçu";
+                    break;
+                }
+                OAuthCallback::Error(query) => {
+                    let _ = stream.write_all(oauth_page(false).as_bytes());
+                    let _ = handle.emit("oauth-callback", format!("emuworld://auth-callback?{}", query));
+                    push_log("WARN", &format!("OAuth: connexion refusée par le fournisseur ({})", query.chars().take(200).collect::<String>()));
+                    outcome = "refus";
+                    break;
+                }
+                OAuthCallback::Ignored => {
+                    let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                }
             }
         }
+        *oauth_port().lock().unwrap() = 0;
+        push_log("INFO", &format!("OAuth: serveur local du port {} arrêté ({})", port, outcome));
     });
 
     Ok(port)
@@ -6739,6 +6761,7 @@ pub fn run() {
                 let handle = app.handle().clone();
                 app.deep_link().on_open_url(move |event| {
                     if let Some(url) = event.urls().first() {
+                        push_log("INFO", "OAuth: lien emuworld:// reçu");
                         let _ = handle.emit("oauth-callback", url.to_string());
                     }
                 });
@@ -6918,6 +6941,26 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn oauth_loopback_only_accepts_a_pkce_code_or_an_error() {
+        use super::{parse_oauth_callback, OAuthCallback};
+        assert_eq!(
+            parse_oauth_callback("GET /callback?code=3f2a-91bc HTTP/1.1\r\nHost: 127.0.0.1:17643\r\n\r\n"),
+            OAuthCallback::Code("code=3f2a-91bc".into())
+        );
+        assert_eq!(
+            parse_oauth_callback("GET /callback?error=access_denied&error_description=User+cancelled HTTP/1.1\r\n"),
+            OAuthCallback::Error("error=access_denied&error_description=User+cancelled".into())
+        );
+        // Raw tokens (implicit flow) would let any page log the app into another account.
+        assert_eq!(parse_oauth_callback("GET /callback?access_token=x&refresh_token=y HTTP/1.1\r\n"), OAuthCallback::Ignored);
+        assert_eq!(parse_oauth_callback("GET /token?access_token=x HTTP/1.1\r\n"), OAuthCallback::Ignored);
+        assert_eq!(parse_oauth_callback("GET /favicon.ico HTTP/1.1\r\n"), OAuthCallback::Ignored);
+        assert_eq!(parse_oauth_callback("POST /callback?code=1 HTTP/1.1\r\n"), OAuthCallback::Ignored);
+        assert_eq!(parse_oauth_callback("GET /callback?code=<script> HTTP/1.1\r\n"), OAuthCallback::Ignored);
+        assert_eq!(parse_oauth_callback(""), OAuthCallback::Ignored);
+    }
+
     #[test]
     fn ui_log_lines_cannot_forge_entries() {
         let (level, msg) = super::sanitize_ui_log("ERROR", "upload failed");

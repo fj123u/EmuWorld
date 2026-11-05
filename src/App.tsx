@@ -15,6 +15,7 @@ import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SaveStatesModal } from "./SaveStatesModal";
+import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -1859,50 +1860,42 @@ export default function App() {
     });
   }, []);
 
-  // Listen for deep-link OAuth callbacks
+  // OAuth return (loopback server or emuworld:// deep link)
   useEffect(() => {
+    const log = (level: "INFO" | "WARN" | "ERROR", message: string) =>
+      invoke("log_event", { level, message: `OAuth: ${message}` }).catch(() => {});
     const unlistenPromise = listen<string>('oauth-callback', async (event) => {
-      console.log('[Auth] OAuth callback received');
+      const callback = parseAuthCallback(event.payload);
+      if (!callback) {
+        log("WARN", "retour sans code ni erreur, ignoré");
+        return;
+      }
+      if (callback.kind === "error") {
+        log("WARN", `connexion refusée: ${callback.message}`);
+        showToast(tl('toast.authError', { error: callback.message }), 'error');
+        setAuthError(callback.message);
+        setAuthLoading(false);
+        return;
+      }
       try {
-        const urlStr = event.payload;
-        // Robust parsing of parameters from both query string (?) and hash fragment (#)
-        // We replace "emuworld://" with "http://localhost/" so the URL constructor can parse it on all systems
-        const urlObj = new URL(urlStr.replace('emuworld://', 'http://localhost/'));
-        const params = new URLSearchParams(urlObj.search || urlObj.hash.substring(1));
-        
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        const code = params.get('code');
-        
-        if (accessToken && refreshToken) {
-          console.log('[Auth] Detected Implicit Flow (tokens)');
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken
-          });
-          if (error) throw error;
-          showToast(tl('toast.connected'), 'success');
-          setShowLoginModal(false);
-        } else if (code) {
-          console.log('[Auth] Detected PKCE Flow (code)');
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) throw error;
-          showToast(tl('toast.connected'), 'success');
-          setShowLoginModal(false);
-        } else {
-          console.warn('[Auth] No session data found in callback URL');
-        }
+        const { error } = await supabase.auth.exchangeCodeForSession(callback.code);
+        if (error) throw error;
+        log("INFO", "session ouverte");
+        showToast(tl('toast.connected'), 'success');
+        setShowLoginModal(false);
+        setAuthLoading(false);
       } catch (e: any) {
-        console.error('[Auth] Callback error:', e);
-        showToast(tl('toast.authError', { error: e.message }), 'error');
-        setAuthError(e.message);
+        log("ERROR", `échange du code impossible: ${e?.message ?? e}`);
+        showToast(tl('toast.authError', { error: e?.message ?? String(e) }), 'error');
+        setAuthError(e?.message ?? String(e));
+        setAuthLoading(false);
       }
     });
 
     return () => {
       unlistenPromise.then(fn => fn());
     };
-  }, [showToast]);
+  }, [showToast, tl]);
 
   // Update profile
   const handleUpdateProfile = async () => {
@@ -1977,14 +1970,15 @@ export default function App() {
     }
   };
 
-  // Social login — uses alwaysdata bounce page + deep-link or local HTTP fallback
+  // Social login: the browser comes back to the app's loopback server
+  // (http://127.0.0.1:<port>/callback) with a PKCE code — no web page involved.
   const handleSocialLogin = async (provider: Provider) => {
     setAuthLoading(true);
     setAuthError(null);
     try {
-      // Start local HTTP server as fallback receiver
-      await invoke<number>("start_oauth_server");
-      const redirectUrl = "https://emuworld.alwaysdata.net/auth-callback.html";
+      const port = await invoke<number>("start_oauth_server");
+      const redirectUrl = oauthRedirectUrl(port);
+      invoke("log_event", { level: "INFO", message: `OAuth: connexion ${provider} via ${redirectUrl}` }).catch(() => {});
 
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider,
