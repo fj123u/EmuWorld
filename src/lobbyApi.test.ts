@@ -50,17 +50,24 @@ describe("lobby access rules (scratch/supabase_lobbies_rls_v2.sql)", () => {
   it("lets only the host add members, and only friends as guests", () => {
     const insert = policy("Host adds itself or invites a friend");
     expect(insert).toContain("FOR INSERT");
-    expect(insert).toContain("public.is_lobby_host(lobby_id, auth.uid())");
-    expect(insert).toContain("public.are_friends(auth.uid(), user_id)");
+    expect(insert).toContain("private.is_lobby_host(lobby_id, auth.uid())");
+    expect(insert).toContain("private.are_friends(auth.uid(), user_id)");
   });
 
   it("hides lobbies from people who are not in them", () => {
-    expect(policy("Host and members view the lobby")).toContain("host_id = auth.uid() OR public.is_lobby_member(id, auth.uid())");
+    expect(policy("Host and members view the lobby")).toContain("host_id = auth.uid() OR private.is_lobby_member(id, auth.uid())");
   });
 
   it("lets members change nothing but their ready flag", () => {
     expect(sql).toContain("REVOKE UPDATE ON public.lobby_members FROM authenticated, anon;");
     expect(sql).toContain("GRANT UPDATE (is_ready) ON public.lobby_members TO authenticated;");
+  });
+
+  it("keeps its helper functions out of the public API", () => {
+    // In "public", Supabase lets anyone call them through /rest/v1/rpc.
+    expect(sql).not.toMatch(/CREATE OR REPLACE FUNCTION public\./);
+    expect(sql).toContain("REVOKE ALL ON ALL FUNCTIONS IN SCHEMA private FROM PUBLIC, anon;");
+    expect(sql).toContain("DROP FUNCTION IF EXISTS public.are_friends(uuid, uuid);");
   });
 
   it("drops every older policy and keeps the host from changing hands", () => {
