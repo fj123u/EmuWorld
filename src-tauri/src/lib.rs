@@ -1860,6 +1860,32 @@ fn save_cover_as_webp(png_bytes: &[u8], dest_dir: &PathBuf, safe_name: &str) -> 
     Some(format!("data:image/webp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&*webp_data)))
 }
 
+/// Cover lookups that may hit the network at the same time. Every card of
+/// the library asks for its cover when it appears: after "Clear cover cache"
+/// that was ~700 lookups at once, and iiDB answered 429 while connections to
+/// every source failed ("error sending request"), so many well-known games
+/// ended up without a cover. Cached covers never wait for a slot.
+const COVER_FETCH_CONCURRENCY: usize = 6;
+
+fn cover_fetch_slots() -> &'static tokio::sync::Semaphore {
+    static SLOTS: OnceLock<tokio::sync::Semaphore> = OnceLock::new();
+    SLOTS.get_or_init(|| tokio::sync::Semaphore::new(COVER_FETCH_CONCURRENCY))
+}
+
+/// One HTTP client (one connection pool) for all cover lookups, instead of a
+/// new client, pool and TLS handshake per game.
+fn cover_http_client() -> &'static reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            .pool_max_idle_per_host(COVER_FETCH_CONCURRENCY)
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new())
+    })
+}
+
 #[tauri::command]
 async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
     let force_refresh = force_refresh.unwrap_or(false);
@@ -2030,11 +2056,9 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     }
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    // Network part: at most COVER_FETCH_CONCURRENCY games at a time.
+    let _slot = cover_fetch_slots().acquire().await.map_err(|e| e.to_string())?;
+    let client = cover_http_client().clone();
 
     // min_size already computed above
 
@@ -6851,6 +6875,34 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cover_lookups_never_run_more_than_the_limit_at_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+        let rt = tokio::runtime::Builder::new_multi_thread().worker_threads(4).enable_all().build().unwrap();
+        let running = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        rt.block_on(async {
+            let tasks: Vec<_> = (0..60)
+                .map(|_| {
+                    let (running, peak) = (running.clone(), peak.clone());
+                    tokio::spawn(async move {
+                        let _slot = super::cover_fetch_slots().acquire().await.unwrap();
+                        let now = running.fetch_add(1, Ordering::SeqCst) + 1;
+                        peak.fetch_max(now, Ordering::SeqCst);
+                        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                        running.fetch_sub(1, Ordering::SeqCst);
+                    })
+                })
+                .collect();
+            for t in tasks {
+                t.await.unwrap();
+            }
+        });
+        assert!(peak.load(Ordering::SeqCst) <= super::COVER_FETCH_CONCURRENCY);
+        assert!(peak.load(Ordering::SeqCst) > 1, "lookups still run in parallel");
+    }
+
     #[test]
     fn oauth_loopback_only_accepts_a_pkce_code_or_an_error() {
         use super::{parse_oauth_callback, OAuthCallback};

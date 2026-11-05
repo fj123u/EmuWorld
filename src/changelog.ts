@@ -13,6 +13,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
     "⏱️ Résumé du record à copier pour le partager",
   ] },
+  { version: "2.6.1", date: "2026-11-06", changes: [
+    "🐛 Fix covers manquantes après « Vider le cache » : les covers sont maintenant récupérées 6 par 6 au lieu de toutes en même temps (iiDB et les autres sources refusaient la rafale)",
+  ] },
   { version: "2.6.0", date: "2026-11-06", changes: [
     "🖼️ Covers: iiDB (iidb.iisu.network) devient la première source — beaucoup plus de jaquettes, repli automatique sur les autres sources",
     "🖼️ Covers carrées affichées en entier sur un fond flou au lieu d'être rognées",
