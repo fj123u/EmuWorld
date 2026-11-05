@@ -103,8 +103,10 @@ const en: Translations = {
     rewind: "Rewind",
     rewindDesc: "Hold R while playing to go back a few seconds. Applied the next time a game launches through RetroArch. Can slow down 3D consoles (PS1, N64).",
     rewindUnchanged: "Let RetroArch decide",
-    rewindOn: "On",
-    rewindOff: "Off",
+    on: "On",
+    off: "Off",
+    achievementAnimation: "Achievement animation",
+    achievementAnimationDesc: "Full-screen animation with confetti when you unlock an achievement. Otherwise, a simple notification.",
   },
 
   // Game card
@@ -687,6 +689,12 @@ const en: Translations = {
   // Guides extra
   guidesExtra: {
     noInSection: "No guides in this section.",
+  },
+  celebration: {
+    title: "Achievement unlocked!",
+    secret: "Secret achievement unlocked!",
+    next: "Next",
+    continue: "Continue",
   },
 };
 

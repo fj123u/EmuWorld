@@ -12,6 +12,7 @@ import { check as checkForUpdate } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
+import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
   Search,
@@ -1964,6 +1965,17 @@ export default function App() {
     []
   );
 
+  // Full-screen achievement celebrations, shown one at a time.
+  const [celebrations, setCelebrations] = useState<CelebratedAchievement[]>([]);
+  const [achievementAnimation, setAchievementAnimationState] = useState(achievementAnimationEnabled);
+  const achievementAnimationRef = useRef(achievementAnimation);
+  achievementAnimationRef.current = achievementAnimation;
+  const setAchievementAnimation = useCallback((on: boolean) => {
+    setAchievementAnimationState(on);
+    try { localStorage.setItem(ACHIEVEMENT_ANIMATION_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
+  }, []);
+  const dismissCelebration = useCallback(() => setCelebrations((q) => q.slice(1)), []);
+
   // Stable translator for event handlers, callbacks and listeners: it reads the
   // current locale through a ref, so it never has to be a dependency and a
   // language change never re-runs effects that call the backend. Render code
@@ -3110,7 +3122,8 @@ export default function App() {
     try {
       const result = await invoke<AchievementItem | null>("unlock_achievement", { id });
       if (result) {
-        showToast(tl("toast.secretAchievementUnlocked", { icon: result.icon, name: result.name }), "success");
+        if (achievementAnimationRef.current) setCelebrations((q) => [...q, result]);
+        else showToast(tl("toast.secretAchievementUnlocked", { icon: result.icon, name: result.name }), "success");
         await loadAchievements();
         syncAchievementToCloud(result);
       }
@@ -3130,8 +3143,9 @@ export default function App() {
         hasDownloaded,
       });
       if (newlyUnlocked.length > 0) {
+        if (achievementAnimationRef.current) setCelebrations((q) => [...q, ...newlyUnlocked]);
         for (const a of newlyUnlocked) {
-          showToast(tl("toast.achievementUnlocked", { icon: a.icon, name: a.name }), "success");
+          if (!achievementAnimationRef.current) showToast(tl("toast.achievementUnlocked", { icon: a.icon, name: a.name }), "success");
           postActivity("achievement_unlocked", undefined, undefined, `${a.icon} ${a.name}`);
           syncAchievementToCloud(a);
         }
@@ -7095,6 +7109,23 @@ export default function App() {
                         <button className="btn btn--ghost btn--sm" onClick={() => setAccentHue(null)}>{t("settings.reset")}</button>
                       )}
                     </div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">{t("settings.achievementAnimation")}</label>
+                        <p className="settings__field-desc">{t("settings.achievementAnimationDesc")}</p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {[true, false].map(on => (
+                          <button
+                            key={String(on)}
+                            className={`btn btn--sm gamepad-nav-item ${achievementAnimation === on ? "btn--primary" : "btn--ghost"}`}
+                            onClick={() => setAchievementAnimation(on)}
+                          >
+                            {t(on ? "settings.on" : "settings.off")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
 
                   <div className="settings__group">
@@ -7154,7 +7185,7 @@ export default function App() {
                               await invoke("save_config", { config: newCfg });
                             }}
                           >
-                            {t(val === null ? "settings.rewindUnchanged" : val ? "settings.rewindOn" : "settings.rewindOff")}
+                            {t(val === null ? "settings.rewindUnchanged" : val ? "settings.on" : "settings.off")}
                           </button>
                         ))}
                       </div>
@@ -9723,6 +9754,7 @@ export default function App() {
       </AnimatePresence>
 
 
+      <AchievementCelebration queue={celebrations} onDone={dismissCelebration} t={t} />
       <div className="toasts">
         <AnimatePresence>
           {toasts.map((t) => (

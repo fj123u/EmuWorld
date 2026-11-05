@@ -136,7 +136,7 @@
 - [ ] **Widgets bureau** *(moyen)* — mini-widgets Windows : dernière session, jeu en cours, achievement récent, streak
 - [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage sur Discord/amis, comparaison avant/après, slideshow
 - [ ] **Profil personnalisable** *(quick win)* — bannière custom, bio, jeu favori épinglé, badges mis en avant sur le profil public
-- [ ] **Animations de déblocage** *(quick win)* — animation plein écran quand un achievement est débloqué (confettis, effet gold)
+- [x] **Animations de déblocage** *(quick win)* — animation plein écran quand un achievement est débloqué (confettis, effet gold)
 
 ### 🌐 Social & Communauté
 

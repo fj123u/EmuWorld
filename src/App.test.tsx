@@ -7,6 +7,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
 import App, { CoverImage } from "./App";
+import { AchievementCelebration, CELEBRATION_MS } from "./AchievementCelebration";
 import { mockBackend, type Handler } from "./test/tauriMock";
 
 class Boundary extends Component<{ onError: (e: Error) => void; children: ReactNode }, { failed: boolean }> {
@@ -251,6 +252,59 @@ describe("RetroArch rewind setting", () => {
       fireEvent.click(button("Laisser RetroArch décider"));
     });
     expect(saved()).toMatchObject({ retroarch_rewind: null });
+  });
+});
+
+describe("achievement celebration", () => {
+  const unlocked = [
+    { id: "first_launch", name: "Premier pas", description: "Lancer un premier jeu", icon: "🎮", unlocked: true, unlocked_at: "2026-11-05T10:00:00Z", hidden: false },
+    { id: "night_owl", name: "Oiseau de nuit", description: "Jouer après minuit", icon: "🦉", unlocked: true, unlocked_at: "2026-11-05T10:00:00Z", hidden: true },
+  ];
+  /** check_achievements reports the unlocks once, like the real backend. */
+  const unlockOnce = () => {
+    let sent = false;
+    return () => (sent ? [] : ((sent = true), unlocked));
+  };
+
+  it("celebrates each new achievement in turn instead of a toast", async () => {
+    await renderApp({ check_achievements: unlockOnce() });
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).toContain("Premier pas");
+    expect(screen.queryByText(/Succès débloqué : Premier pas/)).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Suivant" }));
+    });
+    expect(screen.getByRole("alertdialog").textContent).toContain("Oiseau de nuit");
+    expect(screen.getByText("Succès secret débloqué !")).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("falls back to toasts when the animation is turned off", async () => {
+    localStorage.setItem("emuworld_achievement_animation", "off");
+    await renderApp({ check_achievements: unlockOnce() });
+    expect(await screen.findByText(/Premier pas/)).toBeTruthy();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    localStorage.removeItem("emuworld_achievement_animation");
+  });
+
+  it("waits for the player to come back before counting down", () => {
+    vi.useFakeTimers();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+    const onDone = vi.fn();
+    render(<AchievementCelebration queue={unlocked.slice(0, 1)} onDone={onDone} t={(k) => k} />);
+    act(() => { vi.advanceTimersByTime(CELEBRATION_MS * 3); });
+    expect(onDone).not.toHaveBeenCalled();
+
+    hidden.mockReturnValue(false);
+    act(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    act(() => { vi.advanceTimersByTime(CELEBRATION_MS); });
+    expect(onDone).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });
 

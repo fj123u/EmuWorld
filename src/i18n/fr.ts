@@ -101,8 +101,10 @@ const fr = {
     rewind: "Rembobinage (rewind)",
     rewindDesc: "Maintiens R pendant le jeu pour revenir quelques secondes en arrière. Appliqué au prochain lancement d'un jeu via RetroArch. Peut ralentir les consoles 3D (PS1, N64).",
     rewindUnchanged: "Laisser RetroArch décider",
-    rewindOn: "Activé",
-    rewindOff: "Désactivé",
+    on: "Activé",
+    off: "Désactivé",
+    achievementAnimation: "Animation des succès",
+    achievementAnimationDesc: "Animation plein écran avec confettis quand tu débloques un succès. Sinon, une simple notification.",
   },
 
   // Game card
@@ -685,6 +687,12 @@ const fr = {
   // Guides extra
   guidesExtra: {
     noInSection: "Aucun guide dans cette section.",
+  },
+  celebration: {
+    title: "Succès débloqué !",
+    secret: "Succès secret débloqué !",
+    next: "Suivant",
+    continue: "Continuer",
   },
 };
 
