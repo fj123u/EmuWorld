@@ -233,6 +233,27 @@ describe("smart playlists", () => {
   });
 });
 
+describe("RetroArch rewind setting", () => {
+  it("saves the choice in the config, and can hand control back to RetroArch", async () => {
+    const { container, backend } = await renderApp();
+    fireEvent.click(sidebarButtons(container).find((b) => b.textContent?.trim() === "Réglages")!);
+    const field = (await screen.findByText("Rembobinage (rewind)")).closest(".settings__field") as HTMLElement;
+    const button = (name: string) => [...field.querySelectorAll("button")].find((b) => b.textContent === name)!;
+
+    await act(async () => {
+      fireEvent.click(button("Activé"));
+    });
+    const saved = () => backend.calls.filter((c) => c.cmd === "save_config").pop()?.args?.config;
+    expect(saved()).toMatchObject({ roms_directory: "D:\\Roms", retroarch_rewind: true });
+    expect(button("Activé").className).toContain("btn--primary");
+
+    await act(async () => {
+      fireEvent.click(button("Laisser RetroArch décider"));
+    });
+    expect(saved()).toMatchObject({ retroarch_rewind: null });
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });

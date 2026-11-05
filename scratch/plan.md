@@ -114,7 +114,7 @@
 - [ ] **Save states manager** *(moyen)* — gérer les save states RetroArch depuis l'app : prévisualisation screenshot, renommer, dupliquer, partager avec des amis
 - [ ] **Cheats database** *(moyen)* — base de données de codes triches (Action Replay, GameShark) intégrée, activables en un clic avant de lancer le jeu
 - [ ] **Input display / macros** *(moyen)* — afficher les inputs en overlay (pour les streams), enregistrer et rejouer des macros pour les combos
-- [ ] **Rewind intégré** *(quick win)* — activer automatiquement le rewind dans RetroArch au lancement (configurer retroarch.cfg)
+- [x] **Rewind intégré** *(quick win)* — activer automatiquement le rewind dans RetroArch au lancement (configurer retroarch.cfg)
 
 ### 📱 Multi-plateforme & Cloud
 

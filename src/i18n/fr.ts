@@ -97,6 +97,12 @@ const fr = {
     raLoadPrompt: "Cliquez \"Charger\" pour voir vos jeux 100%.",
     raEmuDesc: "Active les achievements dans RetroArch, DuckStation, PCSX2, Dolphin et PPSSPP. Les jeux NES/SNES/GB/GBA/N64/DS seront lancés via RetroArch avec RA activé.",
     profile: "Profil",
+    retroarch: "RetroArch",
+    rewind: "Rembobinage (rewind)",
+    rewindDesc: "Maintiens R pendant le jeu pour revenir quelques secondes en arrière. Appliqué au prochain lancement d'un jeu via RetroArch. Peut ralentir les consoles 3D (PS1, N64).",
+    rewindUnchanged: "Laisser RetroArch décider",
+    rewindOn: "Activé",
+    rewindOff: "Désactivé",
   },
 
   // Game card

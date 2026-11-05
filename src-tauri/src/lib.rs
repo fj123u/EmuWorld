@@ -370,6 +370,10 @@ pub struct AppConfig {
     pub covers_directory: String,
     #[serde(default)]
     pub bandwidth_limit_kbps: u64,
+    /// RetroArch rewind: `None` leaves retroarch.cfg as the user set it,
+    /// `Some(b)` writes `rewind_enable = "b"` before each RetroArch launch.
+    #[serde(default)]
+    pub retroarch_rewind: Option<bool>,
 }
 
 impl Default for AppConfig {
@@ -380,6 +384,7 @@ impl Default for AppConfig {
             emulators_directory: base.join("Emulators").to_string_lossy().to_string(),
             covers_directory: base.join("Covers").to_string_lossy().to_string(),
             bandwidth_limit_kbps: 0,
+            retroarch_rewind: None,
         }
     }
 }
@@ -432,7 +437,7 @@ fn save_config(config: AppConfig) -> Result<(), String> {
     BANDWIDTH_LIMIT_KBPS.store(config.bandwidth_limit_kbps, AtomicOrdering::Relaxed);
     let data = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
     fs::write(&path, data).map_err(|e| e.to_string())?;
-    push_log("INFO", &format!("Config sauvegardée (ROMs: {}, Émulateurs: {}, BW limit: {} KB/s)", config.roms_directory, config.emulators_directory, config.bandwidth_limit_kbps));
+    push_log("INFO", &format!("Config sauvegardée (ROMs: {}, Émulateurs: {}, BW limit: {} KB/s, rewind RetroArch: {:?})", config.roms_directory, config.emulators_directory, config.bandwidth_limit_kbps, config.retroarch_rewind));
     Ok(())
 }
 
@@ -917,6 +922,42 @@ fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
     }
 }
 
+/// Settings EmuWorld writes to retroarch.cfg before every RetroArch launch:
+/// borderless fullscreen that keeps running when unfocused (the overlay
+/// takes focus), plus rewind when the user chose it in the settings.
+fn retroarch_launch_settings(rewind: Option<bool>) -> Vec<(&'static str, &'static str)> {
+    let mut settings = vec![
+        ("video_fullscreen", "true"),
+        ("video_windowed_fullscreen", "true"),
+        ("pause_nonactive", "false"),
+        ("menu_pause_libretro", "false"),
+    ];
+    if let Some(enabled) = rewind {
+        settings.push(("rewind_enable", if enabled { "true" } else { "false" }));
+    }
+    settings
+}
+
+/// Sets `key = "value"` lines in a retroarch.cfg. A key is matched exactly
+/// (`video_fullscreen` never touches `video_fullscreen_x`); missing keys are
+/// appended and every other line is kept as is.
+fn set_retroarch_cfg_values(cfg: &str, values: &[(&str, &str)]) -> String {
+    let mut lines: Vec<String> = cfg.lines().map(str::to_string).collect();
+    for (key, value) in values {
+        let line = format!("{} = \"{}\"", key, value);
+        let existing = lines
+            .iter_mut()
+            .find(|l| l.split_once('=').map(|(k, _)| k.trim() == *key).unwrap_or(false));
+        match existing {
+            Some(l) => *l = line,
+            None => lines.push(line),
+        }
+    }
+    let mut out = lines.join("\n");
+    out.push('\n');
+    out
+}
+
 #[tauri::command]
 async fn launch_emulator(
     app_handle: tauri::AppHandle,
@@ -1105,23 +1146,14 @@ async fn launch_emulator(
     if effective_id == "retroarch" || effective_id.starts_with("retroarch-") {
         let ra_dir = exe_path.parent().unwrap_or(&install_dir);
         let cfg_path = ra_dir.join("retroarch.cfg");
-        let mut cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
-        let settings = [
-            ("video_fullscreen", "true"),
-            ("video_windowed_fullscreen", "true"),
-            ("pause_nonactive", "false"),
-            ("menu_pause_libretro", "false"),
-        ];
-        for (key, val) in settings {
-            let pattern = format!("{} = ", key);
-            if let Some(pos) = cfg.find(&pattern) {
-                let end = cfg[pos..].find('\n').map(|p| pos + p).unwrap_or(cfg.len());
-                cfg.replace_range(pos..end, &format!("{} = \"{}\"", key, val));
-            } else {
-                cfg.push_str(&format!("\n{} = \"{}\"\n", key, val));
-            }
+        let cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
+        let settings = retroarch_launch_settings(config.retroarch_rewind);
+        if let Some(rewind) = config.retroarch_rewind {
+            push_log("INFO", &format!("RetroArch: rewind {} dans {}", if rewind { "activé" } else { "désactivé" }, cfg_path.display()));
         }
-        let _ = fs::write(&cfg_path, &cfg);
+        if let Err(e) = fs::write(&cfg_path, set_retroarch_cfg_values(&cfg, &settings)) {
+            push_log("WARN", &format!("RetroArch: impossible d'écrire {}: {}", cfg_path.display(), e));
+        }
         // No --fullscreen arg: config handles it via borderless windowed mode
     } else {
         match effective_id.as_str() {
@@ -6847,6 +6879,36 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn retroarch_cfg_values_replace_exact_keys_only() {
+        let cfg = "video_fullscreen_x = \"1920\"\nvideo_fullscreen = \"false\"\nrewind_enable=\"false\"\ninput_rewind = \"r\"";
+        let values = [("video_fullscreen", "true"), ("rewind_enable", "true"), ("pause_nonactive", "false")];
+        let out = super::set_retroarch_cfg_values(cfg, &values);
+        assert_eq!(
+            out,
+            "video_fullscreen_x = \"1920\"\nvideo_fullscreen = \"true\"\nrewind_enable = \"true\"\ninput_rewind = \"r\"\npause_nonactive = \"false\"\n"
+        );
+        // Writing the same values again changes nothing (no duplicated lines).
+        assert_eq!(super::set_retroarch_cfg_values(&out, &values), out);
+    }
+
+    #[test]
+    fn retroarch_rewind_follows_the_setting() {
+        let rewind = |s: Option<bool>| {
+            super::retroarch_launch_settings(s).into_iter().find(|(k, _)| *k == "rewind_enable").map(|(_, v)| v)
+        };
+        assert_eq!(rewind(None), None, "never touch a rewind setting the user made in RetroArch");
+        assert_eq!(rewind(Some(true)), Some("true"));
+        assert_eq!(rewind(Some(false)), Some("false"));
+    }
+
+    #[test]
+    fn config_without_rewind_field_still_loads() {
+        let old = r#"{"roms_directory":"D:\\Roms","emulators_directory":"C:\\Emu","covers_directory":"C:\\Covers"}"#;
+        let cfg: super::AppConfig = serde_json::from_str(old).unwrap();
+        assert_eq!(cfg.retroarch_rewind, None);
+    }
+
     use super::*;
 
     #[test]

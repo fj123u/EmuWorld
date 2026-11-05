@@ -99,6 +99,12 @@ const en: Translations = {
     raLoadPrompt: "Click \"Load\" to see your 100% games.",
     raEmuDesc: "Enables achievements in RetroArch, DuckStation, PCSX2, Dolphin, and PPSSPP. NES/SNES/GB/GBA/N64/DS games will launch via RetroArch with RA enabled.",
     profile: "Profile",
+    retroarch: "RetroArch",
+    rewind: "Rewind",
+    rewindDesc: "Hold R while playing to go back a few seconds. Applied the next time a game launches through RetroArch. Can slow down 3D consoles (PS1, N64).",
+    rewindUnchanged: "Let RetroArch decide",
+    rewindOn: "On",
+    rewindOff: "Off",
   },
 
   // Game card

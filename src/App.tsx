@@ -143,6 +143,8 @@ interface AppConfig {
   emulators_directory: string;
   covers_directory: string;
   bandwidth_limit_kbps: number;
+  /** null/undefined = EmuWorld leaves RetroArch's own rewind setting alone. */
+  retroarch_rewind?: boolean | null;
 }
 
 interface DownloadStats {
@@ -7128,6 +7130,31 @@ export default function App() {
                             }}
                           >
                             {val === 0 ? "Illimité" : val < 1024 ? `${val} KB/s` : `${val / 1024} MB/s`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="settings__group">
+                    <div className="settings__group-title"><Gamepad2 size={16} /> {t("settings.retroarch")}</div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">{t("settings.rewind")}</label>
+                        <p className="settings__field-desc">{t("settings.rewindDesc")}</p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                        {([null, true, false] as const).map(val => (
+                          <button
+                            key={String(val)}
+                            className={`btn btn--sm gamepad-nav-item ${(config.retroarch_rewind ?? null) === val ? "btn--primary" : "btn--ghost"}`}
+                            onClick={async () => {
+                              const newCfg = { ...config, retroarch_rewind: val };
+                              setConfig(newCfg);
+                              await invoke("save_config", { config: newCfg });
+                            }}
+                          >
+                            {t(val === null ? "settings.rewindUnchanged" : val ? "settings.rewindOn" : "settings.rewindOff")}
                           </button>
                         ))}
                       </div>
