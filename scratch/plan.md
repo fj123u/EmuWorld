@@ -148,6 +148,7 @@
 
 ### 🔧 Technique
 
+- [ ] **Web panel sur GitHub Pages** *(moyen)* — alwaysdata est supprimé (compte suspendu le 05/11/2026). Héberger `web-panel/` (profil public) sur GitHub Pages, remplacer `emuworld.alwaysdata.net` dans l'app (liens « partager mon profil », `emailRedirectTo`), puis dans Supabase : retirer l'URL alwaysdata des Redirect URLs et changer le Site URL. La connexion Google/Discord n'en dépend plus (retour local 127.0.0.1).
 - [ ] **Plugin system** *(très gros)* — API pour que les utilisateurs créent des extensions (nouveaux émulateurs, sources de covers, intégrations)
 - [ ] **Linux / macOS support** *(gros)* — porter l'app sur les autres OS (Tauri est cross-platform, mais les émulateurs changent)
 - [x] **Auto-update émulateurs** *(moyen)* — détecter les nouvelles versions des émulateurs installés et proposer la mise à jour
