@@ -107,6 +107,8 @@ const en: Translations = {
     off: "Off",
     achievementAnimation: "Achievement animation",
     achievementAnimationDesc: "Full-screen animation with confetti when you unlock an achievement. Otherwise, a simple notification.",
+    consoleColors: "Console colours",
+    consoleColorsDesc: "While you browse one console in the library, the app's accent takes its colour (Switch red, PlayStation blue, Xbox green…).",
   },
 
   // Game card

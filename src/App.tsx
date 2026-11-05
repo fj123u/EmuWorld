@@ -13,6 +13,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
+import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
   Search,
@@ -1471,11 +1472,24 @@ export default function App() {
     }
   }, []);
 
+  const [consoleColors, setConsoleColorsState] = useState(consoleColorsEnabled);
+  const setConsoleColors = (on: boolean) => {
+    setConsoleColorsState(on);
+    try { localStorage.setItem(CONSOLE_COLORS_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
+  };
+
   const [bigPictureMode, setBigPictureMode] = useState(false);
   const bigPictureModeRef = useRef(bigPictureMode);
   bigPictureModeRef.current = bigPictureMode;
   const [bpSelectedIndex, setBpSelectedIndex] = useState(0);
   const [bpConsoleFilter, setBpConsoleFilter] = useState<string | null>(null);
+
+  // Console colours: the accent follows the console being browsed.
+  const browsedConsole = bigPictureMode ? bpConsoleFilter : page === "library" ? consoleFilter : null;
+  useEffect(() => {
+    applyConsoleAccent(document.documentElement, consoleColors ? consoleHue(browsedConsole) : null);
+  }, [browsedConsole, consoleColors]);
+  useEffect(() => () => applyConsoleAccent(document.documentElement, null), []);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
@@ -7120,6 +7134,23 @@ export default function App() {
                             key={String(on)}
                             className={`btn btn--sm gamepad-nav-item ${achievementAnimation === on ? "btn--primary" : "btn--ghost"}`}
                             onClick={() => setAchievementAnimation(on)}
+                          >
+                            {t(on ? "settings.on" : "settings.off")}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="settings__field">
+                      <div className="settings__field-info">
+                        <label className="settings__field-label">{t("settings.consoleColors")}</label>
+                        <p className="settings__field-desc">{t("settings.consoleColorsDesc")}</p>
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {[true, false].map(on => (
+                          <button
+                            key={String(on)}
+                            className={`btn btn--sm gamepad-nav-item ${consoleColors === on ? "btn--primary" : "btn--ghost"}`}
+                            onClick={() => setConsoleColors(on)}
                           >
                             {t(on ? "settings.on" : "settings.off")}
                           </button>

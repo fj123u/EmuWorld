@@ -105,6 +105,8 @@ const fr = {
     off: "Désactivé",
     achievementAnimation: "Animation des succès",
     achievementAnimationDesc: "Animation plein écran avec confettis quand tu débloques un succès. Sinon, une simple notification.",
+    consoleColors: "Couleurs par console",
+    consoleColorsDesc: "Quand tu parcours une console dans la bibliothèque, l'accent de l'app prend sa couleur (rouge Switch, bleu PlayStation, vert Xbox…).",
   },
 
   // Game card

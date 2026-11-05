@@ -132,7 +132,7 @@
 
 ### 🎨 UI & Experience
 
-- [ ] **Thèmes dynamiques par console** *(quick win)* — quand tu navigues dans une console, les couleurs de l'app changent (bleu Nintendo, vert Xbox, etc.)
+- [x] **Thèmes dynamiques par console** *(quick win)* — quand tu navigues dans une console, les couleurs de l'app changent (bleu Nintendo, vert Xbox, etc.)
 - [ ] **Widgets bureau** *(moyen)* — mini-widgets Windows : dernière session, jeu en cours, achievement récent, streak
 - [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage sur Discord/amis, comparaison avant/après, slideshow
 - [ ] **Profil personnalisable** *(quick win)* — bannière custom, bio, jeu favori épinglé, badges mis en avant sur le profil public

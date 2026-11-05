@@ -308,6 +308,37 @@ describe("achievement celebration", () => {
   });
 });
 
+describe("console colours", () => {
+  const root = document.documentElement;
+
+  async function openNesInLibrary() {
+    const r = await renderApp();
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.click(await screen.findByText("Nintendo", { selector: ".rgs-console-card__name" }));
+    fireEvent.click(await screen.findByText("NES", { selector: ".rgs-console-card__name" }));
+    return r;
+  }
+
+  it("tints the app while browsing a console, and restores it after", async () => {
+    const { container } = await openNesInLibrary();
+    await waitFor(() => expect(root.hasAttribute("data-console-accent")).toBe(true));
+    expect(root.style.getPropertyValue("--console-hue")).toBe("0");
+
+    fireEvent.click(sidebarButtons(container).find((b) => b.textContent?.trim() === "Réglages")!);
+    await waitFor(() => expect(root.hasAttribute("data-console-accent")).toBe(false));
+  });
+
+  it("can be turned off in the settings", async () => {
+    localStorage.setItem("emuworld_console_colors", "off");
+    await openNesInLibrary();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(root.hasAttribute("data-console-accent")).toBe(false);
+    localStorage.removeItem("emuworld_console_colors");
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
