@@ -124,9 +124,11 @@ GitHub Actions workflow (`.github/workflows/release.yml`) se déclenche sur les 
   - UI behaviour → `src/App.test.tsx` (Vitest + Testing Library). The fake backend is `src/test/tauriMock.ts`: when you add or change a `#[tauri::command]` used by the UI, add its handler there **with the exact Rust return shape** (a `Vec` → `[]`, never `null`). Drive backend events with `emit()` from `@tauri-apps/api/event`.
   - New i18n keys are checked automatically by `src/i18n/i18n.test.ts` (same keys in FR/EN, same `{placeholders}`, every literal `t("…")` key exists).
   - Never weaken or delete an existing test to make a change pass — fix the code, or explain why the old behaviour was wrong.
+- **Changelog** : every user-visible feature or fix adds a line (emoji + short French sentence, like the existing ones) to the newest entry of `src/changelog.ts`, shown in the app's Changelogs page. If the newest entry is already released (its version = the last git tag), open a new entry for the next version. `src/changelog.test.ts` fails when the version in `tauri.conf.json` has no entry.
 
 ## Workflow After Each Feature/Fix
 
+0. **Changelog** — add the line(s) for this change to `src/changelog.ts`
 0. **Run `npm run test:all`** — all green, including the new test for this change
 1. **Commit + push** immediately after implementing (CI re-runs everything on each push)
 2. **Check off** the task in `scratch/plan.md`
