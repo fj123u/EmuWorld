@@ -6079,6 +6079,24 @@ async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lo
     Ok(format!("Netplay {} started", if is_host { "host" } else { "client" }))
 }
 
+/// A log line sent by the UI: known level only, one line, at most 500 chars.
+fn sanitize_ui_log(level: &str, message: &str) -> (&'static str, String) {
+    let level = match level {
+        "WARN" => "WARN",
+        "ERROR" => "ERROR",
+        _ => "INFO",
+    };
+    let message: String = message.chars().map(|c| if c.is_control() { ' ' } else { c }).take(500).collect();
+    (level, format!("[UI] {}", message))
+}
+
+/// Lets frontend-only flows (Supabase uploads…) write to the daily log file.
+#[tauri::command]
+fn log_event(level: String, message: String) {
+    let (level, message) = sanitize_ui_log(&level, &message);
+    push_log(level, &message);
+}
+
 #[tauri::command]
 fn get_logs() -> Vec<String> {
     app_logs().lock().map(|l| l.clone()).unwrap_or_default()
@@ -6792,6 +6810,7 @@ pub fn run() {
             savestates::delete_save_state,
             savestates::read_save_state,
             savestates::import_save_state,
+            log_event,
             is_portable_mode,
             save_config,
             get_emulator_catalog,
@@ -6899,6 +6918,16 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn ui_log_lines_cannot_forge_entries() {
+        let (level, msg) = super::sanitize_ui_log("ERROR", "upload failed");
+        assert_eq!((level, msg.as_str()), ("ERROR", "[UI] upload failed"));
+        let (level, msg) = super::sanitize_ui_log("CRITICAL", "a\n[ERROR] fake line");
+        assert_eq!(level, "INFO");
+        assert!(!msg.contains('\n'));
+        assert_eq!(super::sanitize_ui_log("INFO", &"x".repeat(2000)).1.chars().count(), 505);
+    }
+
     #[test]
     fn retroarch_cfg_values_replace_exact_keys_only() {
         let cfg = "video_fullscreen_x = \"1920\"\nvideo_fullscreen = \"false\"\nrewind_enable=\"false\"\ninput_rewind = \"r\"";

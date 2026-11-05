@@ -86,15 +86,22 @@ describe("sharing a save state", () => {
       core: "Snes9x", slot: 2, label: "Avant Ganon", size_bytes: 3, thumbnail: null,
     });
     expect(String(inserted()!.storage_path)).toBe(log[0].split(" ")[1].replace("savestates/", ""));
+    // The outcome lands in the daily log file, not only in a toast.
+    const logged = backend.calls.filter((c) => c.cmd === "log_event").map((c) => c.args);
+    expect(logged).toContainEqual({ level: "INFO", message: expect.stringMatching(/Zelda\.state2 envoyé \(3 octets/) });
   });
 
   it("removes the uploaded file when the share is refused (not friends, table missing…)", async () => {
-    mockBackend({ read_save_state: () => new Uint8Array([1]).buffer });
+    const backend = mockBackend({ read_save_state: () => new Uint8Array([1]).buffer });
     const { db, log } = fakeDb({ insertError: "new row violates row-level security policy" });
     await expect(
       shareSaveState({ senderId: "me", recipientId: "stranger", state, rom: { name: "Zelda", console: "Super Nintendo" } }, db),
     ).rejects.toThrow(/row-level security/);
     expect(log.map((l) => l.split(" ")[0])).toEqual(["upload", "insert", "remove"]);
+    expect(backend.calls.filter((c) => c.cmd === "log_event").map((c) => c.args)).toContainEqual({
+      level: "ERROR",
+      message: expect.stringContaining("partage refusé (new row violates row-level security policy)"),
+    });
   });
 });
 

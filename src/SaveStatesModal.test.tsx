@@ -88,6 +88,25 @@ describe("sharing save states with friends", () => {
     expect(screen.getByRole("combobox", { name: "Choisir un ami" })).toBeTruthy();
   });
 
+  it("does not rewrite a name that was not changed", async () => {
+    const backend = mockBackend({ list_save_states: () => [mine] });
+    renderModal();
+    fireEvent.click(await screen.findByRole("button", { name: "Nommer" }));
+    const input = screen.getByDisplayValue("Donjon 3");
+    await act(async () => {
+      fireEvent.blur(input);
+    });
+    expect(backend.count("rename_save_state")).toBe(0);
+    expect(screen.getByText("Donjon 3")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Nommer" }));
+    fireEvent.change(screen.getByDisplayValue("Donjon 3"), { target: { value: "Donjon 4" } });
+    await act(async () => {
+      fireEvent.blur(screen.getByDisplayValue("Donjon 4"));
+    });
+    expect(backend.calls.find((c) => c.cmd === "rename_save_state")?.args).toEqual({ path: mine.path, label: "Donjon 4" });
+  });
+
   it("hides sharing when signed out", async () => {
     mockBackend({ list_save_states: () => [mine] });
     renderModal({ userId: null });

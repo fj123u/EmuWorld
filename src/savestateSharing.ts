@@ -8,6 +8,13 @@ import type { SaveState } from "./SaveStatesModal";
 
 export const SHARED_STATES_BUCKET = "savestates";
 
+/** Writes to the daily log file (%LOCALAPPDATA%/EmuWorld/logs), never throws. */
+function log(level: "INFO" | "WARN" | "ERROR", message: string) {
+  invoke("log_event", { level, message: `Partage save states: ${message}` }).catch(() => {});
+}
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 /** The Supabase client; tests pass a fake one. */
 type Db = typeof supabase;
 
@@ -75,12 +82,16 @@ export async function shareSaveState(params: {
   rom: { name: string; console: string };
 }, db: Db = supabase): Promise<void> {
   const { senderId, recipientId, state, rom } = params;
+  log("INFO", `envoi de ${state.file_name} (${rom.console}) à ${recipientId}`);
   const bytes = await invoke<ArrayBuffer>("read_save_state", { path: state.path });
   const storagePath = `${senderId}/${crypto.randomUUID()}.state`;
   const upload = await db.storage
     .from(SHARED_STATES_BUCKET)
     .upload(storagePath, new Blob([bytes]), { contentType: "application/octet-stream", upsert: false });
-  if (upload.error) throw new Error(upload.error.message);
+  if (upload.error) {
+    log("ERROR", `upload refusé pour ${storagePath}: ${upload.error.message}`);
+    throw new Error(upload.error.message);
+  }
 
   const { error } = await db.from("shared_savestates").insert({
     sender_id: senderId,
@@ -97,8 +108,10 @@ export async function shareSaveState(params: {
   if (error) {
     // Don't leave an orphan file nobody can see.
     await db.storage.from(SHARED_STATES_BUCKET).remove([storagePath]);
+    log("ERROR", `partage refusé (${error.message}), fichier ${storagePath} retiré`);
     throw new Error(error.message);
   }
+  log("INFO", `${state.file_name} envoyé (${bytes.byteLength} octets, ${storagePath})`);
 }
 
 export async function listReceivedStates(userId: string, db: Db = supabase): Promise<SharedSaveState[]> {
@@ -107,7 +120,10 @@ export async function listReceivedStates(userId: string, db: Db = supabase): Pro
     .select("*")
     .eq("recipient_id", userId)
     .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
+  if (error) {
+    log("WARN", `liste des states reçus indisponible: ${error.message}`);
+    throw new Error(error.message);
+  }
   const rows = (data ?? []) as SharedSaveState[];
   const senderIds = [...new Set(rows.map((r) => r.sender_id))];
   if (senderIds.length === 0) return rows;
@@ -121,14 +137,28 @@ export async function dismissReceivedState(shared: SharedSaveState, db: Db = sup
   // The file first: the storage rule lets the recipient delete it only while the row exists.
   await db.storage.from(SHARED_STATES_BUCKET).remove([shared.storage_path]);
   const { error } = await db.from("shared_savestates").delete().eq("id", shared.id);
-  if (error) throw new Error(error.message);
+  if (error) {
+    log("ERROR", `suppression du partage ${shared.id} impossible: ${error.message}`);
+    throw new Error(error.message);
+  }
+  log("INFO", `partage ${shared.id} retiré du cloud`);
 }
 
 /** Downloads a received state into a new slot of `romPath`, then clears it from the cloud. */
 export async function importReceivedState(shared: SharedSaveState, romPath: string, label: string, db: Db = supabase): Promise<SaveState> {
+  log("INFO", `import du partage ${shared.id} (${shared.game_name}) de ${shared.sender_id}`);
   const { data, error } = await db.storage.from(SHARED_STATES_BUCKET).createSignedUrl(shared.storage_path, 300);
-  if (error || !data?.signedUrl) throw new Error(error?.message ?? "signed URL");
-  const imported = await invoke<SaveState>("import_save_state", { romPath, core: shared.core, url: data.signedUrl });
+  if (error || !data?.signedUrl) {
+    log("ERROR", `lien signé impossible pour ${shared.storage_path}: ${error?.message ?? "pas d'URL"}`);
+    throw new Error(error?.message ?? "signed URL");
+  }
+  let imported: SaveState;
+  try {
+    imported = await invoke<SaveState>("import_save_state", { romPath, core: shared.core, url: data.signedUrl });
+  } catch (e) {
+    log("ERROR", `import du partage ${shared.id} échoué: ${errorText(e)}`);
+    throw e;
+  }
   await invoke("rename_save_state", { path: imported.path, label }).catch(() => {});
   await dismissReceivedState(shared, db);
   return imported;

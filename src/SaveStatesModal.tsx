@@ -102,10 +102,11 @@ export function SaveStatesModal({ rom, t, locale, userId, friends, onClose, onRe
     await reload();
   };
 
-  const saveLabel = (s: SaveState) => run(async () => {
+  const saveLabel = (s: SaveState) => {
     setEditing(null);
-    await invoke("rename_save_state", { path: s.path, label: draft });
-  });
+    if (draft.trim() === (s.label ?? "")) return; // nothing changed: no write
+    return run(() => invoke("rename_save_state", { path: s.path, label: draft }));
+  };
 
   const slotName = (s: { auto?: boolean; slot: number | null }) =>
     s.auto ? t("saveStates.auto") : t("saveStates.slot", { slot: s.slot ?? 0 });
