@@ -20,6 +20,7 @@ import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplay
 import { LobbyPanel } from "./LobbyPanel";
 import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
+import { fetchCloudNotes, syncCloudNotes } from "./playtimeNotes";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -204,7 +205,12 @@ interface MonthlyStats {
 // them so the rest of the playtime still syncs.
 const PLAYTIME_MONTHLY_COLUMNS = ["monthly", "active_days", "longest_session"] as const;
 
-function playtimeGameRow(userId: string, g: GameEntry) {
+/**
+ * Cloud row of a game. `notes` is always null here: playtime_games is public
+ * for public profiles, notes go to the private playtime_notes table instead
+ * (src/playtimeNotes.ts).
+ */
+export function playtimeGameRow(userId: string, g: GameEntry) {
   return {
     user_id: userId,
     console: g.console,
@@ -216,7 +222,7 @@ function playtimeGameRow(userId: string, g: GameEntry) {
     favorite: g.favorite,
     last_emulator_id: g.last_emulator_id,
     rating: g.rating ?? null,
-    notes: g.notes ?? null,
+    notes: null,
     monthly: g.monthly ?? {},
     active_days: g.active_days ?? [],
     longest_session: g.longest_session ?? 0,
@@ -3430,6 +3436,7 @@ export default function App() {
           .upsert(emuRows, { onConflict: "user_id,emulator_id" });
         if (error) throw error;
       }
+      await syncCloudNotes(user.id, pt.games).catch((e) => console.warn("[EmuWorld] notes sync failed:", e));
       console.log("[EmuWorld] sync ok — pushed", gameRows.length, "games,", emuRows.length, "emulators");
     } catch (err: any) {
       console.error("[EmuWorld] Cloud sync failed:", err?.message || err);
@@ -4354,10 +4361,11 @@ export default function App() {
       }
       // Sign-in: fetch this user's playtime and achievements from cloud.
       try {
-        const [gamesRes, emusRes, achievRes] = await Promise.all([
+        const [gamesRes, emusRes, achievRes, cloudNotes] = await Promise.all([
           supabase.from("playtime_games").select("*").eq("user_id", currentId),
           supabase.from("playtime_emulators").select("*").eq("user_id", currentId),
           supabase.from("user_achievements").select("*").eq("user_id", currentId),
+          fetchCloudNotes(currentId),
         ]);
 
         const cloudIsEmpty = (gamesRes.data || []).length === 0 && (emusRes.data || []).length === 0;
@@ -4378,6 +4386,7 @@ export default function App() {
           if (emuRows.length > 0) {
             await supabase.from("playtime_emulators").upsert(emuRows, { onConflict: "user_id,emulator_id" });
           }
+          await syncCloudNotes(currentId, localPt.games).catch((e) => console.warn("[EmuWorld] notes sync failed:", e));
           await loadPlaytime();
         } else {
           const cloud: PlaytimeStore = { games: {}, emulators: {}, collections: [] };
@@ -4397,7 +4406,7 @@ export default function App() {
               favorite: !!row.favorite,
               last_emulator_id: row.last_emulator_id,
               rating: row.rating ?? undefined,
-              notes: row.notes ?? undefined,
+              notes: cloudNotes[gameKey] ?? row.notes ?? undefined,
               monthly: (local ? local.monthly : row.monthly) ?? {},
               active_days: (local ? local.active_days : row.active_days) ?? [],
               longest_session: (local ? local.longest_session : row.longest_session) ?? 0,
