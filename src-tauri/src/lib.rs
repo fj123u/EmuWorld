@@ -249,6 +249,9 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     static SHIFT_DOWN: AtomicBool = AtomicBool::new(false);
+    // Speedrun numpad keys currently held (bit = vk - 0x60): a held key
+    // repeats WM_KEYDOWN, but must split only once.
+    static SPEEDRUN_KEYS_DOWN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
     match overlay_app_handle().lock() {
         Ok(mut guard) => *guard = Some(app_handle),
@@ -268,6 +271,21 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                 WM_KEYDOWN | WM_SYSKEYDOWN => {
                     if vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT {
                         SHIFT_DOWN.store(true, Ordering::Relaxed);
+                    }
+                    // Speedrun timer hotkeys: only while its window is open, and
+                    // never swallowed (the game still receives the key).
+                    if let Some(action) = speedrun::hotkey_action(vk) {
+                        let bit = 1u32 << (vk - 0x60);
+                        if SPEEDRUN_KEYS_DOWN.fetch_or(bit, Ordering::Relaxed) & bit == 0 {
+                            if let Ok(guard) = overlay_app_handle().lock() {
+                                if let Some(ref handle) = *guard {
+                                    use tauri::{Emitter, Manager};
+                                    if handle.get_webview_window(speedrun::WINDOW_LABEL).is_some() {
+                                        let _ = handle.emit_to(speedrun::WINDOW_LABEL, "speedrun-hotkey", action);
+                                    }
+                                }
+                            }
+                        }
                     }
                     if vk == VK_TAB && SHIFT_DOWN.load(Ordering::Relaxed) {
                         println!("[Overlay] LOW-LEVEL HOOK: Shift+Tab detected!");
@@ -304,6 +322,9 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                 WM_KEYUP | WM_SYSKEYUP => {
                     if vk == VK_SHIFT || vk == VK_LSHIFT || vk == VK_RSHIFT {
                         SHIFT_DOWN.store(false, Ordering::Relaxed);
+                    }
+                    if speedrun::hotkey_action(vk).is_some() {
+                        SPEEDRUN_KEYS_DOWN.fetch_and(!(1u32 << (vk - 0x60)), Ordering::Relaxed);
                     }
                 },
                 _ => {}
@@ -348,6 +369,7 @@ mod atomic_file;
 mod iidb;
 mod savestates;
 mod netplay;
+mod speedrun;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -6794,6 +6816,10 @@ pub fn run() {
             open_path,
             netplay::launch_netplay,
             netplay::find_netplay_session,
+            speedrun::get_speedrun,
+            speedrun::save_speedrun,
+            speedrun::open_speedrun_window,
+            speedrun::close_speedrun_window,
             start_oauth_server,
             create_overlay_window,
             close_overlay_window,

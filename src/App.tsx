@@ -21,6 +21,7 @@ import { LobbyPanel } from "./LobbyPanel";
 import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
 import { fetchCloudNotes, syncCloudNotes } from "./playtimeNotes";
+import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -88,6 +89,7 @@ import {
   ThumbsUp,
   Swords,
   Save,
+  Timer,
 } from "lucide-react";
 
 /* ============================
@@ -1387,10 +1389,19 @@ function OverlayWindow() {
   );
 }
 
+/** The speedrun timer window only needs translations. */
+function SpeedrunRoot() {
+  const { t } = useTranslation();
+  return <SpeedrunWindow t={t} />;
+}
+
 export default function App() {
   // If loaded as overlay window, render only the overlay UI
   if (window.location.search.includes("overlay=1")) {
     return <OverlayWindow />;
+  }
+  if (window.location.search.includes("speedrun=1")) {
+    return <SpeedrunRoot />;
   }
 
   const [boxartLogs, setBoxartLogs] = useState<{ game: string; url: string; status: string; error?: string }[]>([]);
@@ -1522,6 +1533,7 @@ export default function App() {
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
   const [saveStatesRom, setSaveStatesRom] = useState<RomFile | null>(null);
+  const [speedrunRom, setSpeedrunRom] = useState<RomFile | null>(null);
   const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; entries: { path: string; data_url: string }[] } | null>(null);
   const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
@@ -1763,6 +1775,7 @@ export default function App() {
     try { localStorage.setItem(ACHIEVEMENT_ANIMATION_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
   }, []);
   const closeSaveStates = useCallback(() => setSaveStatesRom(null), []);
+  const closeSpeedrun = useCallback(() => setSpeedrunRom(null), []);
   const dismissCelebration = useCallback(() => setCelebrations((q) => q.slice(1)), []);
 
   // Stable translator for event handlers, callbacks and listeners: it reads the
@@ -9133,6 +9146,9 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { setSaveStatesRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Save size={14} /> {t("saveStates.menu")}
             </button>
+            <button className="rom-context-menu__btn" onClick={() => { setSpeedrunRom(romContextMenu.rom); setRomContextMenu(null); }}>
+              <Timer size={14} /> {t("speedrun.menu")}
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenGuide(romContextMenu.rom); }}>
               <BookOpen size={14} /> Guide
@@ -9154,6 +9170,10 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {speedrunRom && (
+        <SpeedrunModal rom={speedrunRom} t={t} onClose={closeSpeedrun} onNotify={showToast} />
       )}
 
       {saveStatesRom && (

@@ -110,7 +110,7 @@
 
 ### 🎮 Gameplay avancé
 
-- [ ] **Speed run timer** *(gros)* — chrono intégré avec splits personnalisables, PB (personal best) sauvegardé par jeu, comparaison temps réel avec ton record, export/partage du run
+- [x] **Speed run timer** *(gros)* — chrono intégré avec splits personnalisables, PB (personal best) sauvegardé par jeu, comparaison temps réel avec ton record, export/partage du run
 - [x] **Save states manager** *(moyen)* — gérer les save states RetroArch depuis l'app : prévisualisation screenshot, renommer, dupliquer, partager avec des amis  (partage : lancer scratch/supabase_savestates_sharing.sql)
 - [ ] **Cheats database** *(moyen)* — base de données de codes triches (Action Replay, GameShark) intégrée, activables en un clic avant de lancer le jeu
 - [ ] **Input display / macros** *(moyen)* — afficher les inputs en overlay (pour les streams), enregistrer et rejouer des macros pour les combos

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "speedrun",
+  "description": "Speedrun timer window: receives its hotkey events, nothing else",
+  "windows": ["speedrun"],
+  "permissions": ["core:event:default"]
+}

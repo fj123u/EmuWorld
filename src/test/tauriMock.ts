@@ -97,6 +97,11 @@ export function defaultHandlers(): Record<string, Handler> {
     duplicate_save_state: () => "C:\\RetroArch\\states\\copy.state1",
     delete_save_state: () => null,
     log_event: () => null,
+    // Speedrun timer (speedrun.rs)
+    get_speedrun: () => ({ splits: [], pb: null, best_segments: [], attempts: 0, completed: 0 }),
+    save_speedrun: (args) => (args as { data: unknown }).data,
+    open_speedrun_window: () => null,
+    close_speedrun_window: () => null,
     // Netplay (netplay.rs)
     launch_netplay: () => ({ method: "retroarch", nick: "EW-test-lobby1" }),
     find_netplay_session: () => ({ ip: "europe-west1.relay.retroarch.com", port: 55435, session: "g3kjejYF3wcqOkMh" }),

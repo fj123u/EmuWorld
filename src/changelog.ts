@@ -8,6 +8,11 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.7.0", date: "2026-11-06", changes: [
+    "⏱️ Chrono de speedrun : petite fenêtre toujours visible pendant le jeu, splits personnalisés, record et meilleurs segments par jeu, comparaison en direct (vert/rouge/doré)",
+    "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
+    "⏱️ Résumé du record à copier pour le partager",
+  ] },
   { version: "2.6.0", date: "2026-11-06", changes: [
     "🖼️ Covers: iiDB (iidb.iisu.network) devient la première source — beaucoup plus de jaquettes, repli automatique sur les autres sources",
     "🖼️ Covers carrées affichées en entier sur un fond flou au lieu d'être rognées",
