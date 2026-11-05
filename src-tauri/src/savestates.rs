@@ -33,6 +33,8 @@ pub struct SaveState {
     pub auto: bool,
     /// Sub-folder of `states/` the file is in (core name when sorted by core).
     pub folder: Option<String>,
+    /// Core that made the state, when RetroArch sorts states by core.
+    pub core: Option<String>,
     pub modified: Option<String>,
     pub size: u64,
     /// `data:image/png;base64,…` when RetroArch saved a thumbnail.
@@ -65,6 +67,66 @@ pub fn states_dir(ra_dir: &Path, cfg: &str) -> PathBuf {
         Some(v) if v.starts_with(":\\") || v.starts_with(":/") => ra_dir.join(&v[2..]),
         Some(v) => PathBuf::from(v),
     }
+}
+
+/// Reads a `key = "true"` flag from retroarch.cfg (missing → `default`).
+pub fn cfg_flag(cfg: &str, key: &str, default: bool) -> bool {
+    cfg.lines()
+        .find_map(|line| {
+            let (k, v) = line.split_once('=')?;
+            (k.trim() == key).then(|| v.trim().trim_matches('"') == "true")
+        })
+        .unwrap_or(default)
+}
+
+/// How RetroArch files the states: by core and/or by content folder.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct StatesLayout {
+    pub by_core: bool,
+    pub by_content: bool,
+}
+
+impl StatesLayout {
+    pub fn from_cfg(cfg: &str) -> Self {
+        Self {
+            by_core: cfg_flag(cfg, "sort_savestates_enable", false),
+            by_content: cfg_flag(cfg, "sort_savestates_by_content_enable", false),
+        }
+    }
+
+    /// Folder RetroArch reads `rom_path`'s states from for `core`.
+    pub fn dir_for(&self, states_root: &Path, core: Option<&str>, rom_path: &Path) -> PathBuf {
+        let mut dir = states_root.to_path_buf();
+        if self.by_core {
+            if let Some(core) = core {
+                dir.push(core);
+            }
+        }
+        if self.by_content {
+            if let Some(content_dir) = rom_path.parent().and_then(|p| p.file_name()) {
+                dir.push(content_dir);
+            }
+        }
+        dir
+    }
+}
+
+/// A folder name received from someone else: one plain path component.
+fn safe_component(name: &str) -> Option<&str> {
+    let ok = !name.is_empty()
+        && name.len() <= 100
+        && name != "."
+        && name != ".."
+        && !name.contains(['/', '\\', ':', '\0'])
+        && !name.starts_with('.');
+    ok.then_some(name)
+}
+
+/// First slot ≥ 1 with no `<stem>.state<N>` file in `dir`.
+fn next_free_slot(dir: &Path, stem: &str) -> Option<(u32, PathBuf)> {
+    (1..=MAX_SLOT)
+        .map(|n| (n, dir.join(format!("{}.state{}", stem, n))))
+        .find(|(_, p)| !p.exists())
 }
 
 /// Parses a state file name for a given ROM stem: `Some((slot, auto))`.
@@ -116,7 +178,7 @@ fn thumbnail_of(state: &Path) -> Option<String> {
 }
 
 /// Every state of the ROM `rom_stem` under `states_root`, newest first.
-pub fn list_states(states_root: &Path, rom_stem: &str, labels: &HashMap<String, String>) -> Vec<SaveState> {
+pub fn list_states(states_root: &Path, rom_stem: &str, labels: &HashMap<String, String>, layout: StatesLayout) -> Vec<SaveState> {
     let mut states: Vec<SaveState> = walkdir::WalkDir::new(states_root)
         .max_depth(3)
         .into_iter()
@@ -132,12 +194,18 @@ pub fn list_states(states_root: &Path, rom_stem: &str, labels: &HashMap<String, 
                 .filter(|p| *p != states_root)
                 .and_then(|p| p.strip_prefix(states_root).ok())
                 .map(|p| p.to_string_lossy().to_string());
+            let core = folder
+                .as_deref()
+                .filter(|_| layout.by_core)
+                .and_then(|f| Path::new(f).components().next())
+                .map(|c| c.as_os_str().to_string_lossy().to_string());
             Some(SaveState {
                 path: e.path().to_string_lossy().to_string(),
                 file_name,
                 slot,
                 auto,
                 folder,
+                core,
                 modified: meta.modified().ok().map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()),
                 size: meta.len(),
                 thumbnail: thumbnail_of(e.path()),
@@ -168,10 +236,7 @@ pub fn duplicate_state(path: &Path) -> Result<PathBuf, String> {
     let file_name = path.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("Nom invalide")?;
     let idx = file_name.to_lowercase().rfind(".state").ok_or("Nom de save state invalide")?;
     let base = &file_name[..idx];
-    let target = (1..=MAX_SLOT)
-        .map(|n| dir.join(format!("{}.state{}", base, n)))
-        .find(|p| !p.exists())
-        .ok_or("Tous les slots sont occupés")?;
+    let (_, target) = next_free_slot(dir, base).ok_or("Tous les slots sont occupés")?;
     fs::copy(path, &target).map_err(|e| format!("Copie impossible: {}", e))?;
     let png = PathBuf::from(format!("{}.png", path.display()));
     if png.exists() {
@@ -209,11 +274,15 @@ fn move_to_recycle_bin(path: &Path) -> Result<(), String> {
     fs::remove_file(path).map_err(|e| e.to_string())
 }
 
-fn ra_states_root() -> Result<PathBuf, String> {
+fn ra_states_location() -> Result<(PathBuf, StatesLayout), String> {
     let config = crate::get_config();
     let ra_dir = retroarch_dir(Path::new(&config.emulators_directory)).ok_or("RetroArch n'est pas installé")?;
     let cfg = fs::read_to_string(ra_dir.join("retroarch.cfg")).unwrap_or_default();
-    Ok(states_dir(&ra_dir, &cfg))
+    Ok((states_dir(&ra_dir, &cfg), StatesLayout::from_cfg(&cfg)))
+}
+
+fn ra_states_root() -> Result<PathBuf, String> {
+    ra_states_location().map(|(root, _)| root)
 }
 
 #[tauri::command]
@@ -223,8 +292,8 @@ pub fn list_save_states(rom_path: String) -> Result<Vec<SaveState>, String> {
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
         .ok_or("Chemin de ROM invalide")?;
-    let root = match ra_states_root() {
-        Ok(root) => root,
+    let (root, layout) = match ra_states_location() {
+        Ok(location) => location,
         // No RetroArch: no states, not an error the UI has to show.
         Err(e) => {
             push_log("INFO", &format!("Save states: {}", e));
@@ -234,7 +303,7 @@ pub fn list_save_states(rom_path: String) -> Result<Vec<SaveState>, String> {
     if !root.exists() {
         return Ok(Vec::new());
     }
-    let states = list_states(&root, &stem, &load_labels(&labels_path()));
+    let states = list_states(&root, &stem, &load_labels(&labels_path()), layout);
     push_log("INFO", &format!("Save states: {} trouvé(s) pour '{}' dans {}", states.len(), stem, root.display()));
     Ok(states)
 }
@@ -292,6 +361,89 @@ pub fn delete_save_state(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Largest state accepted for sharing (same limit as the Supabase bucket).
+pub const MAX_SHARED_BYTES: u64 = 32 * 1024 * 1024;
+
+/// Raw bytes of a state, for uploading it to a friend.
+#[tauri::command]
+pub fn read_save_state(path: String) -> Result<tauri::ipc::Response, String> {
+    let root = ra_states_root()?;
+    let file = ensure_state_file(&root, Path::new(&path))?;
+    let size = fs::metadata(&file).map_err(|e| e.to_string())?.len();
+    if size > MAX_SHARED_BYTES {
+        push_log("WARN", &format!("Save states: {} trop gros pour être partagé ({} octets)", file.display(), size));
+        return Err(format!("Save state trop gros ({} Mo, max 32 Mo)", size / 1024 / 1024));
+    }
+    let bytes = fs::read(&file).map_err(|e| e.to_string())?;
+    push_log("INFO", &format!("Save states: lecture de {} pour partage ({} octets)", file.display(), bytes.len()));
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Only Supabase Storage signed URLs of the `savestates` bucket are downloaded.
+pub fn is_shared_state_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else { return false };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host_ok = host.ends_with(".supabase.co")
+        && host.len() > ".supabase.co".len()
+        && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    host_ok && path.starts_with("storage/v1/object/sign/savestates/") && !path.contains("..")
+}
+
+/// Writes a received state to the first free slot of `rom_stem` in
+/// `target_dir`, never over an existing slot. Returns the new file's path.
+pub fn store_received_state(target_dir: &Path, rom_stem: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    fs::create_dir_all(target_dir).map_err(|e| format!("Dossier states inaccessible: {}", e))?;
+    let (_, target) = next_free_slot(target_dir, rom_stem).ok_or("Tous les slots sont occupés")?;
+    crate::atomic_file::write(&target, bytes).map_err(|e| format!("Écriture impossible: {}", e))?;
+    Ok(target)
+}
+
+/// Downloads a state a friend shared and adds it as a new slot of `rom_path`,
+/// in the folder RetroArch reads for that core.
+#[tauri::command]
+pub async fn import_save_state(rom_path: String, core: Option<String>, url: String) -> Result<SaveState, String> {
+    push_log("INFO", &format!("Save states: import d'un state partagé pour {} (core {:?})", rom_path, core));
+    if !is_shared_state_url(&url) {
+        push_log("WARN", "Save states: URL de téléchargement refusée");
+        return Err("Lien de téléchargement invalide".to_string());
+    }
+    let rom = PathBuf::from(&rom_path);
+    let stem = rom.file_stem().map(|s| s.to_string_lossy().to_string()).ok_or("Chemin de ROM invalide")?;
+    let (root, layout) = ra_states_location()?;
+    let core = core.as_deref().and_then(safe_component);
+    let target_dir = layout.dir_for(&root, core, &rom);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let resp = client.get(&url).send().await.map_err(|e| {
+        push_log("ERROR", &format!("Save states: téléchargement impossible: {}", e));
+        format!("Téléchargement impossible: {}", e)
+    })?;
+    if !resp.status().is_success() {
+        push_log("ERROR", &format!("Save states: téléchargement HTTP {}", resp.status()));
+        return Err(format!("Téléchargement impossible (HTTP {})", resp.status().as_u16()));
+    }
+    if resp.content_length().unwrap_or(0) > MAX_SHARED_BYTES {
+        return Err("Save state trop gros".to_string());
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    if bytes.is_empty() || bytes.len() as u64 > MAX_SHARED_BYTES {
+        return Err("Save state vide ou trop gros".to_string());
+    }
+    let target = store_received_state(&target_dir, &stem, &bytes).map_err(|e| {
+        push_log("ERROR", &format!("Save states: import impossible dans {}: {}", target_dir.display(), e));
+        e
+    })?;
+    push_log("INFO", &format!("Save states: state reçu enregistré dans {}", target.display()));
+    let labels = load_labels(&labels_path());
+    list_states(&root, &stem, &labels, layout)
+        .into_iter()
+        .find(|s| Path::new(&s.path) == target)
+        .ok_or_else(|| "State importé introuvable".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,7 +488,8 @@ mod tests {
 
         let key = label_key(&root.join("Snes9x").join("Zelda.state2"));
         let labels = HashMap::from([(key, "Avant le boss".to_string())]);
-        let mut states = list_states(&root, "Zelda", &labels);
+        let layout = StatesLayout { by_core: true, by_content: false };
+        let mut states = list_states(&root, "Zelda", &labels, layout);
         states.sort_by_key(|s| s.file_name.clone());
 
         let names: Vec<_> = states.iter().map(|s| s.file_name.as_str()).collect();
@@ -344,6 +497,7 @@ mod tests {
         let slot2 = &states[2];
         assert_eq!(slot2.slot, Some(2));
         assert_eq!(slot2.folder.as_deref(), Some("Snes9x"));
+        assert_eq!(slot2.core.as_deref(), Some("Snes9x"));
         assert_eq!(slot2.label.as_deref(), Some("Avant le boss"));
         assert!(slot2.thumbnail.as_deref().unwrap().starts_with("data:image/png;base64,"));
         assert!(states[1].auto && states[1].folder.is_none());
@@ -366,6 +520,59 @@ mod tests {
         assert!(ensure_state_file(&root, &root.join("..").join(outside.file_name().unwrap()).join("Zelda.state1")).is_err());
         fs::remove_dir_all(&root).ok();
         fs::remove_dir_all(&outside).ok();
+    }
+
+    #[test]
+    fn reads_how_retroarch_sorts_states() {
+        let cfg = "sort_savestates_by_content_enable = \"false\"\nsort_savestates_enable = \"true\"";
+        assert_eq!(StatesLayout::from_cfg(cfg), StatesLayout { by_core: true, by_content: false });
+        assert_eq!(StatesLayout::from_cfg(""), StatesLayout::default());
+
+        let root = Path::new("C:\\RA\\states");
+        let rom = Path::new("D:\\Roms\\SNES\\Zelda.sfc");
+        let both = StatesLayout { by_core: true, by_content: true };
+        assert_eq!(both.dir_for(root, Some("Snes9x"), rom), root.join("Snes9x").join("SNES"));
+        assert_eq!(StatesLayout::default().dir_for(root, Some("Snes9x"), rom), root.to_path_buf());
+        // The core of a state made without core folders is unknown.
+        assert_eq!(both.dir_for(root, None, rom), root.join("SNES"));
+    }
+
+    #[test]
+    fn only_downloads_supabase_savestate_links() {
+        assert!(is_shared_state_url("https://abcd1234.supabase.co/storage/v1/object/sign/savestates/u1/x.state?token=t"));
+        assert!(!is_shared_state_url("http://abcd1234.supabase.co/storage/v1/object/sign/savestates/u1/x.state"));
+        assert!(!is_shared_state_url("https://evil.com/storage/v1/object/sign/savestates/x"));
+        assert!(!is_shared_state_url("https://abcd.supabase.co.evil.com/storage/v1/object/sign/savestates/x"));
+        assert!(!is_shared_state_url("https://abcd.supabase.co/storage/v1/object/sign/avatars/x"));
+        assert!(!is_shared_state_url("https://abcd.supabase.co/storage/v1/object/sign/savestates/../avatars/x"));
+        assert!(!is_shared_state_url("https://user@abcd.supabase.co/storage/v1/object/sign/savestates/x"));
+    }
+
+    #[test]
+    fn rejects_folder_names_that_escape_the_states_folder() {
+        assert_eq!(safe_component("Snes9x"), Some("Snes9x"));
+        assert_eq!(safe_component("Beetle PSX HW"), Some("Beetle PSX HW"));
+        for bad in ["", "..", ".", "a/b", "a\\b", "C:", ".hidden"] {
+            assert_eq!(safe_component(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn stores_a_received_state_in_a_new_slot() {
+        let root = temp_dir("recv");
+        let dir = root.join("Snes9x");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Zelda.state1"), b"mine").unwrap();
+
+        let stored = store_received_state(&dir, "Zelda", b"friend").unwrap();
+        assert_eq!(stored, dir.join("Zelda.state2"));
+        assert_eq!(fs::read(&stored).unwrap(), b"friend");
+        assert_eq!(fs::read(dir.join("Zelda.state1")).unwrap(), b"mine", "never overwrite an existing slot");
+
+        // A core folder that does not exist yet is created.
+        let fresh = store_received_state(&root.join("Mesen"), "Zelda", b"x").unwrap();
+        assert_eq!(fresh, root.join("Mesen").join("Zelda.state1"));
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]

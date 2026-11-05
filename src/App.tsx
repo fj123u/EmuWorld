@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -1991,7 +1991,6 @@ export default function App() {
     setAchievementAnimationState(on);
     try { localStorage.setItem(ACHIEVEMENT_ANIMATION_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
   }, []);
-  const showErrorToast = useCallback((message: string) => showToast(message, "error"), [showToast]);
   const closeSaveStates = useCallback(() => setSaveStatesRom(null), []);
   const dismissCelebration = useCallback(() => setCelebrations((q) => q.slice(1)), []);
 
@@ -2581,6 +2580,15 @@ export default function App() {
       setLeaderboardLoading(false);
     }
   }, []);
+
+  // Accepted friends a save state can be sent to.
+  const shareFriends = useMemo(
+    () => (user ? friends.map(f => ({
+      id: f.requester_id === user.id ? f.addressee_id : f.requester_id,
+      username: f.profile?.username || "?",
+    })) : []),
+    [friends, user]
+  );
 
   // ---- Friends handlers ----
   const loadFriends = useCallback(async () => {
@@ -9292,9 +9300,19 @@ export default function App() {
           rom={saveStatesRom}
           t={t}
           locale={locale}
+          userId={user?.id ?? null}
+          friends={shareFriends}
           onClose={closeSaveStates}
           onResume={(slot) => { const rom = saveStatesRom; setSaveStatesRom(null); handleLaunch(rom, slot); }}
-          onError={showErrorToast}
+          onNotify={showToast}
+          onShared={(friend) => {
+            if (!user) return;
+            supabase.from("messages").insert({
+              sender_id: user.id,
+              receiver_id: friend.id,
+              content: tl("saveStates.chatMessage", { game: saveStatesRom.name }),
+            }).then(() => {}, () => {});
+          }}
         />
       )}
 

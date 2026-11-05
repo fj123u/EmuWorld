@@ -6790,6 +6790,8 @@ pub fn run() {
             savestates::rename_save_state,
             savestates::duplicate_save_state,
             savestates::delete_save_state,
+            savestates::read_save_state,
+            savestates::import_save_state,
             is_portable_mode,
             save_config,
             get_emulator_catalog,

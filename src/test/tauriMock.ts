@@ -96,6 +96,11 @@ export function defaultHandlers(): Record<string, Handler> {
     rename_save_state: () => null,
     duplicate_save_state: () => "C:\\RetroArch\\states\\copy.state1",
     delete_save_state: () => null,
+    read_save_state: () => new Uint8Array([0x52, 0x5a, 0x49, 0x50]).buffer, // tauri::ipc::Response → ArrayBuffer
+    import_save_state: () => ({
+      path: "C:\\RetroArch\\states\\received.state1", file_name: "received.state1", slot: 1, auto: false,
+      folder: null, core: null, modified: null, size: 4, thumbnail: null, label: null,
+    }),
     launch_emulator: () => "Launched",
     // Tauri plugins
     "plugin:app|version": () => "0.0.0-test",
