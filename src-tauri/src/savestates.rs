@@ -148,15 +148,28 @@ fn labels_path() -> PathBuf {
     crate::emuworld_base_dir().join("savestate_labels.json")
 }
 
+/// Same key for the same file however its path is spelled: the commands get
+/// canonical `\\?\C:\…` paths, the listing plain ones that may use 8.3 short
+/// names or another letter case. Existing files are keyed by their canonical
+/// path, without the `\\?\` prefix.
 fn label_key(path: &Path) -> String {
-    path.to_string_lossy().replace('/', "\\").to_lowercase()
+    let resolved = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let raw = resolved.to_string_lossy().replace('/', "\\");
+    let plain = if let Some(unc) = raw.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{}", unc)
+    } else {
+        raw.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(raw)
+    };
+    plain.to_lowercase()
 }
 
 fn load_labels(file: &Path) -> HashMap<String, String> {
-    fs::read_to_string(file)
+    let stored: HashMap<String, String> = fs::read_to_string(file)
         .ok()
         .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default()
+        .unwrap_or_default();
+    // Names saved before keys were normalised still apply.
+    stored.into_iter().map(|(k, v)| (label_key(Path::new(&k)), v)).collect()
 }
 
 fn save_labels(file: &Path, labels: &HashMap<String, String>) -> Result<(), String> {
@@ -520,6 +533,26 @@ mod tests {
         assert!(ensure_state_file(&root, &root.join("..").join(outside.file_name().unwrap()).join("Zelda.state1")).is_err());
         fs::remove_dir_all(&root).ok();
         fs::remove_dir_all(&outside).ok();
+    }
+
+    #[test]
+    fn a_name_given_through_a_canonical_path_shows_in_the_list() {
+        let root = temp_dir("labels");
+        fs::write(root.join("Zelda.state"), b"s").unwrap();
+        // rename_save_state stores the key of the canonical path (\\?\C:\… on Windows)…
+        let canonical = ensure_state_file(&root, &root.join("Zelda.state")).unwrap();
+        let labels_file = root.join("labels.json");
+        save_labels(&labels_file, &HashMap::from([(label_key(&canonical), "Avant le boss".to_string())])).unwrap();
+        // …and the listing walks plain paths: both must meet.
+        let states = list_states(&root, "Zelda", &load_labels(&labels_file), StatesLayout::default());
+        assert_eq!(states[0].label.as_deref(), Some("Avant le boss"));
+
+        // A file written before the fix (raw \\?\ key) is read the same way.
+        let legacy = format!(r"\\?\{}", root.join("Zelda.state").display()).to_lowercase();
+        fs::write(&labels_file, serde_json::to_string(&HashMap::from([(legacy, "Ancien nom")])).unwrap()).unwrap();
+        let states = list_states(&root, "Zelda", &load_labels(&labels_file), StatesLayout::default());
+        assert_eq!(states[0].label.as_deref(), Some("Ancien nom"));
+        fs::remove_dir_all(&root).ok();
     }
 
     #[test]
