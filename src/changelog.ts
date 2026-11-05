@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.6.1", date: "2026-11-06", changes: [
+    "🐛 Fix covers manquantes après « Vider le cache » : les covers sont maintenant récupérées 6 par 6 au lieu de toutes en même temps (iiDB et les autres sources refusaient la rafale)",
+  ] },
   { version: "2.6.0", date: "2026-11-06", changes: [
     "🖼️ Covers: iiDB (iidb.iisu.network) devient la première source — beaucoup plus de jaquettes, repli automatique sur les autres sources",
     "🖼️ Covers carrées affichées en entier sur un fond flou au lieu d'être rognées",

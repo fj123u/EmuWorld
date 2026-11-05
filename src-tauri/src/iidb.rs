@@ -297,6 +297,25 @@ pub fn asset_url(filename: &str) -> Option<String> {
     ok.then(|| format!("https://{}/{}", ASSETS_HOST, filename))
 }
 
+/// iiDB asked us to slow down (HTTP 429): skip it until this time (Unix
+/// seconds) and let the other sources answer, instead of hammering it.
+static PAUSED_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// How long iiDB is left alone after a 429.
+pub const RATE_LIMIT_PAUSE_SECS: u64 = 60;
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
+/// Whether iiDB is paused at `now` (Unix seconds).
+pub fn paused_at(now: u64) -> bool {
+    now < PAUSED_UNTIL.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+fn pause_from(now: u64) {
+    PAUSED_UNTIL.store(now + RATE_LIMIT_PAUSE_SECS, std::sync::atomic::Ordering::Relaxed);
+}
+
 pub fn user_agent() -> String {
     format!("EmuWorld/{} (+https://github.com/fj123u/EmuWorld)", env!("CARGO_PKG_VERSION"))
 }
@@ -309,9 +328,12 @@ pub async fn find_boxart_url(client: &reqwest::Client, rom_name: &str, console: 
     if wanted.is_empty() {
         return Ok(None);
     }
+    if paused_at(unix_now()) {
+        return Err("iiDB en pause (trop de requêtes), autres sources utilisées".to_string());
+    }
     let titles = query_variants(rom_name);
     for query in &titles {
-        let page: SearchPage = client
+        let resp = client
             .get(SEARCH_URL)
             .header(reqwest::header::USER_AGENT, user_agent())
             .query(&[
@@ -326,7 +348,13 @@ pub async fn find_boxart_url(client: &reqwest::Client, rom_name: &str, console: 
             ])
             .send()
             .await
-            .map_err(|e| format!("iiDB search: {}", e))?
+            .map_err(|e| format!("iiDB search: {}", e))?;
+        if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            pause_from(unix_now());
+            crate::push_log("WARN", &format!("iiDB: trop de requêtes (429), pause de {} s", RATE_LIMIT_PAUSE_SECS));
+            return Err("iiDB search: 429 Too Many Requests".to_string());
+        }
+        let page: SearchPage = resp
             .error_for_status()
             .map_err(|e| format!("iiDB search: {}", e))?
             .json()
@@ -342,6 +370,17 @@ pub async fn find_boxart_url(client: &reqwest::Client, rom_name: &str, console: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rate_limit_pauses_iidb_for_a_while() {
+        let now = 2_000_000_000; // far from the real clock: no clash with other tests
+        assert!(!paused_at(now));
+        pause_from(now);
+        assert!(paused_at(now));
+        assert!(paused_at(now + RATE_LIMIT_PAUSE_SECS - 1));
+        assert!(!paused_at(now + RATE_LIMIT_PAUSE_SECS));
+        PAUSED_UNTIL.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
 
     fn game(name: &str, platforms: &str, boxart: Option<&str>) -> Game {
         Game {
