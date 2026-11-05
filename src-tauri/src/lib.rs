@@ -346,6 +346,7 @@ mod cloud_backup;
 mod dpapi;
 mod atomic_file;
 mod iidb;
+mod savestates;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -931,6 +932,8 @@ fn retroarch_launch_settings(rewind: Option<bool>) -> Vec<(&'static str, &'stati
         ("video_windowed_fullscreen", "true"),
         ("pause_nonactive", "false"),
         ("menu_pause_libretro", "false"),
+        // Save states get a screenshot, shown by the save states manager.
+        ("savestate_thumbnail_enable", "true"),
     ];
     if let Some(enabled) = rewind {
         settings.push(("rewind_enable", if enabled { "true" } else { "false" }));
@@ -965,8 +968,9 @@ async fn launch_emulator(
     rom_path: Option<String>,
     rom_name: Option<String>,
     rom_console: Option<String>,
+    entry_slot: Option<u32>,
 ) -> Result<String, String> {
-    push_log("INFO", &format!("Lancement émulateur: {} (ROM: {:?}, jeu: {:?}, console: {:?})", emulator_id, rom_path, rom_name, rom_console));
+    push_log("INFO", &format!("Lancement émulateur: {} (ROM: {:?}, jeu: {:?}, console: {:?}, slot: {:?})", emulator_id, rom_path, rom_name, rom_console, entry_slot));
     let catalog = emulators::get_catalog();
     let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or_else(|| "Emulator not found".to_string())?.clone();
     let config = get_config();
@@ -1130,6 +1134,16 @@ async fn launch_emulator(
                 } else {
                     println!("[Launch] WARNING: Core '{}' not found in {}", core, core_search_path.display());
                 }
+            }
+        }
+
+        // Resume from a save state (save states manager): RetroArch only.
+        if let Some(slot) = entry_slot {
+            if effective_id.starts_with("retroarch") {
+                push_log("INFO", &format!("RetroArch: reprise depuis le slot {}", slot));
+                cmd.arg("--entryslot").arg(slot.to_string());
+            } else {
+                push_log("WARN", &format!("Slot {} ignoré: {} n'est pas lancé via RetroArch", slot, effective_id));
             }
         }
 
@@ -6772,6 +6786,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             get_config,
+            savestates::list_save_states,
+            savestates::rename_save_state,
+            savestates::duplicate_save_state,
+            savestates::delete_save_state,
             is_portable_mode,
             save_config,
             get_emulator_catalog,

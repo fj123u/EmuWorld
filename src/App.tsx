@@ -14,6 +14,7 @@ import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
+import { SaveStatesModal } from "./SaveStatesModal";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
   Search,
@@ -79,6 +80,7 @@ import {
   BookOpen,
   ThumbsUp,
   Swords,
+  Save,
 } from "lucide-react";
 
 /* ============================
@@ -1512,6 +1514,7 @@ export default function App() {
   // ---- Launch splash ----
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
+  const [saveStatesRom, setSaveStatesRom] = useState<RomFile | null>(null);
   const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; entries: { path: string; data_url: string }[] } | null>(null);
   const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
   const [showAllScreenshots, setShowAllScreenshots] = useState(false);
@@ -1988,6 +1991,8 @@ export default function App() {
     setAchievementAnimationState(on);
     try { localStorage.setItem(ACHIEVEMENT_ANIMATION_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
   }, []);
+  const showErrorToast = useCallback((message: string) => showToast(message, "error"), [showToast]);
+  const closeSaveStates = useCallback(() => setSaveStatesRom(null), []);
   const dismissCelebration = useCallback(() => setCelebrations((q) => q.slice(1)), []);
 
   // Stable translator for event handlers, callbacks and listeners: it reads the
@@ -5250,7 +5255,7 @@ export default function App() {
     }
   };
 
-  const handleLaunch = async (rom: RomFile) => {
+  const handleLaunch = async (rom: RomFile, entrySlot?: number) => {
     try {
       console.log("handleLaunch triggered for ROM:", rom);
       const emulator = catalog.find(e => e.console === rom.console);
@@ -5274,6 +5279,7 @@ export default function App() {
         romPath: rom.path || null,
         romName: rom.name || null,
         romConsole: rom.console || null,
+        entrySlot: entrySlot ?? null,
       });
       console.log("Backend Launch Success:", res);
       updatePresence("playing", rom.name, rom.console);
@@ -9255,6 +9261,9 @@ export default function App() {
             }}>
               <Camera size={14} /> Screenshots
             </button>
+            <button className="rom-context-menu__btn" onClick={() => { setSaveStatesRom(romContextMenu.rom); setRomContextMenu(null); }}>
+              <Save size={14} /> {t("saveStates.menu")}
+            </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenGuide(romContextMenu.rom); }}>
               <BookOpen size={14} /> Guide
@@ -9276,6 +9285,17 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {saveStatesRom && (
+        <SaveStatesModal
+          rom={saveStatesRom}
+          t={t}
+          locale={locale}
+          onClose={closeSaveStates}
+          onResume={(slot) => { const rom = saveStatesRom; setSaveStatesRom(null); handleLaunch(rom, slot); }}
+          onError={showErrorToast}
+        />
       )}
 
       {/* Screenshots Gallery Modal */}

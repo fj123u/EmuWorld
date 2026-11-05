@@ -339,6 +339,77 @@ describe("console colours", () => {
   });
 });
 
+describe("save states manager", () => {
+  const states = [
+    { path: "C:\\RA\\states\\Mesen\\smb3.state2", file_name: "smb3.state2", slot: 2, auto: false, folder: "Mesen", modified: "2026-11-04T20:00:00Z", size: 2_500_000, thumbnail: "data:image/png;base64,AA", label: "Avant Bowser" },
+    { path: "C:\\RA\\states\\Mesen\\smb3.state.auto", file_name: "smb3.state.auto", slot: null, auto: true, folder: "Mesen", modified: "2026-11-03T20:00:00Z", size: 40_000, thumbnail: null, label: null },
+  ];
+
+  async function openSaveStates(overrides: Record<string, Handler> = {}) {
+    const r = await renderApp({ list_save_states: () => states, ...overrides });
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
+    fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
+    fireEvent.click(await screen.findByRole("button", { name: /Save states/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Save states" });
+    await screen.findByText("Avant Bowser");
+    return { ...r, dialog };
+  }
+
+  it("lists the game's states, named or by slot", async () => {
+    const { backend, dialog } = await openSaveStates();
+    expect(backend.calls.find((c) => c.cmd === "list_save_states")?.args).toEqual({ romPath: "D:\\Roms\\NES\\smb3.nes" });
+    expect(dialog.textContent).toContain("Avant Bowser");
+    expect(dialog.textContent).toContain("Slot 2");
+    expect(dialog.textContent).toContain("Sauvegarde auto");
+    expect(dialog.querySelectorAll("img").length).toBe(1);
+  });
+
+  it("resumes the game from a slot through the launcher", async () => {
+    const { backend } = await openSaveStates();
+    fireEvent.click(screen.getByRole("button", { name: /Reprendre/ }));
+    await waitFor(() => expect(backend.count("launch_emulator")).toBe(1));
+    expect(backend.calls.find((c) => c.cmd === "launch_emulator")?.args).toMatchObject({ emulatorId: "mesen", entrySlot: 2 });
+    expect(screen.queryByRole("dialog", { name: "Save states" })).toBeNull();
+  });
+
+  it("names, duplicates and deletes (after confirmation) a state", async () => {
+    const { backend } = await openSaveStates();
+    fireEvent.click(screen.getAllByRole("button", { name: "Nommer" })[1]);
+    const input = screen.getByPlaceholderText("Nom (ex. : avant le boss)");
+    fireEvent.change(input, { target: { value: "Monde 8" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+    await waitFor(() => expect(backend.calls.find((c) => c.cmd === "rename_save_state")?.args).toEqual({ path: states[1].path, label: "Monde 8" }));
+
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Dupliquer dans un slot libre" })[0]);
+    });
+    await waitFor(() => expect(backend.count("duplicate_save_state")).toBe(1));
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Mettre à la corbeille" })[0]);
+    expect(backend.count("delete_save_state")).toBe(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Corbeille ?" }));
+    });
+    await waitFor(() => expect(backend.calls.find((c) => c.cmd === "delete_save_state")?.args).toEqual({ path: states[0].path }));
+    // Every change reloads the list from disk.
+    expect(backend.count("list_save_states")).toBeGreaterThanOrEqual(4);
+  });
+
+  it("explains how to make one when the game has none", async () => {
+    const r = await renderApp({ list_save_states: () => [] });
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    const card = r.container.querySelector(".game-grid .game-card")!;
+    fireEvent.contextMenu(card);
+    fireEvent.click(await screen.findByRole("button", { name: /Save states/ }));
+    expect(await screen.findByText(/F2 sauvegarde dans le slot actuel/)).toBeTruthy();
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });

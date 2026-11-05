@@ -698,6 +698,26 @@ const en: Translations = {
     next: "Next",
     continue: "Continue",
   },
+  saveStates: {
+    menu: "Save states",
+    title: "Save states",
+    close: "Close",
+    loading: "Looking for save states…",
+    empty: "No RetroArch save states for this game yet. In game, F2 saves to the current slot and F6/F7 switch slots.",
+    slot: "Slot {slot}",
+    auto: "Auto save",
+    namePlaceholder: "Name (e.g. before the boss)",
+    resume: "Resume",
+    resumeHint: "Launch the game and load this save state",
+    rename: "Name",
+    duplicate: "Duplicate to a free slot",
+    delete: "Move to the recycle bin",
+    confirmDelete: "Recycle bin?",
+    cancel: "Cancel",
+    sizeKb: "{size} KB",
+    sizeMb: "{size} MB",
+    hint: "Thumbnails appear for save states made from now on. \"Resume\" only works for games launched through RetroArch.",
+  },
 };
 
 export default en;

@@ -696,6 +696,26 @@ const fr = {
     next: "Suivant",
     continue: "Continuer",
   },
+  saveStates: {
+    menu: "Save states",
+    title: "Save states",
+    close: "Fermer",
+    loading: "Recherche des save states…",
+    empty: "Aucun save state RetroArch pour ce jeu. En jeu, F2 sauvegarde dans le slot actuel et F6/F7 changent de slot.",
+    slot: "Slot {slot}",
+    auto: "Sauvegarde auto",
+    namePlaceholder: "Nom (ex. : avant le boss)",
+    resume: "Reprendre",
+    resumeHint: "Lance le jeu et charge ce save state",
+    rename: "Nommer",
+    duplicate: "Dupliquer dans un slot libre",
+    delete: "Mettre à la corbeille",
+    confirmDelete: "Corbeille ?",
+    cancel: "Annuler",
+    sizeKb: "{size} Ko",
+    sizeMb: "{size} Mo",
+    hint: "Les captures apparaissent pour les save states créés à partir de maintenant. « Reprendre » ne fonctionne que pour les jeux lancés via RetroArch.",
+  },
 };
 
 export type Translations = typeof fr;

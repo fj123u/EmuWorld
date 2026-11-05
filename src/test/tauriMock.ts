@@ -91,6 +91,12 @@ export function defaultHandlers(): Record<string, Handler> {
     get_logs_directory: () => "C:\\logs",
     get_all_screenshots: () => [],
     get_screenshots: () => [],
+    // Save states manager (savestates.rs)
+    list_save_states: () => [],
+    rename_save_state: () => null,
+    duplicate_save_state: () => "C:\\RetroArch\\states\\copy.state1",
+    delete_save_state: () => null,
+    launch_emulator: () => "Launched",
     // Tauri plugins
     "plugin:app|version": () => "0.0.0-test",
     "plugin:updater|check": () => null,
