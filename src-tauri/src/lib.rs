@@ -347,6 +347,7 @@ mod dpapi;
 mod atomic_file;
 mod iidb;
 mod savestates;
+mod netplay;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -5960,124 +5961,6 @@ async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 
-#[tauri::command]
-async fn launch_netplay(emulator_id: String, rom_path: String, is_host: bool, lobby_id: String) -> Result<String, String> {
-    let catalog = emulators::get_catalog();
-    let emu = catalog.iter().find(|e| e.id == emulator_id).ok_or("Emulator not found")?;
-    let config = get_config();
-    let final_path = rom_path.replace(r"\\?\", "").replace("/", "\\");
-
-    let mut cmd = if emu.id == "ppsspp" {
-        // PPSSPP adhoc multiplayer — configure adhoc server then launch game
-        let ppsspp_dir = PathBuf::from(&config.emulators_directory).join("ppsspp");
-        let ppsspp_exe = find_executable(&ppsspp_dir, "PPSSPPWindows64.exe")
-            .ok_or("PPSSPP not installed")?;
-        let exe_dir = ppsspp_exe.parent().unwrap_or(&ppsspp_dir);
-        let memstick = exe_dir.join("memstick");
-        let psp_dir = memstick.join("PSP").join("SYSTEM");
-        fs::create_dir_all(&psp_dir).ok();
-        let ini_path = psp_dir.join("ppsspp.ini");
-        let mut ini = fs::read_to_string(&ini_path).unwrap_or_default();
-        // Enable networking + set adhoc server
-        let net_settings = [
-            ("Enable", "True"),
-            ("EnableWlan", "True"),
-            ("EnableAdhocServer", "False"),
-            ("proAdhocServer", "myneighborsushicat.com"),
-            ("PortOffset", "0"),
-            ("MacAddress", if is_host { "01:02:03:04:05:06" } else { "01:02:03:04:05:07" }),
-        ];
-        for (key, val) in net_settings {
-            let pattern = format!("{} = ", key);
-            if let Some(pos) = ini.find(&pattern) {
-                let end = ini[pos..].find('\n').map(|p| pos + p).unwrap_or(ini.len());
-                ini.replace_range(pos..end, &format!("{} = {}", key, val));
-            } else {
-                if !ini.contains("[Network]") { ini.push_str("\n[Network]\n"); }
-                ini.push_str(&format!("{} = {}\n", key, val));
-            }
-        }
-        let _ = fs::write(&ini_path, &ini);
-
-        let mut c = Command::new(&ppsspp_exe);
-        c.current_dir(exe_dir);
-        c.arg(&final_path);
-        c.arg("--fullscreen");
-        c
-    } else if emu.id == "dolphin" {
-        // Dolphin netplay via traversal server
-        let dolphin_dir = PathBuf::from(&config.emulators_directory).join("dolphin");
-        let dolphin_exe = find_executable(&dolphin_dir, "Dolphin.exe")
-            .ok_or("Dolphin not installed")?;
-
-        // Configure Dolphin to use traversal mode
-        let dolphin_cfg_dir = dirs::config_dir().unwrap_or_default().join("Dolphin Emulator").join("Config");
-        let dolphin_ini = dolphin_cfg_dir.join("Dolphin.ini");
-        if dolphin_ini.exists() {
-            let mut cfg = std::fs::read_to_string(&dolphin_ini).unwrap_or_default();
-            if cfg.contains("[NetPlay]") {
-                let re = regex::Regex::new(r"TraversalChoice = \w+").unwrap();
-                cfg = re.replace(&cfg, "TraversalChoice = traversal").to_string();
-            } else {
-                cfg.push_str("\n[NetPlay]\nTraversalChoice = traversal\n");
-            }
-            let _ = std::fs::write(&dolphin_ini, &cfg);
-        }
-
-        let mut c = Command::new(&dolphin_exe);
-        c.current_dir(dolphin_exe.parent().unwrap_or(&dolphin_dir));
-        c.arg("-e").arg(&final_path);
-        if is_host {
-            c.arg("--netplay=host");
-        } else {
-            c.arg("--netplay=connect");
-        }
-        c
-    } else {
-        // RetroArch netplay via MITM relay
-        let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-        let ra_exe = find_executable(&ra_dir, "retroarch.exe")
-            .ok_or("RetroArch not installed — required for netplay")?;
-        let effective_ra_dir = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
-
-        let core_name = emu.core_name.as_deref()
-            .or_else(|| retroachievements::retroarch_core_for_emulator(&emu.id))
-            .ok_or("No RetroArch core available for this emulator")?;
-        let cores_dir = effective_ra_dir.join("cores");
-        let core_path = cores_dir.join(core_name);
-        if !core_path.exists() {
-            return Err(format!("Core '{}' not found in RetroArch cores/", core_name));
-        }
-
-        let mut c = Command::new(&ra_exe);
-        c.current_dir(&effective_ra_dir);
-        c.arg("-L").arg(&core_path);
-        if is_host {
-            c.arg("--host");
-            c.arg("--mitm=netplay.libretro.com");
-            c.arg("--nick=EmuWorld-Host");
-        } else {
-            c.arg("--connect");
-            c.arg("netplay.libretro.com");
-            c.arg("--mitm=netplay.libretro.com");
-            c.arg("--nick=EmuWorld-Client");
-        }
-        c.arg(&final_path);
-        c
-    };
-
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000);
-    }
-
-    println!("[Netplay] Launching {} as {} for lobby {}", emu.id, if is_host { "HOST" } else { "CLIENT" }, lobby_id);
-    push_log("INFO", &format!("Netplay {} — {}", if is_host { "Host" } else { "Client" }, emu.name));
-
-    cmd.spawn().map_err(|e| format!("Failed to launch netplay: {}", e))?;
-    Ok(format!("Netplay {} started", if is_host { "host" } else { "client" }))
-}
 
 /// A log line sent by the UI: known level only, one line, at most 500 chars.
 fn sanitize_ui_log(level: &str, message: &str) -> (&'static str, String) {
@@ -6909,7 +6792,8 @@ pub fn run() {
             get_logs_directory,
             save_emulator_version,
             open_path,
-            launch_netplay,
+            netplay::launch_netplay,
+            netplay::find_netplay_session,
             start_oauth_server,
             create_overlay_window,
             close_overlay_window,

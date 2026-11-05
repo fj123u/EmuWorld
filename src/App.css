@@ -1535,6 +1535,25 @@ body {
 .lobby-panel__members { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.8rem; }
 .lobby-panel__member { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; background: var(--bg-secondary); border-radius: 6px; font-size: 0.8rem; }
 .lobby-panel__member--ready { border-left: 3px solid #22c55e; }
+.lobby-panel__warning {
+  margin: 6px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--neon-amber);
+}
+.lobby-panel__live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--neon-green);
+}
+.lobby-panel__hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .lobby-panel__status { font-size: 0.75rem; opacity: 0.7; }
 .lobby-panel__actions { display: flex; flex-direction: column; gap: 0.5rem; }
 .lobby-panel__invite-select { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 0.4rem; color: var(--text-primary); font-size: 0.8rem; }

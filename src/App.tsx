@@ -16,6 +16,8 @@ import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMAT
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
+import { findLobbyRom, isLobbyOpen, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
+import { LobbyPanel } from "./LobbyPanel";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -3966,27 +3968,66 @@ export default function App() {
   useEffect(() => { if (user) loadVersusChallenges(); }, [user, loadVersusChallenges]);
 
   // ─── Lobby / Multiplayer ───
+  // Flow: the host launches first; for RetroArch EmuWorld finds the host's
+  // relay room and publishes it in the lobby, then friends join it
+  // (src/netplay.ts, src-tauri/src/netplay.rs).
   interface Lobby { id: string; host_id: string; game_name: string; game_console: string; status: string; max_players: number; netplay_code: string | null; created_at: string; members?: LobbyMember[]; host_profile?: { username: string; avatar_url: string } }
-  interface LobbyMember { id: string; lobby_id: string; user_id: string; is_ready: boolean; profile?: { username: string; avatar_url: string } }
+  interface LobbyMember { id?: string; lobby_id: string; user_id: string; is_ready: boolean; profile?: { username: string | null; avatar_url?: string | null } | null }
   const [currentLobby, setCurrentLobby] = useState<Lobby | null>(null);
   const [lobbyInvites, setLobbyInvites] = useState<Lobby[]>([]);
+  const [lobbyBusy, setLobbyBusy] = useState<"launching" | "joining" | null>(null);
+  // Lobbies this player already joined the game of: one launch per lobby.
+  const joinedLobbiesRef = useRef<Set<string>>(new Set());
+  const lobbyLog = useCallback((level: "INFO" | "WARN" | "ERROR", message: string) => {
+    invoke("log_event", { level, message: `Lobby: ${message}` }).catch(() => {});
+  }, []);
+  const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+  const loadLobbyMembers = useCallback(async (lobbyId: string): Promise<LobbyMember[]> => {
+    const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", lobbyId);
+    const list = (members || []) as LobbyMember[];
+    if (list.length === 0) return [];
+    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", list.map(m => m.user_id));
+    const byId = new Map(((profiles || []) as { id: string; username: string | null; avatar_url: string | null }[]).map(p => [p.id, p]));
+    return list.map(m => ({ ...m, profile: byId.get(m.user_id) ?? null }));
+  }, []);
+
+  const refreshLobbyMembers = useCallback(async (lobbyId: string) => {
+    const members = await loadLobbyMembers(lobbyId);
+    setCurrentLobby(prev => (prev && prev.id === lobbyId ? { ...prev, members } : prev));
+  }, [loadLobbyMembers]);
 
   const loadLobbyInvites = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase.from("lobby_members").select("lobby_id").eq("user_id", user.id);
-    if (data && data.length > 0) {
-      const lobbyIds = data.map((m: any) => m.lobby_id);
-      const { data: lobbies } = await supabase.from("lobbies").select("*").in("id", lobbyIds).eq("status", "waiting").neq("host_id", user.id);
-      if (lobbies && lobbies.length > 0) {
-        const hostIds = [...new Set(lobbies.map((l: any) => l.host_id))];
-        const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", hostIds);
-        const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-        setLobbyInvites(lobbies.filter((l: any) => l.host_id !== user.id).map((l: any) => ({ ...l, host_profile: profileMap.get(l.host_id) })));
-      } else {
-        setLobbyInvites([]);
-      }
-    }
+    const lobbyIds = ((data || []) as { lobby_id: string }[]).map(m => m.lobby_id);
+    if (lobbyIds.length === 0) { setLobbyInvites([]); return; }
+    const { data: lobbies } = await supabase.from("lobbies").select("*").in("id", lobbyIds).neq("host_id", user.id);
+    // Abandoned or closed lobbies are no longer offered.
+    const open = ((lobbies || []) as Lobby[]).filter(l => isLobbyOpen(l));
+    if (open.length === 0) { setLobbyInvites([]); return; }
+    const hostIds = [...new Set(open.map(l => l.host_id))];
+    const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", hostIds);
+    const byId = new Map(((profiles || []) as { id: string; username: string; avatar_url: string }[]).map(p => [p.id, p]));
+    setLobbyInvites(open.map(l => ({ ...l, host_profile: byId.get(l.host_id) })));
   }, [user]);
+
+  // After a restart, the host gets their open lobby back.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from("lobbies").select("*").eq("host_id", user.id).neq("status", "closed").order("created_at", { ascending: false }).limit(1);
+      const lobby = ((data || []) as Lobby[]).find(l => isLobbyOpen(l));
+      if (!lobby || cancelled) return;
+      const members = await loadLobbyMembers(lobby.id);
+      if (!cancelled) setCurrentLobby(prev => prev ?? { ...lobby, members });
+    })();
+    return () => { cancelled = true; };
+  }, [user, loadLobbyMembers]);
+
+  const lobbyEmulatorFor = useCallback((rom: RomFile) =>
+    catalog.find((e: any) => e.console === rom.console && installed.includes(e.id)), [catalog, installed]);
 
   const handleCreateLobby = useCallback(async (rom: RomFile) => {
     if (!user) return;
@@ -3995,103 +4036,161 @@ export default function App() {
       game_name: rom.name,
       game_console: rom.console,
     }).select().single();
-    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    if (error || !data) { showToast(tl("toast.error", { error: error?.message ?? "?" }), "error"); return; }
     await supabase.from("lobby_members").insert({ lobby_id: data.id, user_id: user.id, is_ready: true });
-    setCurrentLobby({ ...data, members: [{ id: "", lobby_id: data.id, user_id: user.id, is_ready: true }] });
+    setCurrentLobby({ ...data, members: await loadLobbyMembers(data.id) });
+    lobbyLog("INFO", `lobby ${data.id} créé pour ${rom.name} (${rom.console})`);
     showToast(tl("lobby.created"), "success");
-  }, [user, showToast]);
+  }, [user, showToast, tl, loadLobbyMembers, lobbyLog]);
 
   const handleInviteToLobby = useCallback(async (friendId: string) => {
     if (!currentLobby) return;
     const { error } = await supabase.from("lobby_members").insert({ lobby_id: currentLobby.id, user_id: friendId });
     if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    lobbyLog("INFO", `invitation envoyée pour le lobby ${currentLobby.id}`);
     showToast(tl("lobby.inviteSent"), "success");
-  }, [currentLobby, showToast]);
+    refreshLobbyMembers(currentLobby.id);
+  }, [currentLobby, showToast, tl, lobbyLog, refreshLobbyMembers]);
 
   const handleJoinLobby = useCallback(async (lobbyId: string) => {
     if (!user) return;
     await supabase.from("lobby_members").upsert({ lobby_id: lobbyId, user_id: user.id, is_ready: false });
     const { data } = await supabase.from("lobbies").select("*").eq("id", lobbyId).single();
-    const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", lobbyId);
-    if (data) setCurrentLobby({ ...data, members: members || [] });
-  }, [user]);
+    if (data) setCurrentLobby({ ...data, members: await loadLobbyMembers(lobbyId) });
+    setLobbyInvites(prev => prev.filter(l => l.id !== lobbyId));
+    lobbyLog("INFO", `lobby ${lobbyId} rejoint`);
+  }, [user, loadLobbyMembers, lobbyLog]);
 
   const handleReadyLobby = useCallback(async () => {
     if (!currentLobby || !user) return;
-    const hasRom = roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
-    if (!hasRom) {
+    if (!findLobbyRom(roms, currentLobby)) {
       showToast(tl("toast.lobbyMissingRom", { game: currentLobby.game_name }), "error");
       setPage("store");
       return;
     }
     await supabase.from("lobby_members").update({ is_ready: true }).eq("lobby_id", currentLobby.id).eq("user_id", user.id);
-    const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
-    setCurrentLobby({ ...currentLobby, members: members || [] });
-    const allReady = (members || []).every((m: any) => m.is_ready);
-    if (allReady && (members || []).length >= 2) {
-      await supabase.from("lobbies").update({ status: "ready" }).eq("id", currentLobby.id);
-      showToast(t("lobby.allReady"), "success");
-      const isHost = currentLobby.host_id === user.id;
-      const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
-      if (rom) {
-        const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
-        if (emu) invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost, lobbyId: currentLobby.id }).catch(() => {});
-      }
+    refreshLobbyMembers(currentLobby.id);
+  }, [currentLobby, user, roms, showToast, tl, refreshLobbyMembers]);
+
+  // Host: start the game, then publish how to join it.
+  const handleLaunchLobby = useCallback(async () => {
+    if (!currentLobby || !user || lobbyBusy) return;
+    const rom = findLobbyRom(roms, currentLobby);
+    const emu = rom ? lobbyEmulatorFor(rom) : undefined;
+    if (!rom || !emu) { showToast(tl("lobby.noEmulator", { console: currentLobby.game_console }), "error"); return; }
+    const lobbyId = currentLobby.id;
+    setLobbyBusy("launching");
+    try {
+      await startHostNetplay({
+        launch: () => invoke<NetplayLaunch>("launch_netplay", {
+          emulatorId: emu.id, romPath: rom.path, role: "host", lobbyId,
+          username: profile?.username || "Host", maxPlayers: Math.max(2, (currentLobby.members || []).length), relay: null,
+        }),
+        findSession: (nick) => invoke<RelaySession>("find_netplay_session", { nick, timeoutSecs: 60 }),
+        publish: async (code) => {
+          const netplay_code = JSON.stringify(code);
+          const { error } = await supabase.from("lobbies").update({ status: "playing", netplay_code }).eq("id", lobbyId);
+          if (error) throw new Error(error.message);
+          setCurrentLobby(prev => (prev && prev.id === lobbyId ? { ...prev, status: "playing", netplay_code } : prev));
+        },
+      });
+      lobbyLog("INFO", `partie du lobby ${lobbyId} publiée`);
+      showToast(tl("lobby.hostReady"), "success");
+    } catch (e) {
+      lobbyLog("ERROR", `lancement hôte du lobby ${lobbyId} impossible: ${errorText(e)}`);
+      showToast(tl("lobby.launchFailed", { error: errorText(e) }), "error");
+    } finally {
+      setLobbyBusy(null);
     }
-  }, [currentLobby, user, roms, showToast]);
+  }, [currentLobby, user, lobbyBusy, roms, lobbyEmulatorFor, profile, showToast, tl, lobbyLog]);
+
+  // Friend: join the game the host published.
+  const joinLobbyGame = useCallback(async (lobby: Lobby) => {
+    if (!user) return;
+    const code = parseNetplayCode(lobby.netplay_code);
+    if (!code) return;
+    const rom = findLobbyRom(roms, lobby);
+    const emu = rom ? lobbyEmulatorFor(rom) : undefined;
+    if (!rom || !emu) { showToast(tl("toast.lobbyMissingRom", { game: lobby.game_name }), "error"); return; }
+    joinedLobbiesRef.current.add(lobby.id);
+    setLobbyBusy("joining");
+    try {
+      await invoke<NetplayLaunch>("launch_netplay", {
+        emulatorId: emu.id, romPath: rom.path, role: "client", lobbyId: lobby.id,
+        username: profile?.username || "Player", maxPlayers: 2, relay: code.relay ?? null,
+      });
+      lobbyLog("INFO", `partie du lobby ${lobby.id} rejointe (${code.method})`);
+      showToast(tl("lobby.joined"), "success");
+    } catch (e) {
+      joinedLobbiesRef.current.delete(lobby.id);
+      lobbyLog("ERROR", `impossible de rejoindre le lobby ${lobby.id}: ${errorText(e)}`);
+      showToast(tl("lobby.launchFailed", { error: errorText(e) }), "error");
+    } finally {
+      setLobbyBusy(null);
+    }
+  }, [user, roms, lobbyEmulatorFor, profile, showToast, tl, lobbyLog]);
+
+  // Friends start on their own as soon as the host's game is published.
+  useEffect(() => {
+    if (currentLobby && user && lobbyBusy === null && shouldAutoJoin(currentLobby, user.id, joinedLobbiesRef.current)) {
+      joinLobbyGame(currentLobby);
+    }
+  }, [currentLobby, user, lobbyBusy, joinLobbyGame]);
 
   const handleLeaveLobby = useCallback(async () => {
     if (!currentLobby || !user) return;
+    const lobbyId = currentLobby.id;
     if (currentLobby.host_id === user.id) {
-      await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id);
-      await supabase.from("lobbies").delete().eq("id", currentLobby.id);
-      showToast(t("lobby.dissolved"), "success");
+      // "closed" first: friends are told through the lobby's realtime update.
+      await supabase.from("lobbies").update({ status: "closed" }).eq("id", lobbyId);
+      await supabase.from("lobby_members").delete().eq("lobby_id", lobbyId);
+      await supabase.from("lobbies").delete().eq("id", lobbyId);
+      showToast(tl("lobby.dissolved"), "success");
     } else {
-      await supabase.from("lobby_members").delete().eq("lobby_id", currentLobby.id).eq("user_id", user.id);
-      showToast(t("lobby.left"), "success");
+      await supabase.from("lobby_members").delete().eq("lobby_id", lobbyId).eq("user_id", user.id);
+      showToast(tl("lobby.left"), "success");
     }
+    lobbyLog("INFO", `lobby ${lobbyId} quitté`);
+    joinedLobbiesRef.current.delete(lobbyId);
     setCurrentLobby(null);
-  }, [currentLobby, user, showToast]);
+  }, [currentLobby, user, showToast, tl, lobbyLog]);
 
   useEffect(() => { if (user) loadLobbyInvites(); }, [user, loadLobbyInvites]);
 
-  // Realtime: listen for lobby invites
+  // Realtime: invitations addressed to this player.
   useEffect(() => {
     if (!user) return;
     const channel = supabase.channel("lobby-invites")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "lobby_members", filter: `user_id=eq.${user.id}` }, (payload: any) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "lobby_members", filter: `user_id=eq.${user.id}` }, () => {
         loadLobbyInvites();
-        showToast(t("lobby.inviteReceived"), "success");
+        showToast(tl("lobby.inviteReceived"), "success");
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, loadLobbyInvites, showToast]);
+  }, [user, loadLobbyInvites, showToast, tl]);
 
-  // Realtime: ALL players in a lobby see member changes + auto-launch when allReady
+  // Realtime: members of the current lobby, and the lobby itself (game published, closed).
   useEffect(() => {
     if (!user || !currentLobby) return;
-    const channel = supabase.channel(`lobby-members-${currentLobby.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "lobby_members", filter: `lobby_id=eq.${currentLobby.id}` }, async () => {
-        const { data: members } = await supabase.from("lobby_members").select("*").eq("lobby_id", currentLobby.id);
-        if (members) {
-          setCurrentLobby(prev => prev ? { ...prev, members } : prev);
-          const allReady = members.every((m: any) => m.is_ready);
-          if (allReady && members.length >= 2) {
-            const isHost = currentLobby.host_id === user.id;
-            const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
-            if (rom) {
-              const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
-              if (emu) {
-                showToast(t("lobby.allReady"), "success");
-                invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost, lobbyId: currentLobby.id }).catch(() => {});
-              }
-            }
-          }
+    const lobbyId = currentLobby.id;
+    const isHost = currentLobby.host_id === user.id;
+    const channel = supabase.channel(`lobby-${lobbyId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "lobby_members", filter: `lobby_id=eq.${lobbyId}` }, () => {
+        refreshLobbyMembers(lobbyId);
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "lobbies", filter: `id=eq.${lobbyId}` }, (payload: any) => {
+        const next = payload.new as Lobby;
+        if (next.status === "closed" && !isHost) {
+          joinedLobbiesRef.current.delete(lobbyId);
+          setCurrentLobby(null);
+          showToast(tl("lobby.dissolvedByHost"), "info");
+          return;
         }
+        setCurrentLobby(prev => (prev && prev.id === lobbyId ? { ...prev, ...next, members: prev.members } : prev));
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [user, currentLobby?.id, currentLobby?.host_id, roms, catalog, installed, showToast]);
+  }, [user, currentLobby?.id, currentLobby?.host_id, refreshLobbyMembers, showToast, tl]);
 
   // ─── Marketplace ───
   interface CommunityTheme { id: string; user_id: string; name: string; description: string; base_theme: string; accent_hue: number | null; custom_css: Record<string, string>; downloads: number; created_at: string; profile?: { username: string; avatar_url: string } }
@@ -8919,7 +9018,7 @@ export default function App() {
           </div>
           {lobbyInvites.map(inv => (
             <div key={inv.id} className="lobby-panel__game" style={{ marginBottom: 8 }}>
-              <strong>{inv.host_profile?.username || "?"}</strong> {t("lobby.inviteSent").replace("!", "")}
+              {t("lobby.invitedBy", { friend: inv.host_profile?.username || t("lobby.player") })}
               <div><small>{inv.game_name} ({inv.game_console})</small></div>
               <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                 <button className="btn btn--success btn--sm" onClick={() => handleJoinLobby(inv.id)}>{t("versus.accept")}</button>
@@ -8931,61 +9030,20 @@ export default function App() {
       )}
 
       {currentLobby && (
-        <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-          <div className="lobby-panel__header">
-            <h3>{t("lobby.title")}</h3>
-            <button className="btn btn--danger btn--sm" onClick={handleLeaveLobby}>
-              {currentLobby.host_id === user?.id ? t("lobby.dissolve") : t("lobby.leave")}
-            </button>
-          </div>
-          <div className="lobby-panel__game">
-            <strong>{currentLobby.game_name}</strong>
-            <span>{currentLobby.game_console}</span>
-          </div>
-          <div className="lobby-panel__members">
-            {(currentLobby.members || []).map((m, i) => (
-              <div key={m.user_id || i} className={`lobby-panel__member ${m.is_ready ? "lobby-panel__member--ready" : ""}`}>
-                <span>{m.user_id === user?.id ? "Toi" : (m.profile?.username || "Joueur")}</span>
-                <span className="lobby-panel__status">{m.is_ready ? "✓ Prêt" : "En attente..."}</span>
-              </div>
-            ))}
-          </div>
-          <div className="lobby-panel__actions">
-            {currentLobby.host_id === user?.id && friends.length > 0 && (
-              <select className="lobby-panel__invite-select gamepad-nav-item" onChange={(e) => { if (e.target.value) handleInviteToLobby(e.target.value); e.target.value = ""; }}>
-                <option value="">{t("lobby.inviteFriend")}</option>
-                {friends.map(f => {
-                  const friendId = f.requester_id === user?.id ? f.addressee_id : f.requester_id;
-                  if ((currentLobby.members || []).some(m => m.user_id === friendId)) return null;
-                  return <option key={friendId} value={friendId}>{f.profile?.username || "Ami"}</option>;
-                })}
-              </select>
-            )}
-            {!(currentLobby.members || []).find(m => m.user_id === user?.id)?.is_ready && (
-              roms.some(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console) ? (
-                <button className="btn btn--success btn--sm gamepad-nav-item" onClick={handleReadyLobby}>{t("lobby.ready")}</button>
-              ) : (
-                <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={() => setPage("store")}>
-                  <Download size={12} /> {t("lobby.downloadGame")}
-                </button>
-              )
-            )}
-            {(currentLobby.members || []).length >= 2 && (currentLobby.members || []).every(m => m.is_ready) && currentLobby.host_id === user?.id && (
-              <button className="btn btn--success gamepad-nav-item" onClick={() => {
-                const rom = roms.find(r => r.name === currentLobby.game_name && r.console === currentLobby.game_console);
-                if (rom) {
-                  const emu = catalog.find((e: any) => e.console === rom.console && installed.includes(e.id));
-                  if (emu) {
-                    invoke("launch_netplay", { emulatorId: emu.id, romPath: rom.path, isHost: true, lobbyId: currentLobby.id }).catch(() => {});
-                    showToast(t("lobby.allReady"), "success");
-                  }
-                }
-              }}>
-                <Play size={14} /> {t("lobby.launch")}
-              </button>
-            )}
-          </div>
-        </motion.div>
+        <LobbyPanel
+          lobby={currentLobby}
+          userId={user?.id ?? null}
+          friends={shareFriends}
+          myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
+          busy={lobbyBusy}
+          t={t}
+          onInvite={handleInviteToLobby}
+          onReady={handleReadyLobby}
+          onLaunch={handleLaunchLobby}
+          onJoin={() => { if (currentLobby) joinLobbyGame(currentLobby); }}
+          onLeave={handleLeaveLobby}
+          onGetGame={() => setPage("store")}
+        />
       )}
 
       {romContextMenu && (
