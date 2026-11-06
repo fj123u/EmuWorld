@@ -127,12 +127,15 @@ async fn index_for(client: &reqwest::Client, system: &str) -> Option<Arc<Index>>
             let resp = client.get(&url).timeout(std::time::Duration::from_secs(60)).send().await;
             let html = match resp {
                 Ok(r) if r.status().is_success() => r.text().await.ok()?,
-                Ok(r) => {
-                    push_log("WARN", &format!("Covers: liste libretro de '{}' indisponible (HTTP {})", system, r.status()));
-                    return None;
-                }
-                Err(e) => {
-                    push_log("WARN", &format!("Covers: liste libretro de '{}' indisponible ({})", system, e));
+                failure => {
+                    let why = match failure {
+                        Ok(r) => format!("HTTP {}", r.status()),
+                        Err(e) => e.to_string(),
+                    };
+                    push_log("WARN", &format!("Covers: liste libretro de '{}' indisponible ({}), ignorée jusqu'au prochain lancement", system, why));
+                    // Remember the miss: libretro has no Switch list (404), it was
+                    // downloaded again for every game.
+                    cache.insert(system.to_string(), Arc::new(Index::new()));
                     return None;
                 }
             };
