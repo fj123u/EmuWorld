@@ -371,6 +371,7 @@ mod savestates;
 mod netplay;
 mod speedrun;
 mod libretro_index;
+mod launchbox;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -2208,6 +2209,30 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                 }
             }
         }
+    }
+
+    // 2.95 LaunchBox Games Database: wide coverage, box art of the ROM's
+    // region (200 px thumbnails, so after the sources above).
+    match launchbox::find_box_url(&client, &game_name, &console).await {
+        Ok(Some(url)) => {
+            write_to_boxart_log(&format!("Trying LaunchBox: {}", url));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size.min(4096) {
+                            push_log("INFO", &format!("Cover LaunchBox trouvée: '{}' ({})", game_name, console));
+                            store_cover_url(&format!("{}::{}", console, game_name), &url);
+                            if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                return Ok(data_url);
+                            }
+                            return Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(None) => write_to_boxart_log("LaunchBox: no confident match"),
+        Err(e) => push_log("WARN", &format!("LaunchBox indisponible pour '{}': {}", game_name, e)),
     }
 
     // 3. Try Title Searching FIRST (Libretro / Wikipedia) as requested

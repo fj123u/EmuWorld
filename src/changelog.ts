@@ -13,6 +13,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
     "⏱️ Résumé du record à copier pour le partager",
   ] },
+  { version: "2.6.4", date: "2026-11-06", changes: [
+    "🖼️ Nouvelle source de covers : LaunchBox Games Database, avec la jaquette de la région de ta ROM (utilisée quand les autres sources n'ont rien)",
+  ] },
   { version: "2.6.3", date: "2026-11-06", changes: [
     "🖼️ Covers Switch de retour : tinfoil.media étant en panne, les icônes officielles de l'eShop viennent maintenant de nlib.cc (tinfoil reste en secours)",
   ] },
