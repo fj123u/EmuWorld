@@ -1865,6 +1865,12 @@ fn cover_http_client() -> &'static reqwest::Client {
     })
 }
 
+/// nlib.cc icon (official eShop art, 512×512) of a Switch title ID.
+fn nlib_icon_url(title_id: &str) -> Option<String> {
+    let valid = title_id.len() == 16 && title_id.chars().all(|c| c.is_ascii_hexdigit());
+    valid.then(|| format!("https://api.nlib.cc/nx/{}/icon/512/512", title_id.to_ascii_uppercase()))
+}
+
 #[tauri::command]
 async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
     let force_refresh = force_refresh.unwrap_or(false);
@@ -2070,9 +2076,30 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
         Err(e) => push_log("WARN", &format!("iiDB indisponible pour '{}' ({}), repli sur les autres sources", game_name, e)),
     }
 
-    // === SWITCH/WIIU: Try tinfoil.media first (best source for Switch covers) ===
+    // === SWITCH: official eShop icon by title ID ===
+    // nlib.cc first: tinfoil.media answers 503 or hangs since November 2026,
+    // which left well-known games (Luigi's Mansion 2 HD, Forager…) coverless.
     if console == "Nintendo Switch" {
         if let Some(id) = extract_title_id(&game_name).or_else(|| resolve_title_id(&game_name)) {
+            if let Some(url) = nlib_icon_url(&id) {
+                write_to_boxart_log(&format!("Trying nlib.cc: {}", url));
+                match client.get(&url).send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        if let Ok(bytes) = resp.bytes().await {
+                            if bytes.len() >= min_size {
+                                push_log("INFO", &format!("Cover Switch (nlib) trouvée: '{}' [{}]", game_name, id));
+                                store_cover_url(&format!("{}::{}", console, game_name), &url);
+                                if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                    return Ok(data_url);
+                                }
+                                return Ok(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
+                            }
+                        }
+                    }
+                    Ok(resp) => write_to_boxart_log(&format!("nlib.cc HTTP {} for {}", resp.status(), id)),
+                    Err(e) => push_log("WARN", &format!("nlib.cc indisponible pour '{}': {}", game_name, e)),
+                }
+            }
             let url = format!("https://tinfoil.media/ti/{}/512/512", id);
             write_to_boxart_log(&format!("Trying Tinfoil.media: {}", url));
             if let Ok(resp) = client.get(&url).send().await {
@@ -6873,6 +6900,20 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn switch_icons_come_from_nlib_by_title_id() {
+        assert_eq!(
+            super::nlib_icon_url("010048701995e000").as_deref(),
+            Some("https://api.nlib.cc/nx/010048701995E000/icon/512/512")
+        );
+        assert_eq!(super::nlib_icon_url("0100"), None);
+        // Names without an id still resolve through the known titles.
+        let sword = super::resolve_title_id("Pokemon Sword V1.3.2 Incl. 2 Dlcs Eur SuperXCi - kaze-nico");
+        assert_eq!(sword.as_deref(), Some("0100ABF008968000"));
+        assert!(super::nlib_icon_url(&sword.unwrap()).is_some());
+        assert_eq!(super::nlib_icon_url("010048701995E00/"), None, "only a 16-digit hex id ends up in the URL");
+    }
+
     #[test]
     fn cover_lookups_never_run_more_than_the_limit_at_once() {
         use std::sync::atomic::{AtomicUsize, Ordering};

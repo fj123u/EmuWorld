@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.6.3", date: "2026-11-06", changes: [
+    "🖼️ Covers Switch de retour : tinfoil.media étant en panne, les icônes officielles de l'eShop viennent maintenant de nlib.cc (tinfoil reste en secours)",
+  ] },
   { version: "2.6.2", date: "2026-11-06", changes: [
     "🖼️ Plus de covers trouvées : les jeux dont le nom diffère un peu de celui de libretro sont reconnus (« Duck Tales » ↔ « DuckTales », « Skate or Die! », « Wizards & Warriors »…)",
     "🐛 La version affichée en haut de l'app est la vraie (elle restait bloquée sur 2.5.3)",
