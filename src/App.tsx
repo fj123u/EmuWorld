@@ -22,6 +22,8 @@ import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
 import { fetchCloudNotes, syncCloudNotes } from "./playtimeNotes";
 import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
+import { getVersion } from "@tauri-apps/api/app";
+import { versionInRange } from "./appVersion";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -1865,23 +1867,28 @@ export default function App() {
     };
   }, [fetchProfile]);
 
+  // The real app version (tauri.conf.json), for the titlebar and announcements.
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setAppVersion).catch(() => {});
+  }, []);
+
   // Fetch announcements at startup
   useEffect(() => {
-    const APP_VERSION = "2.5.1";
+    if (!appVersion) return;
     const dismissed = localStorage.getItem("emuworld_dismissed_announcements") || "";
     supabase.from("announcements").select("*").eq("active", true).then(({ data }) => {
       if (!data || data.length === 0) return;
       const now = new Date().toISOString();
       const valid = data.filter((a: { id: string; expires_at?: string; min_version?: string; max_version?: string }) => {
         if (a.expires_at && a.expires_at < now) return false;
-        if (a.min_version && APP_VERSION < a.min_version) return false;
-        if (a.max_version && APP_VERSION > a.max_version) return false;
+        if (!versionInRange(appVersion, a.min_version, a.max_version)) return false;
         if (dismissed.includes(a.id)) return false;
         return true;
       });
       if (valid.length > 0) setAnnouncement(valid[0]);
     });
-  }, []);
+  }, [appVersion]);
 
   // OAuth return (loopback server or emuworld:// deep link)
   useEffect(() => {
@@ -5449,7 +5456,7 @@ export default function App() {
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
-        <span className="titlebar__version" data-tauri-drag-region>v2.5.3</span>
+        <span className="titlebar__version" data-tauri-drag-region>{appVersion ? `v${appVersion}` : ""}</span>
         {updateAvailable && (
           <button
             className="titlebar__update"

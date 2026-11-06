@@ -78,6 +78,12 @@ describe("App", () => {
     expect(sidebarButtons(container).length).toBeGreaterThan(5);
   });
 
+  it("shows the app's real version in the titlebar", async () => {
+    const { container } = await renderApp();
+    // tauriMock answers plugin:app|version with "0.0.0-test"; it used to be a hardcoded "v2.5.3".
+    await waitFor(() => expect(container.querySelector(".titlebar__version")?.textContent).toBe("v0.0.0-test"));
+  });
+
   it("opens every sidebar page without crashing", async () => {
     const { container, backend } = await renderApp();
     const labels = sidebarButtons(container).map((b) => b.textContent!.trim());

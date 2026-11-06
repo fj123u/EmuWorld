@@ -13,6 +13,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
     "⏱️ Résumé du record à copier pour le partager",
   ] },
+  { version: "2.6.2", date: "2026-11-06", changes: [
+    "🖼️ Plus de covers trouvées : les jeux dont le nom diffère un peu de celui de libretro sont reconnus (« Duck Tales » ↔ « DuckTales », « Skate or Die! », « Wizards & Warriors »…)",
+    "🐛 La version affichée en haut de l'app est la vraie (elle restait bloquée sur 2.5.3)",
+  ] },
   { version: "2.6.1", date: "2026-11-06", changes: [
     "🐛 Fix covers manquantes après « Vider le cache » : les covers sont maintenant récupérées 6 par 6 au lieu de toutes en même temps (iiDB et les autres sources refusaient la rafale)",
   ] },

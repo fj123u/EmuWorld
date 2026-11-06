@@ -370,6 +370,7 @@ mod iidb;
 mod savestates;
 mod netplay;
 mod speedrun;
+mod libretro_index;
 
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
@@ -2152,6 +2153,29 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
                                 }
                                 return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                             }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2.9 libretro, tolerant: the ROM's title against libretro's published
+    // file list ("Duck Tales" ↔ "DuckTales", "Skate or Die!" ↔ "Skate or Die").
+    for folder in &libretro_systems {
+        if let Some(file) = libretro_index::find(&client, folder, &game_name).await {
+            let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/{}.png", urlencoding::encode(folder), urlencoding::encode(&file));
+            write_to_boxart_log(&format!("Trying Libretro (approx.): {}", url));
+            if let Ok(resp) = client.get(&url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes().await {
+                        if bytes.len() >= min_size {
+                            push_log("INFO", &format!("Cover libretro (nom approché): '{}' → '{}'", game_name, file));
+                            store_cover_url(&format!("{}::{}", console, game_name), &url);
+                            if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                                return Ok(data_url);
+                            }
+                            return Ok(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&bytes)));
                         }
                     }
                 }
