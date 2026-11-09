@@ -368,6 +368,7 @@ mod dpapi;
 mod atomic_file;
 mod iidb;
 mod iidb_api;
+mod cover_dedup;
 mod savestates;
 mod netplay;
 mod speedrun;
@@ -1895,8 +1896,30 @@ fn nlib_icon_url(title_id: &str) -> Option<String> {
     valid.then(|| format!("https://api.nlib.cc/nx/{}/icon/512/512", title_id.to_ascii_uppercase()))
 }
 
+fn cover_requests() -> &'static cover_dedup::Coalescer<Result<String, String>> {
+    static C: OnceLock<cover_dedup::Coalescer<Result<String, String>>> = OnceLock::new();
+    C.get_or_init(cover_dedup::Coalescer::new)
+}
+
+/// Games no source had, not searched again for 10 minutes (see cover_dedup.rs).
+fn cover_misses() -> &'static cover_dedup::MissMemo {
+    static M: OnceLock<cover_dedup::MissMemo> = OnceLock::new();
+    M.get_or_init(|| cover_dedup::MissMemo::new(std::time::Duration::from_secs(600)))
+}
+
+fn cover_key(game_name: &str, console: &str) -> String {
+    format!("{}|{}", console, game_name)
+}
+
+/// One cover search per game at a time: a request for a game already being
+/// searched waits for that search (StrictMode, several views mounting it).
 #[tauri::command]
 async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
+    let key = format!("{}|{}", cover_key(&game_name, &console), force_refresh.unwrap_or(false));
+    cover_requests().run(key, fetch_boxart_once(app_handle, game_name, console, force_refresh)).await
+}
+
+async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
     let force_refresh = force_refresh.unwrap_or(false);
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
@@ -2063,6 +2086,11 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
             }
         }
     }
+    }
+
+    // Searched a moment ago and found nowhere: don't run every source again.
+    if !force_refresh && cover_misses().recently_missed(&cover_key(&game_name, &console), std::time::Instant::now()) {
+        return Err("No boxart found".to_string());
     }
 
     // iiDB first, through its official API and only with the user's own key
@@ -2551,6 +2579,7 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     write_to_boxart_log("Result: FAILED - All sources exhausted");
     log_event("DONE", "NONE FOUND", None);
     push_log("WARN", &format!("Cover introuvable pour '{}' ({})", game_name, console));
+    cover_misses().record(&cover_key(&game_name, &console), std::time::Instant::now());
     Err("No boxart found".to_string())
 }
 
@@ -5759,6 +5788,8 @@ fn clear_cover_cache() -> Result<(), String> {
         std::fs::remove_dir_all(&covers_dir).map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&covers_dir).map_err(|e| e.to_string())?;
     }
+    // Every game gets a fresh search, including those no source had.
+    cover_misses().clear();
     push_log("INFO", "Cache covers nettoyé");
     Ok(())
 }
