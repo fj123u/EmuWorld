@@ -34,6 +34,15 @@ const GATHER: Duration = Duration::from_millis(400);
 /// iiDB console keys (from `/platforms`) for an EmuWorld console; the first
 /// is the preferred one.
 pub fn console_keys(console: &str) -> &'static [&'static str] {
+    // The library can carry short names ("SNES", "PSP", "Genesis"...): map
+    // them to catalog names the way the ROM scan does.
+    match catalog_console_keys(console) {
+        [] => catalog_console_keys(&crate::normalize_console_folder(console)),
+        keys => keys,
+    }
+}
+
+fn catalog_console_keys(console: &str) -> &'static [&'static str] {
     match console {
         "NES" => &["nes", "famicom", "fds"],
         "Super Nintendo" => &["snes", "sfc"],
@@ -128,6 +137,12 @@ pub fn pick_boxart(result: &Value, console: &str) -> Option<String> {
     if result["match"]["status"].as_str() != Some("matched") {
         return None;
     }
+    pick_from_artwork(result, console)
+}
+
+/// First usable box art of a result's `artwork.boxart` list (resolve or
+/// `/assets/batch`), the ROM's console first.
+pub fn pick_from_artwork(result: &Value, console: &str) -> Option<String> {
     let keys = console_keys(console);
     let assets: Vec<(&str, Option<&str>)> = result["artwork"]["boxart"]
         .as_array()?
@@ -141,6 +156,40 @@ pub fn pick_boxart(result: &Value, console: &str) -> Option<String> {
         .find(|(_, c)| on_console(*c))
         .or_else(|| assets.first())
         .map(|(url, _)| url.to_string())
+}
+
+/// For a `needs_choice` answer, the one candidate EmuWorld can stand behind:
+/// the only one iiDB matched by identifier (Switch Title ID), else the only
+/// one whose name is the ROM's title (same words, ignoring case, accents and
+/// punctuation). Several equal names stay undecided: no guessing.
+pub fn choose_candidate(result: &Value, title: &str) -> Option<i64> {
+    if result["match"]["status"].as_str() != Some("needs_choice") {
+        return None;
+    }
+    let candidates = result["candidates"].as_array()?;
+    let only = |hits: Vec<&Value>| if hits.len() == 1 { hits[0]["id"].as_i64() } else { None };
+    let by_identity: Vec<&Value> = candidates.iter().filter(|c| c["reason"].as_str() == Some("identity")).collect();
+    if !by_identity.is_empty() {
+        return only(by_identity);
+    }
+    let wanted = crate::iidb::normalize_title(title);
+    if wanted.is_empty() {
+        return None;
+    }
+    only(candidates
+        .iter()
+        .filter(|c| c["name"].as_str().is_some_and(|n| crate::iidb::normalize_title(n) == wanted))
+        .collect())
+}
+
+/// `/assets/batch` row for a chosen iiDB parent.
+fn parent_artwork_lookup(parent_id: i64, lookup: &Value) -> Value {
+    json!({
+        "parent_id": parent_id,
+        "slots": ["boxart"],
+        "candidates_per_slot": 6,
+        "preferred_region": lookup["preferred_region"].as_str().unwrap_or("World"),
+    })
 }
 
 /// One word on what happened to a lookup, for the batch log line.
@@ -320,9 +369,60 @@ pub async fn find_boxart(rom_name: &str, console: &str) -> Option<String> {
     answer.await.ok().flatten()
 }
 
+/// Pacing shared by every request of this user.
+struct Pace {
+    last_request: Option<Instant>,
+    rps: f64,
+}
+
+/// POST a batch to the official API, paced to the user's tier, waiting
+/// `Retry-After` on 429 and retrying 5xx. `None` when it never completed.
+async fn post_batch(path: &str, body: &Value, key: &str, pace: &mut Pace) -> Option<Vec<Value>> {
+    for attempt in 0..4 {
+        tokio::time::sleep(wait_before_next(pace.last_request, pace.rps, Instant::now())).await;
+        pace.last_request = Some(Instant::now());
+        let resp = http()
+            .post(format!("{}{}", API_BASE, path))
+            .header("X-API-Key", key)
+            .header("Accept", "application/json")
+            .json(body)
+            .send()
+            .await;
+        let resp = match resp {
+            Ok(r) => r,
+            Err(e) => {
+                push_log("WARN", &format!("iiDB: requête {} échouée ({}), essai {}", path, e, attempt + 1));
+                tokio::time::sleep(Duration::from_secs(2)).await;
+                continue;
+            }
+        };
+        if let Some(limit) = resp.headers().get("X-IIDB-Requests-Per-Second-Limit").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<f64>().ok()) {
+            pace.rps = limit;
+        }
+        match resp.status().as_u16() {
+            200 => return resp.json::<Value>().await.ok().and_then(|v| v["results"].as_array().cloned()),
+            429 => {
+                let wait = retry_after(resp.headers().get("Retry-After").and_then(|v| v.to_str().ok()));
+                push_log("WARN", &format!("iiDB: limite atteinte, attente de {:?}", wait));
+                tokio::time::sleep(wait).await;
+            }
+            401 | 403 => {
+                push_log("WARN", "iiDB: clé API refusée, iiDB ignoré jusqu'à une nouvelle clé");
+                set_cached_key(None);
+                return None;
+            }
+            s if s >= 500 => tokio::time::sleep(Duration::from_secs(2 * (attempt + 1) as u64)).await,
+            s => {
+                push_log("WARN", &format!("iiDB: lot {} refusé (HTTP {})", path, s));
+                return None;
+            }
+        }
+    }
+    None
+}
+
 async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
-    let mut last_request: Option<Instant> = None;
-    let mut rps = 1.0f64;
+    let mut pace = Pace { last_request: None, rps: 1.0 };
     while let Some(first) = rx.recv().await {
         let mut jobs = vec![first];
         let deadline = tokio::time::Instant::now() + GATHER;
@@ -337,58 +437,36 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
             continue;
         };
         let body = json!({ "lookups": jobs.iter().map(|j| j.lookup.clone()).collect::<Vec<_>>() });
-        let mut results: Option<Vec<Value>> = None;
-        for attempt in 0..4 {
-            tokio::time::sleep(wait_before_next(last_request, rps, Instant::now())).await;
-            last_request = Some(Instant::now());
-            let resp = http()
-                .post(format!("{}/resolve/batch", API_BASE))
-                .header("X-API-Key", &key)
-                .header("Accept", "application/json")
-                .json(&body)
-                .send()
-                .await;
-            let resp = match resp {
-                Ok(r) => r,
-                Err(e) => {
-                    push_log("WARN", &format!("iiDB: requête échouée ({}), essai {}", e, attempt + 1));
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    continue;
-                }
-            };
-            if let Some(limit) = resp.headers().get("X-IIDB-Requests-Per-Second-Limit").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<f64>().ok()) {
-                rps = limit;
-            }
-            match resp.status().as_u16() {
-                200 => {
-                    results = resp.json::<Value>().await.ok().and_then(|v| v["results"].as_array().cloned());
-                    break;
-                }
-                429 => {
-                    let wait = retry_after(resp.headers().get("Retry-After").and_then(|v| v.to_str().ok()));
-                    push_log("WARN", &format!("iiDB: limite atteinte, attente de {:?}", wait));
-                    tokio::time::sleep(wait).await;
-                }
-                401 | 403 => {
-                    push_log("WARN", "iiDB: clé API refusée, iiDB ignoré jusqu'à une nouvelle clé");
-                    set_cached_key(None);
-                    break;
-                }
-                s if s >= 500 => tokio::time::sleep(Duration::from_secs(2 * (attempt + 1) as u64)).await,
-                s => {
-                    push_log("WARN", &format!("iiDB: lot refusé (HTTP {})", s));
-                    break;
-                }
+        let results = post_batch("/resolve/batch", &body, &key, &mut pace).await.unwrap_or_default();
+
+        let mut urls: Vec<Option<String>> = Vec::with_capacity(jobs.len());
+        let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut chosen: Vec<(usize, i64)> = Vec::new();
+        for (i, job) in jobs.iter().enumerate() {
+            let result = results.get(i);
+            urls.push(result.and_then(|r| pick_boxart(r, &job.console)));
+            if let Some(id) = result.and_then(|r| choose_candidate(r, job.lookup["title"].as_str().unwrap_or(""))) {
+                chosen.push((i, id));
+            } else {
+                *outcomes.entry(outcome(result)).or_default() += 1;
             }
         }
-        let results = results.unwrap_or_default();
+
+        // needs_choice with one exact candidate: its box art by parent id.
+        if !chosen.is_empty() {
+            let body = json!({ "lookups": chosen.iter().map(|(i, id)| parent_artwork_lookup(*id, &jobs[*i].lookup)).collect::<Vec<_>>() });
+            let art = post_batch("/assets/batch", &body, &key, &mut pace).await.unwrap_or_default();
+            for (n, (i, _)) in chosen.iter().enumerate() {
+                let url = art.get(n).and_then(|r| pick_from_artwork(r, &jobs[*i].console));
+                let label = if url.is_some() { "choisi (nom exact)" } else { "choisi, sans boxart" };
+                *outcomes.entry(label.to_string()).or_default() += 1;
+                urls[*i] = url;
+            }
+        }
+
         let count = jobs.len();
-        let mut found = 0;
-        let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
-        for (i, job) in jobs.into_iter().enumerate() {
-            let url = results.get(i).and_then(|r| pick_boxart(r, &job.console));
-            found += url.is_some() as usize;
-            *outcomes.entry(outcome(results.get(i))).or_default() += 1;
+        let found = urls.iter().filter(|u| u.is_some()).count();
+        for (job, url) in jobs.into_iter().zip(urls) {
             let _ = job.reply.send(url);
         }
         let detail = outcomes.iter().map(|(k, n)| format!("{} ×{}", k, n)).collect::<Vec<_>>().join(", ");
@@ -452,6 +530,50 @@ mod tests {
         assert_eq!(pick_boxart(&choice, "NES"), None, "never guess between candidates");
         let error = json!({"status": 422, "errors": []});
         assert_eq!(pick_boxart(&error, "NES"), None);
+    }
+
+    #[test]
+    fn understands_the_short_console_names_of_the_library() {
+        assert_eq!(console_keys("SNES"), &["snes", "sfc"]);
+        assert_eq!(console_keys("PSP"), &["psp"]);
+        assert_eq!(console_keys("Genesis"), &["megadrive", "genesis"]);
+        assert_eq!(console_keys("GameCube"), &["gamecube", "wii"]);
+        assert!(build_lookup("Super Mario World", "SNES").is_some(), "SNES games were never sent to iiDB");
+        assert!(console_keys("Not a console").is_empty());
+    }
+
+    #[test]
+    fn picks_the_one_exact_candidate_of_a_needs_choice() {
+        let answer = |cands: Value| json!({"match": {"status": "needs_choice"}, "candidates": cands});
+        let r = answer(json!([
+            {"id": 1, "name": "Pokémon Scarlet and Violet Double Pack", "reason": "name_prefix"},
+            {"id": 2, "name": "Pokémon Scarlet", "reason": "fuzzy"}
+        ]));
+        assert_eq!(choose_candidate(&r, "Pokemon Scarlet"), Some(2), "same words, accents ignored");
+        let r = answer(json!([
+            {"id": 7, "name": "Celeste", "reason": "identity"},
+            {"id": 8, "name": "Celeste", "reason": "name_exact"}
+        ]));
+        assert_eq!(choose_candidate(&r, "Celeste"), Some(7), "the Title ID decides");
+        let r = answer(json!([
+            {"id": 3, "name": "Tomb Raider", "reason": "name_exact"},
+            {"id": 4, "name": "Tomb Raider", "reason": "name_exact"}
+        ]));
+        assert_eq!(choose_candidate(&r, "Tomb Raider"), None, "two equal names: never guess");
+        let r = answer(json!([{"id": 5, "name": "Super Mario Party", "reason": "name_prefix"}]));
+        assert_eq!(choose_candidate(&r, "Super Mario Party Jamboree"), None);
+        let matched = json!({"match": {"status": "matched"}, "candidates": [{"id": 6, "name": "Celeste"}]});
+        assert_eq!(choose_candidate(&matched, "Celeste"), None);
+    }
+
+    #[test]
+    fn reads_box_art_from_an_assets_batch_row() {
+        let row = json!({"parent_id": 2, "artwork_status": "available", "artwork": {"boxart": [
+            {"url": "https://assets.iisu.network/p.png", "console_id": "switch"}
+        ]}});
+        assert_eq!(pick_from_artwork(&row, "Nintendo Switch").as_deref(), Some("https://assets.iisu.network/p.png"));
+        assert_eq!(parent_artwork_lookup(2, &json!({"preferred_region": "Europe"})),
+            json!({"parent_id": 2, "slots": ["boxart"], "candidates_per_slot": 6, "preferred_region": "Europe"}));
     }
 
     #[test]
