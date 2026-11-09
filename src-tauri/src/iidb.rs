@@ -1,19 +1,22 @@
 //! iiDB (https://iidb.iisu.network) — the iiSU community game-art database.
 //!
-//! `fetch_boxart` asks iiDB first; when it has no confident match the usual
-//! cascade (tinfoil → libretro → Wikipedia → GameTDB) runs as before.
+//! Not queried in 2.6.5: iiDB's terms (section 8) only allow automated
+//! access through the documented public API (https://iidb-api.iisu.network,
+//! each user's own API key). The website's internal search endpoint used up
+//! to 2.6.4 is off-limits. The title helpers below stay for the official
+//! API client; a test in lib.rs fails if the internal endpoint comes back.
 //!
 //! Matching is deliberately strict: a game is accepted only when its title
 //! normalizes to exactly the ROM's title *and* it exists on the ROM's
 //! platform. A missing cover falls back to another source; a wrong cover
 //! would just be wrong, so ambiguity always means "no match".
+#![allow(dead_code)]
 
 use regex::Regex;
 use serde::Deserialize;
 use std::sync::OnceLock;
 
-const SEARCH_URL: &str = "https://iidb.iisu.network/api/v1/parents/search/enriched/page";
-/// Host serving iiDB images; also allow-listed for Discord Rich Presence.
+/// Host serving iiDB images (never hotlinked: not allow-listed for Discord).
 pub const ASSETS_HOST: &str = "assets.iisu.network";
 
 /// One search result (only the fields EmuWorld uses).
@@ -33,12 +36,6 @@ pub struct Game {
     /// Path of the main box art under `https://assets.iisu.network/`.
     #[serde(default)]
     pub boxart_filename: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct SearchPage {
-    #[serde(default)]
-    items: Vec<Game>,
 }
 
 /// iiDB platform names for an EmuWorld console (as listed in the API's
@@ -297,90 +294,10 @@ pub fn asset_url(filename: &str) -> Option<String> {
     ok.then(|| format!("https://{}/{}", ASSETS_HOST, filename))
 }
 
-/// iiDB asked us to slow down (HTTP 429): skip it until this time (Unix
-/// seconds) and let the other sources answer, instead of hammering it.
-static PAUSED_UNTIL: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// How long iiDB is left alone after a 429.
-pub const RATE_LIMIT_PAUSE_SECS: u64 = 60;
-
-fn unix_now() -> u64 {
-    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
-}
-
-/// Whether iiDB is paused at `now` (Unix seconds).
-pub fn paused_at(now: u64) -> bool {
-    now < PAUSED_UNTIL.load(std::sync::atomic::Ordering::Relaxed)
-}
-
-fn pause_from(now: u64) {
-    PAUSED_UNTIL.store(now + RATE_LIMIT_PAUSE_SECS, std::sync::atomic::Ordering::Relaxed);
-}
-
-pub fn user_agent() -> String {
-    format!("EmuWorld/{} (+https://github.com/fj123u/EmuWorld)", env!("CARGO_PKG_VERSION"))
-}
-
-/// Looks the ROM up on iiDB and returns the box-art image URL if a
-/// confident match exists. Network/API errors are returned as `Err` so the
-/// caller can log them and fall back to the other sources.
-pub async fn find_boxart_url(client: &reqwest::Client, rom_name: &str, console: &str) -> Result<Option<String>, String> {
-    let wanted = platforms(console);
-    if wanted.is_empty() {
-        return Ok(None);
-    }
-    if paused_at(unix_now()) {
-        return Err("iiDB en pause (trop de requêtes), autres sources utilisées".to_string());
-    }
-    let titles = query_variants(rom_name);
-    for query in &titles {
-        let resp = client
-            .get(SEARCH_URL)
-            .header(reqwest::header::USER_AGENT, user_agent())
-            .query(&[
-                ("q", query.as_str()),
-                ("skip", "0"),
-                ("limit", "10"),
-                // Only games that actually have uploaded art: faster and
-                // avoids matching an entry with nothing to show.
-                ("assets_only", "true"),
-                ("search_mode", "all"),
-                ("asset_scoring", "false"),
-            ])
-            .send()
-            .await
-            .map_err(|e| format!("iiDB search: {}", e))?;
-        if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            pause_from(unix_now());
-            crate::push_log("WARN", &format!("iiDB: trop de requêtes (429), pause de {} s", RATE_LIMIT_PAUSE_SECS));
-            return Err("iiDB search: 429 Too Many Requests".to_string());
-        }
-        let page: SearchPage = resp
-            .error_for_status()
-            .map_err(|e| format!("iiDB search: {}", e))?
-            .json()
-            .await
-            .map_err(|e| format!("iiDB response: {}", e))?;
-        if let Some(game) = pick(&page.items, &titles, wanted) {
-            return Ok(game.boxart_filename.as_deref().and_then(asset_url));
-        }
-    }
-    Ok(None)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_rate_limit_pauses_iidb_for_a_while() {
-        let now = 2_000_000_000; // far from the real clock: no clash with other tests
-        assert!(!paused_at(now));
-        pause_from(now);
-        assert!(paused_at(now));
-        assert!(paused_at(now + RATE_LIMIT_PAUSE_SECS - 1));
-        assert!(!paused_at(now + RATE_LIMIT_PAUSE_SECS));
-        PAUSED_UNTIL.store(0, std::sync::atomic::Ordering::Relaxed);
-    }
 
     fn game(name: &str, platforms: &str, boxart: Option<&str>) -> Game {
         Game {
@@ -534,42 +451,5 @@ mod tests {
         }
     }
 
-    /// Hit rate on a real library, sampled (~60 lookups):
-    /// `EMUWORLD_ROMS_DIR=D:\Roms cargo test -- --ignored iidb_library_sample --nocapture`
-    #[tokio::test]
-    #[ignore]
-    async fn iidb_library_sample() {
-        let Ok(dir) = std::env::var("EMUWORLD_ROMS_DIR") else { return };
-        let roms = crate::scan_roms(dir);
-        let step = (roms.len() / 60).max(1);
-        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap();
-        let (mut hits, mut total) = (0, 0);
-        for rom in roms.iter().step_by(step) {
-            total += 1;
-            let url = find_boxart_url(&client, &rom.name, &rom.console).await.unwrap_or(None);
-            if url.is_some() { hits += 1; }
-            println!("{} | {} | {}", if url.is_some() { "HIT " } else { "MISS" }, rom.console, rom.name);
-            tokio::time::sleep(std::time::Duration::from_millis(300)).await;
-        }
-        println!("iiDB hit rate: {hits}/{total}");
-    }
 
-    /// Live check against the real API: `cargo test -- --ignored iidb_live`.
-    #[tokio::test]
-    #[ignore]
-    async fn iidb_live_lookup() {
-        let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap();
-        let cases = [
-            ("Super Mario Bros. 3 (Europe)", "NES", true),
-            ("Metroid Prime (USA)", "GameCube / Wii", true),
-            ("Halo 2 (France) (En,Ja,Fr,De,Es,It,Zh,Ko).xiso", "Xbox", true),
-            ("pokemon lune", "Nintendo 3DS", true),
-            ("Definitely Not A Real Game 12345", "NES", false),
-        ];
-        for (name, console, expect) in cases {
-            let url = find_boxart_url(&client, name, console).await.unwrap();
-            println!("{name} ({console}) -> {url:?}");
-            assert_eq!(url.is_some(), expect, "{name}");
-        }
-    }
 }

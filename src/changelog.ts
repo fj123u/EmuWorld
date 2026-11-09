@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.6.5", date: "2026-11-09", changes: [
+    "🖼️ iiDB n'est plus interrogé automatiquement : ses nouvelles conditions n'autorisent que son API officielle avec une clé par utilisateur (elle arrive dans une prochaine version). Les autres sources prennent le relais, tes covers en cache restent",
+  ] },
   { version: "2.6.4", date: "2026-11-06", changes: [
     "🖼️ Nouvelle source de covers : LaunchBox Games Database, avec la jaquette de la région de ta ROM (utilisée quand les autres sources n'ont rien)",
   ] },
