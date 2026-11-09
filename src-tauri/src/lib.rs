@@ -367,6 +367,7 @@ mod cloud_backup;
 mod dpapi;
 mod atomic_file;
 mod iidb;
+mod iidb_api;
 mod savestates;
 mod netplay;
 mod speedrun;
@@ -2064,15 +2065,33 @@ async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: 
     }
     }
 
+    // iiDB first, through its official API and only with the user's own key
+    // (iidb_api.rs). Lookups are queued and batched by 25, so this runs
+    // before taking one of the 6 cover slots.
+    if let Some(url) = iidb_api::find_boxart(&game_name, &console).await {
+        match cover_http_client().get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(bytes) = resp.bytes().await {
+                    if bytes.len() >= min_size {
+                        if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                            push_log("INFO", &format!("Cover iiDB (API officielle) trouvée: '{}' ({})", game_name, console));
+                            return Ok(data_url);
+                        }
+                    }
+                }
+            }
+            Ok(resp) => push_log("WARN", &format!("Cover iiDB HTTP {} pour '{}'", resp.status(), game_name)),
+            Err(e) => push_log("WARN", &format!("Téléchargement cover iiDB échoué ('{}'): {}", game_name, e)),
+        }
+    }
+
     // Network part: at most COVER_FETCH_CONCURRENCY games at a time.
     let _slot = cover_fetch_slots().acquire().await.map_err(|e| e.to_string())?;
     let client = cover_http_client().clone();
 
     // min_size already computed above
 
-    // iiDB is NOT queried here any more: its terms (section 8) only allow the
-    // documented public API, with each user's own API key. The old internal
-    // search endpoint used until 2.6.4 is off-limits; see iidb.rs.
+    // (iiDB is queried above, through its official API only; see iidb_api.rs.)
 
     // === SWITCH: official eShop icon by title ID ===
     // nlib.cc first: tinfoil.media answers 503 or hangs since November 2026,
@@ -6809,6 +6828,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             savestates::list_save_states,
+            iidb_api::set_iidb_api_key,
+            iidb_api::get_iidb_status,
+            iidb_api::clear_iidb_api_key,
             savestates::rename_save_state,
             savestates::duplicate_save_state,
             savestates::delete_save_state,

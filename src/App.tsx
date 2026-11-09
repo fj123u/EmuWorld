@@ -24,6 +24,7 @@ import { fetchCloudNotes, syncCloudNotes } from "./playtimeNotes";
 import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
 import { getVersion } from "@tauri-apps/api/app";
 import { versionInRange } from "./appVersion";
+import { IidbSettings } from "./IidbSettings";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -7129,6 +7130,8 @@ export default function App() {
                       </div>
                     </div>
                   </div>
+
+                  <IidbSettings t={t} />
 
                   <div className="settings__group">
                     <div className="settings__group-title"><Gamepad2 size={16} /> {t("settings.retroarch")}</div>

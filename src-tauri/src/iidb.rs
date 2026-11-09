@@ -1,10 +1,8 @@
 //! iiDB (https://iidb.iisu.network) — the iiSU community game-art database.
 //!
-//! Not queried in 2.6.5: iiDB's terms (section 8) only allow automated
-//! access through the documented public API (https://iidb-api.iisu.network,
-//! each user's own API key). The website's internal search endpoint used up
-//! to 2.6.4 is off-limits. The title helpers below stay for the official
-//! API client; a test in lib.rs fails if the internal endpoint comes back.
+//! Title helpers. iiDB itself is queried in iidb_api.rs, through the
+//! official API only: its terms (section 8) forbid the website's internal
+//! endpoint used up to 2.6.4; a test in lib.rs fails if it comes back.
 //!
 //! Matching is deliberately strict: a game is accepted only when its title
 //! normalizes to exactly the ROM's title *and* it exists on the ROM's

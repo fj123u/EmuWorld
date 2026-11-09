@@ -6947,3 +6947,11 @@ body {
 .speedrun-modal__splits { width: 100%; resize: vertical; }
 .speedrun-modal__warning { font-size: 12px; color: var(--neon-amber); }
 .speedrun-modal__actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* iiDB settings */
+.iidb-settings__form, .iidb-settings__connected { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.iidb-settings__form .settings__field-input { min-width: 220px; }
+.iidb-settings__ok { display: inline-flex; align-items: center; gap: 6px; color: var(--neon-green); font-weight: 700; font-size: 13px; }
+.iidb-settings__error { margin: 6px 0 0; font-size: 12px; color: var(--neon-red); }
+.iidb-settings__credit { margin-top: 8px; }
+.iidb-settings__link { color: var(--accent-blue-ink); text-decoration: underline; padding: 0; font-weight: 700; }

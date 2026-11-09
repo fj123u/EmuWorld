@@ -791,6 +791,20 @@ const en: Translations = {
     clear: "Clear the record and stats",
     confirmClear: "Clear everything?",
   },
+  iidb: {
+    title: "iiDB covers",
+    keyLabel: "iiDB API key (optional)",
+    desc: "iiDB, iiSU's community database, has the best covers. Its terms ask for one API key per user (free): create it on accounts.iisu.network and paste it here. Without a key, EmuWorld uses the other sources.",
+    keyPlaceholder: "Paste your iiDB API key",
+    save: "Check and save",
+    checking: "Checking…",
+    getKey: "Create a key",
+    connected: "iiDB key saved",
+    connectedTier: "Connected to iiDB ({user}, tier {tier}, {rps} req/s)",
+    remove: "Remove the key",
+    creditBefore: "Covers provided by",
+    creditAfter: ", libretro, LaunchBox Games Database, nlib.cc, Wikipedia and GameTDB.",
+  },
 };
 
 export default en;

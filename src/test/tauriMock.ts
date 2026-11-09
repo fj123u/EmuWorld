@@ -97,6 +97,10 @@ export function defaultHandlers(): Record<string, Handler> {
     duplicate_save_state: () => "C:\\RetroArch\\states\\copy.state1",
     delete_save_state: () => null,
     log_event: () => null,
+    // iiDB official API (iidb_api.rs)
+    get_iidb_status: () => ({ configured: false, username: null, tier: null, requests_per_second: null }),
+    set_iidb_api_key: () => ({ configured: true, username: "fj123u", tier: "standard", requests_per_second: 1 }),
+    clear_iidb_api_key: () => null,
     // Speedrun timer (speedrun.rs)
     get_speedrun: () => ({ splits: [], pb: null, best_segments: [], attempts: 0, completed: 0 }),
     save_speedrun: (args) => (args as { data: unknown }).data,

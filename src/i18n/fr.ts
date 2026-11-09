@@ -789,6 +789,20 @@ const fr = {
     clear: "Effacer le record et les stats",
     confirmClear: "Tout effacer ?",
   },
+  iidb: {
+    title: "Covers iiDB",
+    keyLabel: "Clé API iiDB (facultative)",
+    desc: "iiDB, la base communautaire d'iiSU, a les plus belles covers. Ses conditions demandent une clé API par utilisateur (gratuite) : crée-la sur accounts.iisu.network et colle-la ici. Sans clé, EmuWorld utilise les autres sources.",
+    keyPlaceholder: "Colle ta clé API iiDB",
+    save: "Vérifier et enregistrer",
+    checking: "Vérification…",
+    getKey: "Créer une clé",
+    connected: "Clé iiDB enregistrée",
+    connectedTier: "Connecté à iiDB ({user}, palier {tier}, {rps} req/s)",
+    remove: "Retirer la clé",
+    creditBefore: "Covers fournies par",
+    creditAfter: ", libretro, LaunchBox Games Database, nlib.cc, Wikipedia et GameTDB.",
+  },
 };
 
 export type Translations = typeof fr;

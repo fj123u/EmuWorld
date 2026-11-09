@@ -12,6 +12,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⏱️ Chrono de speedrun : petite fenêtre toujours visible pendant le jeu, splits personnalisés, record et meilleurs segments par jeu, comparaison en direct (vert/rouge/doré)",
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
     "⏱️ Résumé du record à copier pour le partager",
+    "🖼️ iiDB revient, par son API officielle : colle ta clé API iiDB (gratuite, sur accounts.iisu.network) dans Réglages → Covers iiDB. Les covers sont demandées par lots de 25 et la source est créditée",
   ] },
   { version: "2.6.5", date: "2026-11-09", changes: [
     "🖼️ iiDB n'est plus interrogé automatiquement : ses nouvelles conditions n'autorisent que son API officielle avec une clé par utilisateur (elle arrive dans une prochaine version). Les autres sources prennent le relais, tes covers en cache restent",
