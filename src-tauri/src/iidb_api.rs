@@ -8,9 +8,11 @@
 //!   request (counted as one request), paced to the user's tier
 //!   (`X-IIDB-Requests-Per-Second-Limit`, 1/s by default), waiting
 //!   `Retry-After` on 429. A 700-game library is ~28 requests.
-//! - Only `match.status == "matched"` is accepted, with box art restricted to
+//! - Switch ROMs also send their Title ID (`nintendo-switch.title-id`).
+//! - Only `match.status == "matched"` is accepted, preferring box art from
 //!   the ROM's console; ambiguous names ("needs_choice") fall through to the
-//!   other sources rather than risk a wrong cover.
+//!   other sources rather than risk a wrong cover. Each batch logs what
+//!   happened to its lookups (matched, not_found, invalid…), never the key.
 //! - Public apps must credit iiDB with a link to https://iidb.iisu.network:
 //!   done in Settings.
 
@@ -98,27 +100,63 @@ pub fn build_lookup(rom_name: &str, console: &str) -> Option<Value> {
         "preferred_region": preferred_region(rom_name),
         "artwork": "recommended",
         "slots": ["boxart"],
-        "candidates_per_slot": 3,
+        "candidates_per_slot": 6,
     });
-    // Box art from that console only, when the console is unambiguous.
-    if keys.len() == 1 {
-        lookup["artwork_filters"] = json!({ "console_id": keys[0] });
+    // No `artwork_filters.console_id`: iiDB wants the console ids found on
+    // its assets, which are not documented to equal `/platforms` keys, and a
+    // wrong one filters out every cover. The console is preferred in
+    // `pick_boxart` instead.
+    if console == "Nintendo Switch" {
+        if let Some(id) = switch_title_id(rom_name) {
+            lookup["identity"] = json!({ "kind": "title_id", "value": id, "namespace": "nintendo-switch.title-id" });
+        }
     }
     Some(lookup)
 }
 
-/// Box art URL from one `/resolve` result: only a confident match, on the
-/// ROM's console, served by iiDB's asset host.
+/// Switch Title ID written in the ROM name ("Celeste [01002B30028F6000][v0]").
+pub fn switch_title_id(rom_name: &str) -> Option<String> {
+    rom_name.split(['[', ']', '(', ')', ' ']).find_map(|token| {
+        let ok = token.len() == 16 && token.starts_with("01") && token.chars().all(|c| c.is_ascii_hexdigit());
+        ok.then(|| token.to_uppercase())
+    })
+}
+
+/// Box art URL from one `/resolve` result: only a confident match, served by
+/// iiDB's asset host, from the ROM's console when iiDB has one for it.
 pub fn pick_boxart(result: &Value, console: &str) -> Option<String> {
     if result["match"]["status"].as_str() != Some("matched") {
         return None;
     }
     let keys = console_keys(console);
-    result["artwork"]["boxart"].as_array()?.iter().find_map(|asset| {
-        let url = asset["url"].as_str()?;
-        let console_ok = asset["console_id"].as_str().map_or(true, |c| keys.contains(&c));
-        (url.starts_with(ASSET_HOST) && console_ok).then(|| url.to_string())
-    })
+    let assets: Vec<(&str, Option<&str>)> = result["artwork"]["boxart"]
+        .as_array()?
+        .iter()
+        .filter_map(|a| Some((a["url"].as_str()?, a["console_id"].as_str())))
+        .filter(|(url, _)| url.starts_with(ASSET_HOST))
+        .collect();
+    let on_console = |c: Option<&str>| c.is_some_and(|c| keys.iter().any(|k| k.eq_ignore_ascii_case(c)));
+    assets
+        .iter()
+        .find(|(_, c)| on_console(*c))
+        .or_else(|| assets.first())
+        .map(|(url, _)| url.to_string())
+}
+
+/// One word on what happened to a lookup, for the batch log line.
+pub fn outcome(result: Option<&Value>) -> String {
+    let Some(r) = result else { return "absent".into() };
+    if r["status"].as_str() == Some("invalid_request") {
+        let why = r["errors"][0]["msg"].as_str().or(r["errors"][0]["message"].as_str()).unwrap_or("?");
+        return format!("invalide ({})", why.chars().take(60).collect::<String>());
+    }
+    match r["match"]["status"].as_str().unwrap_or("?") {
+        "matched" => match r["missing_artwork"]["boxart"].as_str() {
+            Some(reason) => format!("trouvé sans boxart ({})", reason),
+            None => format!("trouvé ({})", r["artwork_status"].as_str().unwrap_or("?")),
+        },
+        other => other.to_string(),
+    }
 }
 
 /// Pause before the next request so the user's per-second allowance holds.
@@ -344,18 +382,17 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
             }
         }
         let results = results.unwrap_or_default();
-        let found = jobs
-            .into_iter()
-            .enumerate()
-            .map(|(i, job)| {
-                let url = results.get(i).and_then(|r| pick_boxart(r, &job.console));
-                let hit = url.is_some();
-                let _ = job.reply.send(url);
-                hit
-            })
-            .filter(|h| *h)
-            .count();
-        push_log("INFO", &format!("iiDB: lot de {} jeux, {} covers trouvées", results.len().max(1), found));
+        let count = jobs.len();
+        let mut found = 0;
+        let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
+        for (i, job) in jobs.into_iter().enumerate() {
+            let url = results.get(i).and_then(|r| pick_boxart(r, &job.console));
+            found += url.is_some() as usize;
+            *outcomes.entry(outcome(results.get(i))).or_default() += 1;
+            let _ = job.reply.send(url);
+        }
+        let detail = outcomes.iter().map(|(k, n)| format!("{} ×{}", k, n)).collect::<Vec<_>>().join(", ");
+        push_log("INFO", &format!("iiDB: lot de {} jeux, {} covers trouvées [{}]", count, found, detail));
     }
 }
 
@@ -381,10 +418,21 @@ mod tests {
         assert_eq!(l["preferred_region"], "Europe");
         assert_eq!(l["artwork"], "recommended");
         assert_eq!(l["slots"], json!(["boxart"]));
-        assert!(l.get("artwork_filters").is_none(), "NES spans nes/famicom/fds");
-        let switch = build_lookup("Celeste [01002B30028F6000][v0]", "Nintendo Switch").unwrap();
-        assert_eq!(switch["artwork_filters"]["console_id"], "switch");
+        assert!(l.get("artwork_filters").is_none());
+        assert!(l.get("identity").is_none());
+        let switch = build_lookup("Celeste [01002b30028f6000][v0]", "Nintendo Switch").unwrap();
+        assert!(switch.get("artwork_filters").is_none(), "a guessed console_id filtered out every cover");
+        assert_eq!(switch["identity"], json!({"kind": "title_id", "value": "01002B30028F6000", "namespace": "nintendo-switch.title-id"}));
+        assert_eq!(switch["title"], "Celeste");
         assert!(build_lookup("Game", "Multi-System").is_none());
+    }
+
+    #[test]
+    fn reads_switch_title_ids() {
+        assert_eq!(switch_title_id("Pokemon Scarlet [0100A3D008C5C000]").as_deref(), Some("0100A3D008C5C000"));
+        assert_eq!(switch_title_id("Zelda (01007EF00011E000) (nsw2u.com)").as_deref(), Some("01007EF00011E000"));
+        assert_eq!(switch_title_id("SR ROM [0400380020056000]"), None, "not a Switch application id");
+        assert_eq!(switch_title_id("The Legend of Zelda Echoes of Wisdom"), None);
     }
 
     #[test]
@@ -392,13 +440,27 @@ mod tests {
         let ok = json!({"match": {"status": "matched"}, "artwork": {"boxart": [
             {"url": "https://evil.example/x.png", "console_id": "nes"},
             {"url": "https://assets.iisu.network/a.png", "console_id": "snes"},
-            {"url": "https://assets.iisu.network/b.png", "console_id": "nes"}
+            {"url": "https://assets.iisu.network/b.png", "console_id": "NES"}
         ]}});
         assert_eq!(pick_boxart(&ok, "NES").as_deref(), Some("https://assets.iisu.network/b.png"));
+        let other_console = json!({"match": {"status": "matched"}, "artwork": {"boxart": [
+            {"url": "https://assets.iisu.network/only.png", "console_id": "nintendo-switch"}
+        ]}});
+        assert_eq!(pick_boxart(&other_console, "Nintendo Switch").as_deref(), Some("https://assets.iisu.network/only.png"),
+            "the game matched: its box art beats no cover");
         let choice = json!({"match": {"status": "needs_choice"}, "artwork": {"boxart": [{"url": "https://assets.iisu.network/c.png"}]}});
         assert_eq!(pick_boxart(&choice, "NES"), None, "never guess between candidates");
         let error = json!({"status": 422, "errors": []});
         assert_eq!(pick_boxart(&error, "NES"), None);
+    }
+
+    #[test]
+    fn describes_each_lookup_outcome_for_the_log() {
+        assert_eq!(outcome(None), "absent");
+        assert_eq!(outcome(Some(&json!({"status": "invalid_request", "errors": [{"msg": "Extra inputs are not permitted"}]}))), "invalide (Extra inputs are not permitted)");
+        assert_eq!(outcome(Some(&json!({"match": {"status": "not_found"}, "artwork_status": "not_resolved"}))), "not_found");
+        assert_eq!(outcome(Some(&json!({"match": {"status": "matched"}, "artwork_status": "empty", "missing_artwork": {"boxart": "filtered"}}))), "trouvé sans boxart (filtered)");
+        assert_eq!(outcome(Some(&json!({"match": {"status": "matched"}, "artwork_status": "available"}))), "trouvé (available)");
     }
 
     #[test]
