@@ -485,6 +485,27 @@ describe("cover picker in Big Picture", () => {
   });
 });
 
+describe("gamepad in the library", () => {
+  it("Y toggles the favorite of the focused game", async () => {
+    const r = await renderApp();
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
+    const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
+    card.classList.add("gamepad-focused");
+    const frame = (pressed: number | null) => emit("gamepad-state", { connected: true, name: "Pad", buttons: Array.from({ length: 16 }, (_, i) => i === pressed), axes: [0, 0, 0, 0] });
+    await act(async () => {
+      await frame(3); // Y
+      await frame(null);
+    });
+    // The listener is registered once: it used to see an empty library.
+    await waitFor(() => expect(r.backend.count("toggle_favorite")).toBe(1));
+    const args = r.backend.calls.find((c) => c.cmd === "toggle_favorite")?.args as { console: string; name: string };
+    expect(args.name.length).toBeGreaterThan(0);
+    expect(args.console.length).toBeGreaterThan(0);
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });

@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⚡ Chaque cover n'est plus cherchée qu'une fois quand plusieurs écrans la demandent en même temps, et un jeu introuvable n'est pas recherché de nouveau pendant 10 minutes : bibliothèque plus rapide et quota iiDB épargné",
     "🖼️ Choisir la cover : clic droit sur un jeu → « Choisir la cover » montre les jaquettes d'iiDB (toutes régions, et chaque jeu possible quand le nom est ambigu) , ou une image de ton PC avec « Depuis un fichier… » ; un clic et la bibliothèque l'affiche",
     "🎮 « Choisir la cover » en Big Picture et à la manette : touche X sur un jeu (ou clic droit), la croix pour se déplacer entre les covers, A pour choisir, B pour fermer",
+    "🐛 Fix : Y sur la manette met de nouveau un jeu en favori dans la bibliothèque (la manette ne voyait pas la liste des jeux)",
   ] },
   { version: "2.6.5", date: "2026-11-09", changes: [
     "🖼️ iiDB n'est plus interrogé automatiquement : ses nouvelles conditions n'autorisent que son API officielle avec une clé par utilisateur (elle arrive dans une prochaine version). Les autres sources prennent le relais, tes covers en cache restent",

@@ -3363,8 +3363,8 @@ export default function App() {
         const el = document.querySelector<HTMLElement>(".game-card.gamepad-focused");
         if (el) {
           const romPath = el.getAttribute("data-rom-path") ?? "";
-          const rom = roms.find(r => r.path === romPath);
-          if (rom) handleToggleFavorite(rom);
+          const rom = romsRef.current.find(r => r.path === romPath);
+          if (rom) handleToggleFavoriteRef.current(rom);
         }
       }
 
@@ -3638,6 +3638,9 @@ export default function App() {
       showToast(tl("toast.favoriteFailed", { error: String(err) }), "error");
     }
   }, [loadPlaytime, showToast, scheduleCloudSync, triggerHiddenAchievement, checkAchievements]);
+  // For the gamepad listener, registered once (Y = favorite).
+  const handleToggleFavoriteRef = useRef(handleToggleFavorite);
+  handleToggleFavoriteRef.current = handleToggleFavorite;
 
   const handleSetRating = useCallback(async (rom: RomFile, rating: number) => {
     try {
