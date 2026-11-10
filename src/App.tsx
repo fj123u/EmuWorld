@@ -16,6 +16,7 @@ import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMAT
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
+import { spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
@@ -1035,11 +1036,12 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   );
 };
 
-const BigPictureCard = ({ rom, focused, entry, onLaunch }: {
+const BigPictureCard = ({ rom, focused, entry, onLaunch, onChooseCover }: {
   rom: RomFile;
   focused: boolean;
   entry?: GameEntry;
   onLaunch: () => void;
+  onChooseCover?: () => void;
 }) => {
   const [cover, setCover] = useState<string | null>(null);
 
@@ -1053,7 +1055,9 @@ const BigPictureCard = ({ rom, focused, entry, onLaunch }: {
   return (
     <motion.div
       className={`bp-card gamepad-nav-item ${focused ? "bp-card--focused" : ""}`}
+      data-rom-path={rom.path}
       onClick={onLaunch}
+      onContextMenu={(e) => { e.preventDefault(); onChooseCover?.(); }}
       whileHover={{ scale: 1.04 }}
       whileTap={{ scale: 0.96 }}
     >
@@ -2999,6 +3003,11 @@ export default function App() {
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
   const bpSelectedIndexRef = useRef(bpSelectedIndex);
+  const coverPickerRomRef = useRef(coverPickerRom);
+  coverPickerRomRef.current = coverPickerRom;
+  // The gamepad listener is registered once: read the library through a ref.
+  const romsRef = useRef(roms);
+  romsRef.current = roms;
   bpSelectedIndexRef.current = bpSelectedIndex;
   const bpConsoleFilterRef = useRef(bpConsoleFilter);
   bpConsoleFilterRef.current = bpConsoleFilter;
@@ -3181,6 +3190,29 @@ export default function App() {
         return;
       }
 
+      // Cover picker open (library or Big Picture): move between its items by
+      // position, A picks, B closes.
+      if (coverPickerRomRef.current) {
+        const dir: Direction | null = moveDown ? "down" : moveUp ? "up" : moveLeft ? "left" : moveRight ? "right" : null;
+        const items = Array.from(document.querySelectorAll<HTMLElement>(".cover-picker .gamepad-nav-item"));
+        const current = items.findIndex(el => el.classList.contains("gamepad-focused"));
+        if (dir && items.length > 0) {
+          // First press: the first cover (or "From a file…"), not the close button.
+          const firstCover = items.findIndex(el => el.classList.contains("cover-picker__cover"));
+          const start = firstCover >= 0 ? firstCover : Math.max(0, items.findIndex(el => !el.closest(".screenshot-gallery__header")));
+          const next = current < 0
+            ? start
+            : spatialNext(items.map(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; }), current, dir);
+          items.forEach(el => el.classList.remove("gamepad-focused"));
+          items[next]?.classList.add("gamepad-focused");
+          items[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        if (getAction("confirm")) items[current]?.click();
+        if (getAction("back")) setCoverPickerRom(null);
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
       // Big Picture mode navigation
       if (bigPictureModeRef.current) {
         if (moveDown || moveUp || moveRight || moveLeft) {
@@ -3205,6 +3237,13 @@ export default function App() {
         if (getAction("back")) {
           if (bpConsoleFilterRef.current) { setBpConsoleFilter(null); setBpSelectedIndex(0); }
           else setBigPictureMode(false);
+        }
+        // X = choose the focused game's cover
+        if (getAction("details")) {
+          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
+          const romPath = items[bpSelectedIndexRef.current]?.getAttribute("data-rom-path");
+          const rom = romPath ? romsRef.current.find(r => r.path === romPath) : undefined;
+          if (rom) setCoverPickerRom(rom);
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
@@ -5442,6 +5481,7 @@ export default function App() {
                   focused={bpSelectedIndex === i}
                   entry={playtime.games[`${rom.console}::${rom.name}`]}
                   onLaunch={() => handleLaunch(rom)}
+                  onChooseCover={() => setCoverPickerRom(rom)}
                 />
               ))}
             </div>
@@ -5449,8 +5489,13 @@ export default function App() {
         )}
 
         <div className="big-picture__footer">
-          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {t("gamepad.back")} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
+          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {t("gamepad.back")}{bpConsoleFilter && <> &nbsp; X — {t("coverPicker.menu")}</>} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
         </div>
+
+        {/* Inside .big-picture: its stacking context sits above the app's overlays. */}
+        {coverPickerRom && (
+          <CoverPicker rom={coverPickerRom} t={t} onClose={closeCoverPicker} onNotify={showToast} />
+        )}
       </div>
     );
   }
@@ -8850,6 +8895,12 @@ export default function App() {
                       <Package size={14} /> + {col.name}
                     </button>
                   ))}
+                  <button
+                    className="gamepad-context-menu__btn"
+                    onClick={() => { setGamepadContextMenu(null); setCoverPickerRom(rom); }}
+                  >
+                    <ImagePlus size={14} /> {t("coverPicker.menu")}
+                  </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleOpenNotes(rom); }}

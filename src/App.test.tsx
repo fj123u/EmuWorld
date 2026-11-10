@@ -439,6 +439,52 @@ describe("cover picker in the library", () => {
   });
 });
 
+describe("cover picker in Big Picture", () => {
+  // One gamepad frame from the Rust side (gilrs); buttons are edge-triggered.
+  async function pad(pressed: number | null) {
+    const buttons = Array.from({ length: 16 }, (_, i) => i === pressed);
+    await act(async () => {
+      await emit("gamepad-state", { connected: true, name: "Pad", buttons, axes: [0, 0, 0, 0] });
+    });
+  }
+  async function press(button: number) {
+    await pad(button);
+    await pad(null);
+  }
+
+  async function openBigPictureOnNes() {
+    const r = await renderApp();
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "F11" });
+    });
+    fireEvent.click(await screen.findByRole("button", { name: /NES/ }));
+    await waitFor(() => expect(r.container.querySelector(".big-picture .bp-card")).not.toBeNull());
+    return r;
+  }
+
+  it("X opens it for the focused game, inside Big Picture, and the pad drives it", async () => {
+    const r = await openBigPictureOnNes();
+    await press(15); // right: from the back button to the first game
+    await press(2); // X
+    const dialog = await screen.findByRole("dialog", { name: "Choisir la cover" });
+    expect(dialog.closest(".big-picture"), "rendered above Big Picture").not.toBeNull();
+    expect(r.backend.calls.find((c) => c.cmd === "iidb_cover_choices")?.args).toEqual({ gameName: "Super Mario Bros. 3 (Europe)", console: "NES" });
+    expect(screen.getByText(/X — Choisir la cover/)).toBeTruthy();
+    await press(13); // down: first item of the dialog
+    await press(0); // A
+    await waitFor(() => expect(r.backend.count("plugin:dialog|open")).toBe(1));
+    await press(1); // B closes the dialog, Big Picture stays
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choisir la cover" })).toBeNull());
+    expect(r.container.querySelector(".big-picture")).not.toBeNull();
+  });
+
+  it("opens with a right-click on a game card", async () => {
+    const r = await openBigPictureOnNes();
+    fireEvent.contextMenu(r.container.querySelector(".big-picture .bp-card")!);
+    expect(await screen.findByRole("dialog", { name: "Choisir la cover" })).toBeTruthy();
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
