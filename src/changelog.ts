@@ -8,7 +8,7 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
-  { version: "2.7.0", date: "2026-11-06", changes: [
+  { version: "2.7.0", date: "2026-11-10", changes: [
     "⏱️ Chrono de speedrun : petite fenêtre toujours visible pendant le jeu, splits personnalisés, record et meilleurs segments par jeu, comparaison en direct (vert/rouge/doré)",
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
     "⏱️ Résumé du record à copier pour le partager, et « Remettre à zéro » pour effacer record, meilleurs segments et runs d'un jeu",
