@@ -113,8 +113,11 @@ pub fn save_speedrun(game_key: String, data: SpeedrunData) -> Result<SpeedrunDat
 /// Opens the timer in the top-right corner of the main screen: always on
 /// top, transparent, click-through and never focused, so the game keeps
 /// the keyboard. Reopening it switches it to `game_key`.
+/// Async on purpose: a synchronous command that builds a window deadlocks
+/// the main thread on Windows (the app then ignored every click, "Jouer"
+/// included). A test in lib.rs checks it.
 #[tauri::command]
-pub fn open_speedrun_window(app_handle: tauri::AppHandle, game_key: String, game_name: String) -> Result<(), String> {
+pub async fn open_speedrun_window(app_handle: tauri::AppHandle, game_key: String, game_name: String) -> Result<(), String> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     push_log("INFO", &format!("Speedrun: ouverture du chrono pour '{}'", game_key));
     if let Some(win) = app_handle.get_webview_window(WINDOW_LABEL) {
@@ -157,7 +160,7 @@ pub fn open_speedrun_window(app_handle: tauri::AppHandle, game_key: String, game
 }
 
 #[tauri::command]
-pub fn close_speedrun_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+pub async fn close_speedrun_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
     if let Some(win) = app_handle.get_webview_window(WINDOW_LABEL) {
         win.close().map_err(|e| e.to_string())?;

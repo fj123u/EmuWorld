@@ -6773,7 +6773,7 @@ async fn start_oauth_server(app_handle: tauri::AppHandle) -> Result<u16, String>
 }
 
 #[tauri::command]
-fn create_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
+async fn create_overlay_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
     use tauri::WebviewWindowBuilder;
 
@@ -7253,6 +7253,23 @@ mod tests {
     }
 
     /// Builds a throw-away ROM library on disk and returns its root.
+    #[test]
+    fn commands_that_build_a_window_are_async() {
+        // Tauri on Windows: a synchronous command creating a window
+        // deadlocks the main thread; the whole UI then stops answering.
+        for (file, src) in [("lib.rs", include_str!("lib.rs")), ("speedrun.rs", include_str!("speedrun.rs"))] {
+            for chunk in src.split("#[tauri::command]").skip(1) {
+                let body = chunk.split("
+}
+").next().unwrap_or(chunk);
+                let signature = chunk.lines().find(|l| l.contains("fn ")).unwrap_or("");
+                if body.contains(&["WebviewWindowBuilder", "::new"].concat()) {
+                    assert!(signature.contains("async fn"), "{file}: make this command async: {signature}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn cover_files_must_be_images_of_a_sane_size() {
         let dir = std::env::temp_dir().join(format!("emuworld_cover_file_{}", std::process::id()));
