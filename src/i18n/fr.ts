@@ -786,8 +786,9 @@ const fr = {
     opened: "Chrono affiché en haut à droite de l'écran",
     copy: "Copier le résumé",
     copied: "Résumé copié !",
-    clear: "Effacer le record et les stats",
-    confirmClear: "Tout effacer ?",
+    clear: "Remettre à zéro",
+    confirmClear: "Effacer record, meilleurs segments et runs ?",
+    cleared: "Chrono remis à zéro : record, meilleurs segments et runs effacés",
   },
   iidb: {
     title: "Covers iiDB",

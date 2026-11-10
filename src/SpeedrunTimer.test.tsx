@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { mockBackend } from "./test/tauriMock";
 import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
 import type { SpeedrunData } from "./speedrun";
@@ -48,6 +48,31 @@ describe("speedrun timer window", () => {
     const all = saves(backend);
     return all[all.length - 1];
   };
+
+  it("forgets the old record when the game is reset from the app", async () => {
+    window.history.pushState({}, "", "/?speedrun=1&game=NES%3A%3AMario&name=Mario");
+    let clock = 0;
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    let onDisk: SpeedrunData = stored;
+    const backend = mockBackend({ get_speedrun: () => onDisk, save_speedrun: (a) => (a as { data: SpeedrunData }).data });
+    render(<SpeedrunWindow t={t} />);
+    await screen.findByText("Monde 2");
+    const press = async (key: string, at: number) => {
+      clock = at;
+      await act(async () => { await emit("speedrun-hotkey", key); });
+    };
+    await press("split", 1_000);
+    await press("split", 56_000);
+    expect(screen.getByText("-5.0")).toBeTruthy();
+    onDisk = { ...stored, pb: null, best_segments: [], attempts: 0, completed: 0 };
+    await act(async () => { await emit("speedrun-reset", "NES::Mario"); });
+    await waitFor(() => expect(backend.count("get_speedrun")).toBe(2));
+    expect(screen.queryByText("-5.0"), "the running run is dropped").toBeNull();
+    // The next run starts from the cleared data, not the old record.
+    await press("split", 100_000);
+    await waitFor(() => expect(lastSave(backend)?.attempts).toBe(1));
+    expect(lastSave(backend)?.pb).toBeNull();
+  });
 
   it("counts an attempt when a run starts, and saves a faster run as the record", async () => {
     const { backend, press } = await openWindow();
@@ -113,6 +138,24 @@ describe("speedrun setup", () => {
       gameKey: "NES::Super Mario Bros. 3",
       gameName: "Super Mario Bros. 3",
     }));
+  });
+
+  it("resets the record, best segments and runs after confirmation, and tells the timer", async () => {
+    const { backend, onNotify } = renderModal();
+    const heard: string[] = [];
+    const stop = await listen<string>("speedrun-reset", (e) => { heard.push(e.payload); });
+    await screen.findByRole("dialog", { name: "Speedrun" });
+    fireEvent.click(screen.getByRole("button", { name: /Remettre à zéro/ }));
+    expect(backend.count("save_speedrun"), "asks first").toBe(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Effacer record, meilleurs segments et runs/ }));
+    });
+    await waitFor(() => expect(backend.count("save_speedrun")).toBe(1));
+    const saved = (backend.calls.find((c) => c.cmd === "save_speedrun")!.args as { data: SpeedrunData }).data;
+    expect(saved).toMatchObject({ pb: null, best_segments: [], attempts: 0, completed: 0, splits: stored.splits });
+    await waitFor(() => expect(heard).toEqual(["NES::Super Mario Bros. 3"]));
+    stop();
+    expect(onNotify).toHaveBeenCalledWith(expect.stringContaining("remis à zéro"), "success");
   });
 
   it("warns that changing the number of splits clears the record", async () => {

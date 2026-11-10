@@ -3,7 +3,7 @@
 // (SpeedrunModal). Logic: src/speedrun.ts, storage: src-tauri/src/speedrun.rs.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { Copy, Flag, Timer, Trash2, X } from "lucide-react";
 import {
   deltaVsPb,
@@ -29,6 +29,9 @@ import {
 type T = (key: string, params?: Record<string, string | number>) => string;
 
 const now = () => performance.now();
+
+/** Sent to the timer window when a game's record and stats are reset. */
+export const SPEEDRUN_RESET_EVENT = "speedrun-reset";
 
 function log(level: "INFO" | "WARN" | "ERROR", message: string) {
   invoke("log_event", { level, message: `Speedrun: ${message}` }).catch(() => {});
@@ -105,6 +108,22 @@ export function SpeedrunWindow({ t }: { t: T }) {
     const unlisten = listen<HotkeyAction>("speedrun-hotkey", (e) => handle(e.payload));
     return () => { unlisten.then((fn) => fn()); };
   }, [handle]);
+
+  // "Remettre à zéro" in the app: drop what this window holds (it would
+  // write the old record back on its next save) and start from scratch.
+  useEffect(() => {
+    const unlisten = listen<string>(SPEEDRUN_RESET_EVENT, (e) => {
+      if (e.payload !== gameKey) return;
+      runRef.current = newRun();
+      setRun(runRef.current);
+      recorded.current = false;
+      setNewPb(false);
+      invoke<SpeedrunData>("get_speedrun", { gameKey })
+        .then((d) => { dataRef.current = d; setData(d); })
+        .catch(() => {});
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, [gameKey]);
 
   useEffect(() => {
     if (run.status !== "running") return;
@@ -255,15 +274,21 @@ export function SpeedrunModal({ rom, t, onClose, onNotify }: ModalProps) {
                 className="btn btn--danger btn--sm gamepad-nav-item"
                 onClick={async () => {
                   setConfirmClear(false);
-                  const saved = await invoke<SpeedrunData>("save_speedrun", { gameKey, data: { ...data, pb: null, best_segments: [], attempts: 0, completed: 0 } }).catch(() => null);
-                  if (saved) setData(saved);
+                  try {
+                    const saved = await invoke<SpeedrunData>("save_speedrun", { gameKey, data: { ...data, pb: null, best_segments: [], attempts: 0, completed: 0 } });
+                    setData(saved);
+                    await emit(SPEEDRUN_RESET_EVENT, gameKey).catch(() => {});
+                    onNotify(t("speedrun.cleared"), "success");
+                  } catch (e) {
+                    onNotify(String(e), "error");
+                  }
                 }}
               >
-                {t("speedrun.confirmClear")}
+                <Trash2 size={12} /> {t("speedrun.confirmClear")}
               </button>
             ) : (
-              <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => setConfirmClear(true)} aria-label={t("speedrun.clear")} title={t("speedrun.clear")}>
-                <Trash2 size={12} />
+              <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => setConfirmClear(true)}>
+                <Trash2 size={12} /> {t("speedrun.clear")}
               </button>
             )}
           </div>

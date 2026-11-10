@@ -788,8 +788,9 @@ const en: Translations = {
     opened: "Timer shown in the top-right corner of the screen",
     copy: "Copy summary",
     copied: "Summary copied!",
-    clear: "Clear the record and stats",
-    confirmClear: "Clear everything?",
+    clear: "Reset",
+    confirmClear: "Clear record, best segments and runs?",
+    cleared: "Timer reset: record, best segments and runs cleared",
   },
   iidb: {
     title: "iiDB covers",

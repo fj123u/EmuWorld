@@ -11,7 +11,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   { version: "2.7.0", date: "2026-11-06", changes: [
     "⏱️ Chrono de speedrun : petite fenêtre toujours visible pendant le jeu, splits personnalisés, record et meilleurs segments par jeu, comparaison en direct (vert/rouge/doré)",
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",
-    "⏱️ Résumé du record à copier pour le partager",
+    "⏱️ Résumé du record à copier pour le partager, et « Remettre à zéro » pour effacer record, meilleurs segments et runs d'un jeu",
     "🖼️ iiDB revient, par son API officielle : colle ta clé API iiDB (gratuite, sur accounts.iisu.network) dans Réglages → Covers iiDB. Les covers sont demandées par lots de 25 (les jeux Switch par leur Title ID), toutes consoles comprises, et la source est créditée. Quand iiDB hésite entre plusieurs fiches, EmuWorld prend celle qui porte exactement le nom du jeu, sinon il ne devine pas",
     "⚡ Chaque cover n'est plus cherchée qu'une fois quand plusieurs écrans la demandent en même temps, et un jeu introuvable n'est pas recherché de nouveau pendant 10 minutes : bibliothèque plus rapide et quota iiDB épargné",
     "🖼️ Choisir la cover : clic droit sur un jeu → « Choisir la cover » montre les jaquettes d'iiDB (toutes régions, et chaque jeu possible quand le nom est ambigu) , ou une image de ton PC avec « Depuis un fichier… » ; un clic et la bibliothèque l'affiche",
