@@ -85,6 +85,26 @@ export function findLobbyRom<R extends { name: string; console: string }>(
   return sameConsole.find((r) => normalizeGameTitle(r.name) === title);
 }
 
+/**
+ * Emulator a lobby uses for a console: the first installed one that plays
+ * online, otherwise those to install (`missing`). `null`: nothing plays that
+ * console online, so no lobby is offered for its games. `netplayIds` comes
+ * from the backend (netplay_emulators).
+ */
+export type LobbyEmulator<E> = { emulator: E; missing?: undefined } | { emulator?: undefined; missing: E[] };
+
+export function pickLobbyEmulator<E extends { id: string; console: string }>(
+  catalog: readonly E[],
+  installed: readonly string[],
+  netplayIds: readonly string[],
+  console: string,
+): LobbyEmulator<E> | null {
+  const online = catalog.filter((e) => e.console === console && netplayIds.includes(e.id));
+  if (online.length === 0) return null;
+  const emulator = online.find((e) => installed.includes(e.id));
+  return emulator ? { emulator } : { missing: online };
+}
+
 export function everyoneReady(members: { is_ready: boolean }[]): boolean {
   return members.length >= 2 && members.every((m) => m.is_ready);
 }

@@ -113,6 +113,7 @@ export function defaultHandlers(): Record<string, Handler> {
     close_speedrun_window: () => null,
     // Netplay (netplay.rs)
     launch_netplay: () => ({ method: "retroarch", nick: "EW-test-lobby1" }),
+    netplay_emulators: () => ["mesen"],
     find_netplay_session: () => ({ ip: "europe-west1.relay.retroarch.com", port: 55435, session: "g3kjejYF3wcqOkMh" }),
     read_save_state: () => new Uint8Array([0x52, 0x5a, 0x49, 0x50]).buffer, // tauri::ipc::Response → ArrayBuffer
     import_save_state: () => ({

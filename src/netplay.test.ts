@@ -6,6 +6,7 @@ import {
   isValidHostCode,
   LOBBY_MAX_AGE_MS,
   parseNetplayCode,
+  pickLobbyEmulator,
   shouldAutoJoin,
   startHostNetplay,
   type LobbyLike,
@@ -116,5 +117,29 @@ describe("starting the host's game", () => {
       }),
     ).rejects.toThrow(/pas apparue/);
     expect(publish).not.toHaveBeenCalled();
+  });
+});
+
+describe("pickLobbyEmulator", () => {
+  const catalog = [
+    { id: "duckstation", console: "PlayStation 1" },
+    { id: "mesen", console: "NES" },
+    { id: "retroarch-nes", console: "NES" },
+    { id: "pcsx2", console: "PlayStation 2" },
+  ];
+  const online = ["mesen", "retroarch-nes"];
+
+  it("offers no lobby for a console nothing plays online", () => {
+    expect(pickLobbyEmulator(catalog, ["pcsx2"], online, "PlayStation 2")).toBeNull();
+    expect(pickLobbyEmulator(catalog, ["duckstation"], online, "PlayStation 1")).toBeNull();
+  });
+
+  it("uses an installed emulator that plays online, never one that does not", () => {
+    expect(pickLobbyEmulator(catalog, ["retroarch-nes"], online, "NES")).toEqual({ emulator: catalog[2] });
+    expect(pickLobbyEmulator(catalog, ["mesen", "retroarch-nes"], online, "NES")).toEqual({ emulator: catalog[1] });
+  });
+
+  it("lists the emulators to install when none is installed", () => {
+    expect(pickLobbyEmulator(catalog, ["pcsx2"], online, "NES")).toEqual({ missing: [catalog[1], catalog[2]] });
   });
 });

@@ -206,6 +206,33 @@ fn spawn(mut cmd: Command) -> Result<(), String> {
     cmd.spawn().map(|_| ()).map_err(|e| format!("Lancement impossible: {}", e))
 }
 
+/// How EmuWorld plays this emulator online: "retroarch" (libretro relay, via
+/// the emulator's core), "ppsspp" (ad hoc server), "dolphin" (NetPlay code)
+/// or "azahar" (room). `None`: no netplay, so no lobby for its games (a lobby
+/// on a PS2 or Switch game would only fail once everyone is ready).
+pub fn netplay_method(emu: &crate::emulators::EmulatorInfo) -> Option<&'static str> {
+    match emu.id.as_str() {
+        "ppsspp" => Some("ppsspp"),
+        "dolphin" => Some("dolphin"),
+        "azahar" => Some("azahar"),
+        id if emu.core_name.is_some() || crate::retroachievements::retroarch_core_for_emulator(id).is_some() => Some("retroarch"),
+        _ => None,
+    }
+}
+
+/// Ids of the catalog emulators that can play online (lobbies are offered
+/// only for the consoles they run).
+#[tauri::command]
+pub fn netplay_emulators() -> Vec<String> {
+    let ids: Vec<String> = crate::emulators::get_catalog()
+        .into_iter()
+        .filter(|e| netplay_method(e).is_some())
+        .map(|e| e.id)
+        .collect();
+    push_log("INFO", &format!("Netplay: {} émulateurs compatibles", ids.len()));
+    ids
+}
+
 /// Starts the emulator for a lobby. `role` is "host" or "client"; a RetroArch
 /// client needs the host's `relay` (from the lobby). `max_players` caps the
 /// host's connections.
@@ -249,6 +276,7 @@ async fn launch_inner(
     }
 
     let emus_dir = PathBuf::from(&config.emulators_directory);
+    netplay_method(emu).ok_or("Pas de netplay pour cette console")?;
     match emu.id.as_str() {
         "ppsspp" => return launch_ppsspp(&emus_dir, &final_path, username),
         "dolphin" => return launch_dolphin(&emus_dir, &final_path, username, is_host, host_code.as_deref()),
@@ -507,6 +535,27 @@ pub async fn find_netplay_session(nick: String, timeout_secs: Option<u64>) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_emulators_with_netplay_get_lobbies() {
+        let catalog = crate::emulators::get_catalog();
+        let method = |id: &str| netplay_method(catalog.iter().find(|e| e.id == id).unwrap_or_else(|| panic!("{} absent du catalogue", id)));
+        assert_eq!(method("ppsspp"), Some("ppsspp"));
+        assert_eq!(method("dolphin"), Some("dolphin"));
+        assert_eq!(method("azahar"), Some("azahar"));
+        assert_eq!(method("mesen"), Some("retroarch"));
+        assert_eq!(method("retroarch-nes"), Some("retroarch"));
+        assert_eq!(method("flycast"), Some("retroarch"));
+        // Every other emulator is a deliberate "no netplay": a new emulator
+        // must be added to one list or the other.
+        // ("retroarch" alone is the multi-system frontend: no core, no console.)
+        let without = ["cemu", "ryubing", "duckstation", "pcsx2", "rpcs3", "xemu", "xenia", "retroarch"];
+        for emu in &catalog {
+            assert_eq!(netplay_method(emu).is_none(), without.contains(&emu.id.as_str()), "netplay de {} à décider", emu.id);
+        }
+        let ids = netplay_emulators();
+        assert!(ids.contains(&"retroarch-snes".to_string()) && !ids.contains(&"pcsx2".to_string()));
+    }
 
     const LIST: &str = r#"[
       {"fields": {"username": "Airwax", "host_method": 0, "mitm_ip": "", "mitm_port": 0, "mitm_session": ""}},

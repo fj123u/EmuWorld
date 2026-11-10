@@ -6854,6 +6854,7 @@ pub fn run() {
             open_path,
             netplay::launch_netplay,
             netplay::find_netplay_session,
+            netplay::netplay_emulators,
             speedrun::get_speedrun,
             speedrun::save_speedrun,
             speedrun::open_speedrun_window,

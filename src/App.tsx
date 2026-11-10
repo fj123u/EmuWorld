@@ -18,7 +18,7 @@ import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
-import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
+import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
 import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
@@ -4106,11 +4106,28 @@ export default function App() {
     return () => { cancelled = true; };
   }, [user, loadLobbyMembers]);
 
-  const lobbyEmulatorFor = useCallback((rom: RomFile) =>
-    catalog.find((e: any) => e.console === rom.console && installed.includes(e.id)), [catalog, installed]);
+  // Emulators that play online (netplay.rs): lobbies only for their consoles.
+  const [netplayIds, setNetplayIds] = useState<string[]>([]);
+  useEffect(() => { invoke<string[]>("netplay_emulators").then(setNetplayIds).catch(() => {}); }, []);
+  const lobbyEmulatorFor = useCallback((console: string) =>
+    pickLobbyEmulator(catalog, installed, netplayIds, console), [catalog, installed, netplayIds]);
+  /** Why this console can't be played online here yet, or null when it can. */
+  const lobbyEmulatorProblem = useCallback((console: string): string | null => {
+    const choice = lobbyEmulatorFor(console);
+    if (!choice) return tl("lobby.noNetplay", { console });
+    if (choice.missing) return tl("lobby.installForOnline", { console, emulators: choice.missing.map(e => e.name).join(", ") });
+    return null;
+  }, [lobbyEmulatorFor, tl]);
 
   const handleCreateLobby = useCallback(async (rom: RomFile) => {
     if (!user) return;
+    // The host launches first: refuse before inviting friends to a game that can't start.
+    const problem = lobbyEmulatorProblem(rom.console);
+    if (problem) {
+      lobbyLog("WARN", `lobby refusé pour ${rom.name} (${rom.console}): ${problem}`);
+      showToast(problem, "error");
+      return;
+    }
     const { data, error } = await supabase.from("lobbies").insert({
       host_id: user.id,
       game_name: rom.name,
@@ -4121,7 +4138,7 @@ export default function App() {
     setCurrentLobby({ ...data, members: await loadLobbyMembers(data.id) });
     lobbyLog("INFO", `lobby ${data.id} créé pour ${rom.name} (${rom.console})`);
     showToast(tl("lobby.created"), "success");
-  }, [user, showToast, tl, loadLobbyMembers, lobbyLog]);
+  }, [user, showToast, tl, loadLobbyMembers, lobbyLog, lobbyEmulatorProblem]);
 
   const handleInviteToLobby = useCallback(async (friendId: string) => {
     if (!currentLobby) return;
@@ -4164,8 +4181,13 @@ export default function App() {
   const handleLaunchLobby = useCallback(async () => {
     if (!currentLobby || !user || lobbyBusy) return;
     const rom = findLobbyRom(roms, currentLobby);
-    const emu = rom ? lobbyEmulatorFor(rom) : undefined;
-    if (!rom || !emu) { showToast(tl("lobby.noEmulator", { console: currentLobby.game_console }), "error"); return; }
+    const emu = lobbyEmulatorFor(currentLobby.game_console)?.emulator;
+    if (!rom || !emu) {
+      const problem = rom ? lobbyEmulatorProblem(currentLobby.game_console) : tl("toast.lobbyMissingRom", { game: currentLobby.game_name });
+      lobbyLog("WARN", `lancement hôte du lobby ${currentLobby.id} impossible: ${problem}`);
+      showToast(problem ?? "", "error");
+      return;
+    }
     const lobbyId = currentLobby.id;
     setLobbyBusy("launching");
     try {
@@ -4196,7 +4218,7 @@ export default function App() {
     } finally {
       setLobbyBusy(null);
     }
-  }, [currentLobby, user, lobbyBusy, roms, lobbyEmulatorFor, profile, showToast, tl, lobbyLog]);
+  }, [currentLobby, user, lobbyBusy, roms, lobbyEmulatorFor, lobbyEmulatorProblem, profile, showToast, tl, lobbyLog]);
 
   // Friend: join the game the host published.
   const joinLobbyGame = useCallback(async (lobby: Lobby) => {
@@ -4204,8 +4226,14 @@ export default function App() {
     const code = parseNetplayCode(lobby.netplay_code);
     if (!code) return;
     const rom = findLobbyRom(roms, lobby);
-    const emu = rom ? lobbyEmulatorFor(rom) : undefined;
-    if (!rom || !emu) { showToast(tl("toast.lobbyMissingRom", { game: lobby.game_name }), "error"); return; }
+    const emu = lobbyEmulatorFor(lobby.game_console)?.emulator;
+    if (!rom || !emu) {
+      // Missing game or missing emulator: say which, not always "missing game".
+      const problem = rom ? lobbyEmulatorProblem(lobby.game_console) : tl("toast.lobbyMissingRom", { game: lobby.game_name });
+      lobbyLog("WARN", `impossible de rejoindre le lobby ${lobby.id}: ${problem}`);
+      showToast(problem ?? "", "error");
+      return;
+    }
     joinedLobbiesRef.current.add(lobby.id);
     setLobbyBusy("joining");
     try {
@@ -4222,7 +4250,7 @@ export default function App() {
     } finally {
       setLobbyBusy(null);
     }
-  }, [user, roms, lobbyEmulatorFor, profile, showToast, tl, lobbyLog]);
+  }, [user, roms, lobbyEmulatorFor, lobbyEmulatorProblem, profile, showToast, tl, lobbyLog]);
 
   // Host of a Dolphin/Azahar game: share the code the emulator shows.
   const publishHostCode = useCallback(async (hostCode: string) => {
@@ -9232,7 +9260,7 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleShowRecommendations(romContextMenu.rom); }}>
               <Sparkles size={14} /> Jeux similaires
             </button>
-            {user && (
+            {user && lobbyEmulatorFor(romContextMenu.rom.console) && (
               <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleCreateLobby(romContextMenu.rom); }}>
                 <Users size={14} /> {t("lobby.createLobby")}
               </button>
