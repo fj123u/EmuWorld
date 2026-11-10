@@ -1,0 +1,10 @@
+# cargo audit configuration (run from src-tauri/).
+[advisories]
+ignore = [
+    # sevenz-rust: path traversal in decompress_file (no fixed release).
+    # EmuWorld never calls it: every 7z goes through decompress_7z_safely
+    # (lib.rs), which refuses absolute paths, drive letters and "..".
+    # Tests: archive_entries_stay_inside_the_destination,
+    # a_crafted_7z_cannot_write_outside_its_folder.
+    "RUSTSEC-2026-0245",
+]

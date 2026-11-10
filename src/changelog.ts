@@ -8,6 +8,13 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.7.1", date: "2026-11-10", changes: [
+    "🔒 Sécurité : une archive .7z piégée ne peut plus écrire en dehors de son dossier (import de ROMs et installation d'émulateurs)",
+    "🔒 Sécurité : bibliothèques réseau et de compression mises à jour (TLS, certificats, HTTP/2, zip), 18 failles connues corrigées",
+    "🔒 Sécurité : suppression d'une ROM refusée si son emplacement ne peut pas être vérifié, et cores RetroArch installés uniquement dans leur dossier",
+    "🔒 Avatars et images de chat limités à 5 Mo et aux formats d'image",
+    "🧹 Ancien code Myrient retiré (le site a fermé)",
+  ] },
   { version: "2.7.0", date: "2026-11-10", changes: [
     "⏱️ Chrono de speedrun : petite fenêtre toujours visible pendant le jeu, splits personnalisés, record et meilleurs segments par jeu, comparaison en direct (vert/rouge/doré)",
     "⏱️ Pilotage au pavé numérique comme LiveSplit (1 split, 2 passer, 3 reset, 5 pause, 8 annuler), sans quitter le jeu",

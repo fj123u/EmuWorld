@@ -40,3 +40,6 @@ yarn-debug.log*
 !*.key.pub
 
 # Lock files (keep package-lock.json)
+
+# Session cookies (never commit)
+cookies.txt
