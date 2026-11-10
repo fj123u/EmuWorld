@@ -43,11 +43,17 @@ jobs:
       - name: Audit npm dependencies
         run: npm audit --audit-level=high
 
-      - name: Type-check + build frontend
-        run: npm run build
+      - name: Type-check
+        run: npx tsc --noEmit
 
       - name: Frontend tests (UI pages, store flows, translations)
         run: npm test
 
       - name: Rust tests (scan, downloads, playtime, catalog)
         run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # Builds the real app (frontend + Rust, debug, no installer, no signing)
+      # so errors that only `tauri build` reports — like the mismatched Tauri
+      # packages that broke the 2.7.1 release — show up before tagging.
+      - name: Build the Tauri app
+        run: npx tauri build --debug --no-bundle
