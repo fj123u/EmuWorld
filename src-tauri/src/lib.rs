@@ -1988,7 +1988,7 @@ fn replace_cached_cover(dir: &PathBuf, game_name: &str, image: &[u8]) -> Option<
 /// "Choisir la cover": downloads the box art the user picked (iiDB's asset
 /// host only) and makes it the game's cached cover.
 #[tauri::command]
-async fn set_cover_from_url(game_name: String, console: String, url: String) -> Result<String, String> {
+async fn set_cover_from_url(game_name: String, console: String, url: String, parent_id: Option<i64>) -> Result<String, String> {
     push_log("INFO", &format!("Cover choisie pour '{}' ({})", game_name, console));
     if !url.starts_with(iidb_api::ASSET_HOST) {
         push_log("WARN", &format!("Cover refusée (hôte inattendu) pour '{}'", game_name));
@@ -2009,6 +2009,10 @@ async fn set_cover_from_url(game_name: String, console: String, url: String) -> 
         "Image illisible".to_string()
     })?;
     push_log("INFO", &format!("Cover remplacée pour '{}' ({})", game_name, console));
+    // The iiDB game picked here is the one to use for this ROM from now on.
+    if let Some(id) = parent_id {
+        iidb_api::remember_parent(&game_name, &console, id);
+    }
     Ok(data_url)
 }
 

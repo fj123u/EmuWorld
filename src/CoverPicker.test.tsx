@@ -45,11 +45,25 @@ describe("cover picker", () => {
     await act(async () => {
       fireEvent.click(usa);
     });
-    expect(backend.calls.find((c) => c.cmd === "set_cover_from_url")?.args).toEqual({ gameName: rom.name, console: rom.console, url: "https://assets.iisu.network/us.png" });
+    // parentId: the picked game is remembered for later searches.
+    expect(backend.calls.find((c) => c.cmd === "set_cover_from_url")?.args).toEqual({ gameName: rom.name, console: rom.console, url: "https://assets.iisu.network/us.png", parentId: 1 });
     expect((changed.mock.calls[0][0] as CustomEvent).detail).toEqual({ name: rom.name, console: rom.console, dataUrl: "data:image/webp;base64,NEW" });
     expect(onNotify).toHaveBeenCalledWith("Cover mise à jour", "success");
     expect(onClose).toHaveBeenCalled();
     window.removeEventListener(COVER_CHANGED_EVENT, changed);
+  });
+
+  it("marks the game picked earlier and sends the right game when picking another", async () => {
+    const backend = mockBackend({ iidb_cover_choices: () => [{ ...games[1], remembered: true }, games[0]] });
+    render(<CoverPicker rom={rom} t={t} onClose={() => {}} onNotify={() => {}} />);
+    const chosen = await screen.findByText("✓ Ton choix");
+    expect(chosen.closest("section")?.textContent).toContain("Xbox 360, 2013");
+    expect(screen.getByText(/EmuWorld s'en souviendra/)).toBeTruthy();
+    const eu = screen.getByRole("button", { name: "Utiliser cette cover (Europe)" });
+    await act(async () => {
+      fireEvent.click(eu);
+    });
+    expect((backend.calls.find((c) => c.cmd === "set_cover_from_url")?.args as { parentId: number }).parentId).toBe(1);
   });
 
   it("takes a cover from an image on the PC, even without iiDB", async () => {

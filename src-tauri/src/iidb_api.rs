@@ -9,6 +9,9 @@
 //!   (`X-IIDB-Requests-Per-Second-Limit`, 1/s by default), waiting
 //!   `Retry-After` on 429. A 700-game library is ~28 requests.
 //! - Switch ROMs also send their Title ID (`nintendo-switch.title-id`).
+//! - A game picked in "Choisir la cover" is remembered (`iidb_choices.json`):
+//!   later lookups ask `/assets/batch` for that iiDB game directly, so an
+//!   ambiguous name ("needs_choice") is settled once, by the user.
 //! - Only `match.status == "matched"` is accepted, preferring box art from
 //!   the ROM's console; ambiguous names ("needs_choice") fall through to the
 //!   other sources rather than risk a wrong cover. Each batch logs what
@@ -18,7 +21,8 @@
 
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
@@ -342,11 +346,78 @@ pub fn clear_iidb_api_key() -> Result<(), String> {
     Ok(())
 }
 
+// ---- remembered choices -----------------------------------------------------
+
+fn choices_path() -> PathBuf {
+    crate::emuworld_base_dir().join("iidb_choices.json")
+}
+
+/// `console|rom name` → iiDB parent id the user picked.
+pub fn load_choices(path: &Path) -> HashMap<String, i64> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|s| serde_json::from_str::<HashMap<String, i64>>(&s).ok())
+        .map(|m| m.into_iter().filter(|(_, id)| *id > 0).collect())
+        .unwrap_or_default()
+}
+
+pub fn save_choices(path: &Path, choices: &HashMap<String, i64>) -> Result<(), String> {
+    let json = serde_json::to_string_pretty(choices).map_err(|e| e.to_string())?;
+    crate::atomic_file::write(path, json.as_bytes()).map_err(|e| e.to_string())
+}
+
+fn choices() -> &'static Mutex<Option<HashMap<String, i64>>> {
+    static CHOICES: OnceLock<Mutex<Option<HashMap<String, i64>>>> = OnceLock::new();
+    CHOICES.get_or_init(|| Mutex::new(None))
+}
+
+fn with_choices<T>(f: impl FnOnce(&mut HashMap<String, i64>) -> T) -> T {
+    let mut guard = choices().lock().unwrap_or_else(|e| e.into_inner());
+    f(guard.get_or_insert_with(|| load_choices(&choices_path())))
+}
+
+/// The iiDB game the user picked for this ROM, if any.
+pub fn remembered_parent(rom_name: &str, console: &str) -> Option<i64> {
+    with_choices(|c| c.get(&crate::cover_key(rom_name, console)).copied())
+}
+
+/// Remembers the iiDB game picked for this ROM ("Choisir la cover").
+pub fn remember_parent(rom_name: &str, console: &str, parent_id: i64) {
+    if parent_id <= 0 {
+        return;
+    }
+    let key = crate::cover_key(rom_name, console);
+    let saved = with_choices(|c| {
+        c.insert(key, parent_id);
+        save_choices(&choices_path(), c)
+    });
+    match saved {
+        Ok(()) => push_log("INFO", &format!("iiDB: jeu {} retenu pour '{}' ({})", parent_id, rom_name, console)),
+        Err(e) => push_log("ERROR", &format!("iiDB: choix non enregistré pour '{}': {}", rom_name, e)),
+    }
+}
+
+/// Which jobs of a batch need `/resolve` (no remembered game) and which go
+/// straight to `/assets/batch` with the remembered parent id.
+pub fn split_remembered(parents: &[Option<i64>]) -> (Vec<usize>, Vec<(usize, i64)>) {
+    let mut resolve = Vec::new();
+    let mut direct = Vec::new();
+    for (i, p) in parents.iter().enumerate() {
+        match p {
+            Some(id) => direct.push((i, *id)),
+            None => resolve.push(i),
+        }
+    }
+    (resolve, direct)
+}
+
 // ---- batched lookups --------------------------------------------------------
 
 struct Job {
     lookup: Value,
     console: String,
+    /// iiDB game the user picked earlier for this ROM.
+    parent: Option<i64>,
     reply: oneshot::Sender<Option<String>>,
 }
 
@@ -364,8 +435,9 @@ fn queue() -> &'static mpsc::UnboundedSender<Job> {
 pub async fn find_boxart(rom_name: &str, console: &str) -> Option<String> {
     api_key()?;
     let lookup = build_lookup(rom_name, console)?;
+    let parent = remembered_parent(rom_name, console);
     let (reply, answer) = oneshot::channel();
-    queue().send(Job { lookup, console: console.to_string(), reply }).ok()?;
+    queue().send(Job { lookup, console: console.to_string(), parent, reply }).ok()?;
     answer.await.ok().flatten()
 }
 
@@ -442,30 +514,39 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
             jobs.into_iter().for_each(|j| { let _ = j.reply.send(None); });
             continue;
         };
-        let body = json!({ "lookups": jobs.iter().map(|j| j.lookup.clone()).collect::<Vec<_>>() });
-        let results = post_batch("/resolve/batch", &body, &key).await.unwrap_or_default();
+        // Games the user picked before skip /resolve.
+        let (to_resolve, remembered) = split_remembered(&jobs.iter().map(|j| j.parent).collect::<Vec<_>>());
+        let mut results: Vec<Option<Value>> = vec![None; jobs.len()];
+        if !to_resolve.is_empty() {
+            let body = json!({ "lookups": to_resolve.iter().map(|&i| jobs[i].lookup.clone()).collect::<Vec<_>>() });
+            let resolved = post_batch("/resolve/batch", &body, &key).await.unwrap_or_default();
+            for (n, &i) in to_resolve.iter().enumerate() {
+                results[i] = resolved.get(n).cloned();
+            }
+        }
 
-        let mut urls: Vec<Option<String>> = Vec::with_capacity(jobs.len());
+        let mut urls: Vec<Option<String>> = vec![None; jobs.len()];
         let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
-        let mut chosen: Vec<(usize, i64)> = Vec::new();
-        for (i, job) in jobs.iter().enumerate() {
-            let result = results.get(i);
-            urls.push(result.and_then(|r| pick_boxart(r, &job.console)));
-            if let Some(id) = result.and_then(|r| choose_candidate(r, job.lookup["title"].as_str().unwrap_or(""))) {
-                chosen.push((i, id));
+        // (job, parent id, log label when found)
+        let mut chosen: Vec<(usize, i64, &str)> = remembered.iter().map(|&(i, id)| (i, id, "ton choix")).collect();
+        for &i in &to_resolve {
+            let result = results[i].as_ref();
+            urls[i] = result.and_then(|r| pick_boxart(r, &jobs[i].console));
+            if let Some(id) = result.and_then(|r| choose_candidate(r, jobs[i].lookup["title"].as_str().unwrap_or(""))) {
+                chosen.push((i, id, "choisi (nom exact)"));
             } else {
                 *outcomes.entry(outcome(result)).or_default() += 1;
             }
         }
 
-        // needs_choice with one exact candidate: its box art by parent id.
+        // Remembered games, and needs_choice with one exact candidate: box art by parent id.
         if !chosen.is_empty() {
-            let body = json!({ "lookups": chosen.iter().map(|(i, id)| parent_artwork_lookup(*id, &jobs[*i].lookup)).collect::<Vec<_>>() });
+            let body = json!({ "lookups": chosen.iter().map(|(i, id, _)| parent_artwork_lookup(*id, &jobs[*i].lookup)).collect::<Vec<_>>() });
             let art = post_batch("/assets/batch", &body, &key).await.unwrap_or_default();
-            for (n, (i, _)) in chosen.iter().enumerate() {
+            for (n, (i, _, found_label)) in chosen.iter().enumerate() {
                 let url = art.get(n).and_then(|r| pick_from_artwork(r, &jobs[*i].console));
-                let label = if url.is_some() { "choisi (nom exact)" } else { "choisi, sans boxart" };
-                *outcomes.entry(label.to_string()).or_default() += 1;
+                let label = if url.is_some() { found_label.to_string() } else { format!("{} sans boxart", found_label) };
+                *outcomes.entry(label).or_default() += 1;
                 urls[*i] = url;
             }
         }
@@ -499,10 +580,27 @@ pub struct CoverGame {
     pub platform: Option<String>,
     pub year: Option<i64>,
     pub covers: Vec<CoverChoice>,
+    /// The game the user picked earlier for this ROM.
+    pub remembered: bool,
 }
 
 /// Most games offered in the picker when iiDB hesitates.
 const PICKER_GAMES: usize = 8;
+
+/// The remembered game first; added when iiDB did not offer it this time.
+pub fn with_remembered_first(
+    mut games: Vec<(i64, String, Option<String>, Option<i64>)>,
+    remembered: Option<i64>,
+) -> Vec<(i64, String, Option<String>, Option<i64>)> {
+    let Some(id) = remembered else { return games };
+    let game = match games.iter().position(|g| g.0 == id) {
+        Some(pos) => games.remove(pos),
+        None => (id, String::new(), None, None),
+    };
+    games.insert(0, game);
+    games.truncate(PICKER_GAMES);
+    games
+}
 
 /// `/resolve` lookup for the picker: the match and its alternatives, no art.
 pub fn picker_lookup(rom_name: &str, console: &str) -> Option<Value> {
@@ -558,7 +656,7 @@ pub async fn iidb_cover_choices(game_name: String, console: String) -> Result<Ve
     let Some(lookup) = picker_lookup(&game_name, &console) else { return Ok(Vec::new()) };
     let region = preferred_region(&game_name);
     let resolved = post_batch("/resolve/batch", &json!({ "lookups": [lookup] }), &key).await.ok_or("unavailable")?;
-    let games = resolved.first().map(picker_games).unwrap_or_default();
+    let games = with_remembered_first(resolved.first().map(picker_games).unwrap_or_default(), remembered_parent(&game_name, &console));
     if games.is_empty() {
         push_log("INFO", &format!("iiDB: aucun jeu trouvé pour '{}'", game_name));
         return Ok(Vec::new());
@@ -571,7 +669,13 @@ pub async fn iidb_cover_choices(game_name: String, console: String) -> Result<Ve
     let out: Vec<CoverGame> = games
         .into_iter()
         .enumerate()
-        .map(|(i, (parent_id, name, platform, year))| CoverGame { parent_id, name, platform, year, covers: art.get(i).map(picker_covers).unwrap_or_default() })
+        .map(|(i, (parent_id, name, platform, year))| {
+            let row = art.get(i);
+            // A remembered game iiDB did not offer this time has no name yet.
+            let name = if name.is_empty() { row.and_then(|r| r["name"].as_str()).unwrap_or("iiDB").to_string() } else { name };
+            let remembered = remembered_parent(&game_name, &console) == Some(parent_id);
+            CoverGame { parent_id, name, platform, year, covers: row.map(picker_covers).unwrap_or_default(), remembered }
+        })
         .filter(|g| !g.covers.is_empty())
         .collect();
     push_log("INFO", &format!("iiDB: {} jeu(x), {} covers proposées pour '{}'", out.len(), out.iter().map(|g| g.covers.len()).sum::<usize>(), game_name));
@@ -713,6 +817,46 @@ mod tests {
         assert_eq!(covers[0].thumbnail.as_deref(), Some("https://assets.iisu.network/a_t.webp"));
         assert_eq!(covers[0].region.as_deref(), Some("Europe"));
         assert_eq!(covers[1].thumbnail, None);
+    }
+
+    #[test]
+    fn remembered_games_skip_the_question() {
+        let (resolve, direct) = split_remembered(&[None, Some(42), None, Some(7)]);
+        assert_eq!(resolve, vec![0, 2]);
+        assert_eq!(direct, vec![(1, 42), (3, 7)]);
+        let (resolve, direct) = split_remembered(&[Some(1), Some(2)]);
+        assert!(resolve.is_empty(), "no /resolve request at all");
+        assert_eq!(direct.len(), 2);
+    }
+
+    #[test]
+    fn choices_are_saved_and_read_back() {
+        let dir = std::env::temp_dir().join(format!("emuworld_iidb_choices_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("iidb_choices.json");
+        assert!(load_choices(&path).is_empty(), "no file yet");
+        let mut c = HashMap::new();
+        c.insert("PlayStation 1|Tomb Raider (Europe)".to_string(), 46185);
+        save_choices(&path, &c).unwrap();
+        assert_eq!(load_choices(&path), c);
+        std::fs::write(&path, "{\"a\": -3, \"b\": 5}").unwrap();
+        assert_eq!(load_choices(&path).len(), 1, "invalid ids dropped");
+        std::fs::write(&path, "not json").unwrap();
+        assert!(load_choices(&path).is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_picker_shows_the_remembered_game_first() {
+        let g = |id: i64, n: &str| (id, n.to_string(), None, None);
+        let games = vec![g(1, "Tomb Raider"), g(2, "Tomb Raider"), g(3, "Tomb Raider II")];
+        let out = with_remembered_first(games.clone(), Some(2));
+        assert_eq!(out.iter().map(|g| g.0).collect::<Vec<_>>(), vec![2, 1, 3]);
+        let out = with_remembered_first(games.clone(), Some(9));
+        assert_eq!(out[0], (9, String::new(), None, None), "added even when iiDB did not offer it");
+        assert_eq!(out.len(), 4);
+        assert_eq!(with_remembered_first(games.clone(), None), games);
     }
 
     #[test]

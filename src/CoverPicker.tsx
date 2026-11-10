@@ -22,6 +22,8 @@ export interface CoverGame {
   platform: string | null;
   year: number | null;
   covers: CoverChoice[];
+  /** The iiDB game picked earlier for this ROM (shown first). */
+  remembered?: boolean;
 }
 
 /** Window event telling every card of a game to show its new cover. */
@@ -71,7 +73,7 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
     return () => { alive = false; };
   }, [rom.name, rom.console]);
 
-  const applyWith = async (marker: string, command: string, args: Record<string, string>) => {
+  const applyWith = async (marker: string, command: string, args: Record<string, string | number>) => {
     setApplying(marker);
     try {
       const dataUrl = await invoke<string>(command, { gameName: rom.name, console: rom.console, ...args });
@@ -84,7 +86,9 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
     }
   };
 
-  const apply = (cover: CoverChoice) => applyWith(cover.url, "set_cover_from_url", { url: cover.url });
+  // The game is remembered: later cover searches use it without asking iiDB again.
+  const apply = (cover: CoverChoice, game: CoverGame) =>
+    applyWith(cover.url, "set_cover_from_url", { url: cover.url, parentId: game.parent_id });
 
   const fromFile = async () => {
     const picked = await openFileDialog({
@@ -106,6 +110,7 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
       <h4 className="cover-picker__game-title">
         {game.name}
         {(game.platform || game.year) && <span className="cover-picker__meta"> · {[game.platform, game.year].filter(Boolean).join(", ")}</span>}
+        {game.remembered && <span className="cover-picker__chosen">{t("coverPicker.yourChoice")}</span>}
       </h4>
       <div className="cover-picker__grid">
         {game.covers.map((cover) => (
@@ -113,7 +118,7 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
             key={cover.url}
             className="cover-picker__cover gamepad-nav-item"
             disabled={applying !== null}
-            onClick={() => apply(cover)}
+            onClick={() => apply(cover, game)}
             aria-label={t("coverPicker.use", { region: cover.region ?? "?" })}
           >
             <img src={cover.thumbnail ?? cover.url} alt="" loading="lazy" />

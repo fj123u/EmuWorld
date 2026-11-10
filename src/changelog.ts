@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.7.3", date: "2026-11-10", changes: [
+    "🖼️ « Choisir la cover » retient le jeu choisi : quand iiDB hésite entre plusieurs jeux, ton choix est réutilisé à chaque recherche de cover (même après « Vider le cache »), et marqué « ✓ Ton choix »",
+  ] },
   { version: "2.7.2", date: "2026-11-10", changes: [
     "🔒 Sécurité : une archive .7z piégée ne peut plus écrire en dehors de son dossier (import de ROMs et installation d'émulateurs)",
     "🔒 Sécurité : bibliothèques réseau et de compression mises à jour (TLS, certificats, HTTP/2, zip), 18 failles connues corrigées",
