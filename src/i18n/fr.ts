@@ -803,6 +803,20 @@ const fr = {
     creditBefore: "Covers fournies par",
     creditAfter: ", libretro, LaunchBox Games Database, nlib.cc, Wikipedia et GameTDB.",
   },
+  coverPicker: {
+    menu: "Choisir la cover",
+    title: "Choisir la cover",
+    close: "Fermer",
+    loading: "Recherche des covers sur iiDB…",
+    none: "iiDB n'a pas de cover pour ce jeu.",
+    noKey: "Ajoute ta clé API iiDB (gratuite) dans Réglages → Covers iiDB pour choisir parmi ses covers.",
+    unavailable: "iiDB ne répond pas pour le moment, réessaie plus tard.",
+    severalGames: "iiDB hésite entre plusieurs jeux : choisis la cover du bon.",
+    use: "Utiliser cette cover ({region})",
+    applied: "Cover mise à jour",
+    failed: "Impossible d'appliquer cette cover : {error}",
+    creditBefore: "Covers fournies par",
+  },
 };
 
 export type Translations = typeof fr;

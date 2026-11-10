@@ -416,6 +416,29 @@ describe("save states manager", () => {
   });
 });
 
+describe("cover picker in the library", () => {
+  it("opens from a game's menu and updates its card with the chosen cover", async () => {
+    const r = await renderApp({
+      iidb_cover_choices: () => [{ parent_id: 9, name: "Super Mario Bros. 3", platform: "NES", year: 1988, covers: [
+        { url: "https://assets.iisu.network/smb3.png", thumbnail: null, region: "Europe", console_id: "nes" },
+      ] }],
+    });
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
+    const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
+    fireEvent.contextMenu(card);
+    fireEvent.click(await screen.findByRole("button", { name: /Choisir la cover/ }));
+    const pick = await screen.findByRole("button", { name: "Utiliser cette cover (Europe)" });
+    await act(async () => {
+      fireEvent.click(pick);
+    });
+    expect(r.backend.calls.find((c) => c.cmd === "set_cover_from_url")?.args).toMatchObject({ url: "https://assets.iisu.network/smb3.png" });
+    await waitFor(() => expect(card.querySelector("img[src='data:image/webp;base64,NEW']")).not.toBeNull());
+    expect(screen.queryByRole("dialog", { name: "Choisir la cover" })).toBeNull();
+  });
+});
+
 describe("CoverImage", () => {
   function loadWith(img: HTMLImageElement, width: number, height: number) {
     Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });

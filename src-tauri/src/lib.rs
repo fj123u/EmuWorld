@@ -1911,6 +1911,56 @@ fn cover_key(game_name: &str, console: &str) -> String {
     format!("{}|{}", console, game_name)
 }
 
+/// Cached cover file name for a game (as `fetch_boxart` names it).
+fn cover_safe_name(game_name: &str) -> String {
+    game_name.chars().map(|c| if ['*', '/', '<', '>', '?', '\\', '|', '"', ':'].contains(&c) { '_' } else { c }).collect()
+}
+
+/// Replaces a game's cached cover with `image`: removes the files the cache
+/// lookup would match exactly (any extension), then saves the WebP.
+fn replace_cached_cover(dir: &PathBuf, game_name: &str, image: &[u8]) -> Option<String> {
+    let norm = |s: &str| s.to_lowercase().chars().filter(|c| c.is_alphanumeric()).collect::<String>();
+    let target = norm(game_name);
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_lowercase();
+            if let Some((stem, ext)) = name.rsplit_once('.') {
+                if ["png", "jpg", "jpeg", "webp"].contains(&ext) && norm(stem) == target {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+    save_cover_as_webp(image, dir, &cover_safe_name(game_name))
+}
+
+/// "Choisir la cover": downloads the box art the user picked (iiDB's asset
+/// host only) and makes it the game's cached cover.
+#[tauri::command]
+async fn set_cover_from_url(game_name: String, console: String, url: String) -> Result<String, String> {
+    push_log("INFO", &format!("Cover choisie pour '{}' ({})", game_name, console));
+    if !url.starts_with(iidb_api::ASSET_HOST) {
+        push_log("WARN", &format!("Cover refusée (hôte inattendu) pour '{}'", game_name));
+        return Err("Adresse d'image inattendue".into());
+    }
+    let resp = cover_http_client().get(&url).send().await.map_err(|e| {
+        push_log("ERROR", &format!("Téléchargement de la cover choisie échoué: {}", e));
+        e.to_string()
+    })?;
+    if !resp.status().is_success() {
+        push_log("ERROR", &format!("Cover choisie: HTTP {}", resp.status()));
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| e.to_string())?;
+    let dir = PathBuf::from(&get_config().covers_directory).join(console.replace('/', "-"));
+    let data_url = replace_cached_cover(&dir, &game_name, &bytes).ok_or_else(|| {
+        push_log("ERROR", &format!("Cover choisie illisible pour '{}'", game_name));
+        "Image illisible".to_string()
+    })?;
+    push_log("INFO", &format!("Cover remplacée pour '{}' ({})", game_name, console));
+    Ok(data_url)
+}
+
 /// One cover search per game at a time: a request for a game already being
 /// searched waits for that search (StrictMode, several views mounting it).
 #[tauri::command]
@@ -1981,10 +2031,8 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
     };
 
     let candidates = generate_search_candidates(&game_name, &console);
-    let safe_name: String = game_name.chars()
-        .map(|c| if ['*', '/', '<', '>', '?', '\\', '|', '"', ':'].contains(&c) { '_' } else { c })
-        .collect();
-    
+    let safe_name = cover_safe_name(&game_name);
+
     let norm_target = game_name.to_lowercase().chars()
         .filter(|c| c.is_alphanumeric())
         .collect::<String>();
@@ -6862,6 +6910,8 @@ pub fn run() {
             iidb_api::set_iidb_api_key,
             iidb_api::get_iidb_status,
             iidb_api::clear_iidb_api_key,
+            iidb_api::iidb_cover_choices,
+            set_cover_from_url,
             savestates::rename_save_state,
             savestates::duplicate_save_state,
             savestates::delete_save_state,
@@ -7168,6 +7218,28 @@ mod tests {
     }
 
     /// Builds a throw-away ROM library on disk and returns its root.
+    #[test]
+    fn a_chosen_cover_replaces_the_cached_one() {
+        let dir = std::env::temp_dir().join(format!("emuworld_cover_pick_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("Celeste [01002B30028F6000].png"), b"old png").unwrap();
+        fs::write(dir.join("Celeste [01002B30028F6000].webp"), b"old webp").unwrap();
+        fs::write(dir.join("Celeste 2.webp"), b"another game").unwrap();
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(4, 6, image::Rgb([200, 30, 30]))
+            .write_to(&mut Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        let data_url = replace_cached_cover(&dir, "Celeste [01002B30028F6000]", &png).expect("saved");
+        assert!(data_url.starts_with("data:image/webp;base64,"));
+        let mut left: Vec<String> = fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        left.sort();
+        assert_eq!(left, vec!["Celeste 2.webp", "Celeste [01002B30028F6000].webp"], "old files of that game removed, other games kept");
+        assert_ne!(fs::read(dir.join("Celeste [01002B30028F6000].webp")).unwrap(), b"old webp");
+        assert!(replace_cached_cover(&dir, "Celeste", b"not an image").is_none());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {
         let root = std::env::temp_dir().join(format!("emuworld_scan_{}_{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&root);

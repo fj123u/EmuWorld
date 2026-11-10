@@ -375,9 +375,16 @@ struct Pace {
     rps: f64,
 }
 
-/// POST a batch to the official API, paced to the user's tier, waiting
-/// `Retry-After` on 429 and retrying 5xx. `None` when it never completed.
-async fn post_batch(path: &str, body: &Value, key: &str, pace: &mut Pace) -> Option<Vec<Value>> {
+fn pace() -> &'static tokio::sync::Mutex<Pace> {
+    static PACE: OnceLock<tokio::sync::Mutex<Pace>> = OnceLock::new();
+    PACE.get_or_init(|| tokio::sync::Mutex::new(Pace { last_request: None, rps: 1.0 }))
+}
+
+/// POST a batch to the official API, paced to the user's tier (one request
+/// at a time across the app), waiting `Retry-After` on 429 and retrying 5xx.
+/// `None` when it never completed.
+async fn post_batch(path: &str, body: &Value, key: &str) -> Option<Vec<Value>> {
+    let mut pace = pace().lock().await;
     for attempt in 0..4 {
         tokio::time::sleep(wait_before_next(pace.last_request, pace.rps, Instant::now())).await;
         pace.last_request = Some(Instant::now());
@@ -422,7 +429,6 @@ async fn post_batch(path: &str, body: &Value, key: &str, pace: &mut Pace) -> Opt
 }
 
 async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
-    let mut pace = Pace { last_request: None, rps: 1.0 };
     while let Some(first) = rx.recv().await {
         let mut jobs = vec![first];
         let deadline = tokio::time::Instant::now() + GATHER;
@@ -437,7 +443,7 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
             continue;
         };
         let body = json!({ "lookups": jobs.iter().map(|j| j.lookup.clone()).collect::<Vec<_>>() });
-        let results = post_batch("/resolve/batch", &body, &key, &mut pace).await.unwrap_or_default();
+        let results = post_batch("/resolve/batch", &body, &key).await.unwrap_or_default();
 
         let mut urls: Vec<Option<String>> = Vec::with_capacity(jobs.len());
         let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
@@ -455,7 +461,7 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
         // needs_choice with one exact candidate: its box art by parent id.
         if !chosen.is_empty() {
             let body = json!({ "lookups": chosen.iter().map(|(i, id)| parent_artwork_lookup(*id, &jobs[*i].lookup)).collect::<Vec<_>>() });
-            let art = post_batch("/assets/batch", &body, &key, &mut pace).await.unwrap_or_default();
+            let art = post_batch("/assets/batch", &body, &key).await.unwrap_or_default();
             for (n, (i, _)) in chosen.iter().enumerate() {
                 let url = art.get(n).and_then(|r| pick_from_artwork(r, &jobs[*i].console));
                 let label = if url.is_some() { "choisi (nom exact)" } else { "choisi, sans boxart" };
@@ -472,6 +478,104 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
         let detail = outcomes.iter().map(|(k, n)| format!("{} ×{}", k, n)).collect::<Vec<_>>().join(", ");
         push_log("INFO", &format!("iiDB: lot de {} jeux, {} covers trouvées [{}]", count, found, detail));
     }
+}
+
+// ---- cover picker -----------------------------------------------------------
+
+/// One box art the user can pick.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct CoverChoice {
+    pub url: String,
+    pub thumbnail: Option<String>,
+    pub region: Option<String>,
+    pub console_id: Option<String>,
+}
+
+/// An iiDB game (parent) and its box art.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+pub struct CoverGame {
+    pub parent_id: i64,
+    pub name: String,
+    pub platform: Option<String>,
+    pub year: Option<i64>,
+    pub covers: Vec<CoverChoice>,
+}
+
+/// Most games offered in the picker when iiDB hesitates.
+const PICKER_GAMES: usize = 8;
+
+/// `/resolve` lookup for the picker: the match and its alternatives, no art.
+pub fn picker_lookup(rom_name: &str, console: &str) -> Option<Value> {
+    let full = build_lookup(rom_name, console)?;
+    let mut lookup = json!({
+        "title": full["title"],
+        "preferred_console": full["preferred_console"],
+        "max_candidates": PICKER_GAMES,
+    });
+    if let Some(identity) = full.get("identity") {
+        lookup["identity"] = identity.clone();
+    }
+    Some(lookup)
+}
+
+/// Games to show: the matched one, or every candidate when iiDB hesitates
+/// (the user decides, which is what `needs_choice` asks for).
+pub fn picker_games(result: &Value) -> Vec<(i64, String, Option<String>, Option<i64>)> {
+    let read = |v: &Value| Some((v["id"].as_i64()?, v["name"].as_str()?.to_string(), v["primary_platform"].as_str().map(String::from), v["year"].as_i64()));
+    match result["match"]["status"].as_str() {
+        Some("matched") => read(&result["match"]["parent"]).into_iter().collect(),
+        Some("needs_choice") => result["candidates"].as_array().map(|c| c.iter().filter_map(read).take(PICKER_GAMES).collect()).unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
+/// Box art of one `/assets/batch` row, iiDB's asset host only.
+pub fn picker_covers(row: &Value) -> Vec<CoverChoice> {
+    let on_host = |v: &Value| v.as_str().filter(|u| u.starts_with(ASSET_HOST)).map(String::from);
+    row["artwork"]["boxart"]
+        .as_array()
+        .map(|list| {
+            list.iter()
+                .filter_map(|a| Some(CoverChoice {
+                    url: on_host(&a["url"])?,
+                    thumbnail: on_host(&a["thumbnail_url"]),
+                    region: a["region"].as_str().map(String::from),
+                    console_id: a["console_id"].as_str().map(String::from),
+                }))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Box art iiDB has for a game, to choose from ("Choisir la cover").
+/// Two requests: the match (with alternatives), then their box art by
+/// parent id. Errors: "no_key" without an API key, "unavailable" when iiDB
+/// could not be reached.
+#[tauri::command]
+pub async fn iidb_cover_choices(game_name: String, console: String) -> Result<Vec<CoverGame>, String> {
+    push_log("INFO", &format!("iiDB: choix de cover pour '{}' ({})", game_name, console));
+    let key = api_key().ok_or("no_key")?;
+    let Some(lookup) = picker_lookup(&game_name, &console) else { return Ok(Vec::new()) };
+    let region = preferred_region(&game_name);
+    let resolved = post_batch("/resolve/batch", &json!({ "lookups": [lookup] }), &key).await.ok_or("unavailable")?;
+    let games = resolved.first().map(picker_games).unwrap_or_default();
+    if games.is_empty() {
+        push_log("INFO", &format!("iiDB: aucun jeu trouvé pour '{}'", game_name));
+        return Ok(Vec::new());
+    }
+    let rows: Vec<Value> = games
+        .iter()
+        .map(|(id, ..)| json!({ "parent_id": id, "slots": ["boxart"], "candidates_per_slot": 6, "preferred_region": region, "include": ["asset_metadata"] }))
+        .collect();
+    let art = post_batch("/assets/batch", &json!({ "lookups": rows }), &key).await.ok_or("unavailable")?;
+    let out: Vec<CoverGame> = games
+        .into_iter()
+        .enumerate()
+        .map(|(i, (parent_id, name, platform, year))| CoverGame { parent_id, name, platform, year, covers: art.get(i).map(picker_covers).unwrap_or_default() })
+        .filter(|g| !g.covers.is_empty())
+        .collect();
+    push_log("INFO", &format!("iiDB: {} jeu(x), {} covers proposées pour '{}'", out.len(), out.iter().map(|g| g.covers.len()).sum::<usize>(), game_name));
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -574,6 +678,41 @@ mod tests {
         assert_eq!(pick_from_artwork(&row, "Nintendo Switch").as_deref(), Some("https://assets.iisu.network/p.png"));
         assert_eq!(parent_artwork_lookup(2, &json!({"preferred_region": "Europe"})),
             json!({"parent_id": 2, "slots": ["boxart"], "candidates_per_slot": 6, "preferred_region": "Europe"}));
+    }
+
+    #[test]
+    fn the_picker_asks_for_the_match_and_its_alternatives() {
+        let l = picker_lookup("Pokemon Scarlet [0100A3D008C5C000]", "Nintendo Switch").unwrap();
+        assert_eq!(l["title"], "Pokemon Scarlet");
+        assert_eq!(l["identity"]["value"], "0100A3D008C5C000");
+        assert_eq!(l["max_candidates"], 8);
+        assert!(l.get("slots").is_none() && l.get("artwork").is_none(), "artwork options without artwork are a 422");
+    }
+
+    #[test]
+    fn the_picker_offers_the_match_or_every_candidate() {
+        let matched = json!({"match": {"status": "matched", "parent": {"id": 4, "name": "Celeste", "year": 2018}}});
+        assert_eq!(picker_games(&matched), vec![(4, "Celeste".to_string(), None, Some(2018))]);
+        let choice = json!({"match": {"status": "needs_choice"}, "candidates": [
+            {"id": 1, "name": "Tomb Raider", "primary_platform": "PlayStation", "year": 1996},
+            {"id": 2, "name": "Tomb Raider", "primary_platform": "Xbox 360", "year": 2013}
+        ]});
+        assert_eq!(picker_games(&choice).len(), 2, "the user picks: iiDB asked for a choice");
+        assert!(picker_games(&json!({"match": {"status": "not_found"}})).is_empty());
+    }
+
+    #[test]
+    fn the_picker_keeps_iidb_hosted_covers_only() {
+        let row = json!({"artwork": {"boxart": [
+            {"url": "https://assets.iisu.network/a.png", "thumbnail_url": "https://assets.iisu.network/a_t.webp", "region": "Europe", "console_id": "switch"},
+            {"url": "https://elsewhere.example/b.png"},
+            {"url": "https://assets.iisu.network/c.png", "thumbnail_url": "https://elsewhere.example/c.webp"}
+        ]}});
+        let covers = picker_covers(&row);
+        assert_eq!(covers.len(), 2);
+        assert_eq!(covers[0].thumbnail.as_deref(), Some("https://assets.iisu.network/a_t.webp"));
+        assert_eq!(covers[0].region.as_deref(), Some("Europe"));
+        assert_eq!(covers[1].thumbnail, None);
     }
 
     #[test]

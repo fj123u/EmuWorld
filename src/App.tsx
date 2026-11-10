@@ -15,6 +15,7 @@ import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { SaveStatesModal } from "./SaveStatesModal";
+import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
@@ -93,6 +94,7 @@ import {
   Swords,
   Save,
   Timer,
+  ImagePlus,
 } from "lucide-react";
 
 /* ============================
@@ -914,6 +916,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   useEffect(() => {
     fetchCover();
   }, [fetchCover]);
+  useCoverChanges(rom, setCover);
 
   return (
     <motion.div
@@ -1045,6 +1048,7 @@ const BigPictureCard = ({ rom, focused, entry, onLaunch }: {
       .then(setCover)
       .catch(() => {});
   }, [rom.name, rom.console]);
+  useCoverChanges(rom, setCover);
 
   return (
     <motion.div
@@ -1536,6 +1540,7 @@ export default function App() {
   const [launchSplash, setLaunchSplash] = useState<{ gameName: string; console: string } | null>(null);
   const [currentPlayingGame, setCurrentPlayingGame] = useState<{ name: string; console: string } | null>(null);
   const [saveStatesRom, setSaveStatesRom] = useState<RomFile | null>(null);
+  const [coverPickerRom, setCoverPickerRom] = useState<RomFile | null>(null);
   const [speedrunRom, setSpeedrunRom] = useState<RomFile | null>(null);
   const [screenshotGallery, setScreenshotGallery] = useState<{ gameName: string; console: string; entries: { path: string; data_url: string }[] } | null>(null);
   const [allScreenshots, setAllScreenshots] = useState<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>([]);
@@ -1778,6 +1783,7 @@ export default function App() {
     try { localStorage.setItem(ACHIEVEMENT_ANIMATION_KEY, on ? "on" : "off"); } catch { /* storage unavailable */ }
   }, []);
   const closeSaveStates = useCallback(() => setSaveStatesRom(null), []);
+  const closeCoverPicker = useCallback(() => setCoverPickerRom(null), []);
   const closeSpeedrun = useCallback(() => setSpeedrunRom(null), []);
   const dismissCelebration = useCallback(() => setCelebrations((q) => q.slice(1)), []);
 
@@ -9153,6 +9159,9 @@ export default function App() {
             }}>
               <Camera size={14} /> Screenshots
             </button>
+            <button className="rom-context-menu__btn" onClick={() => { setCoverPickerRom(romContextMenu.rom); setRomContextMenu(null); }}>
+              <ImagePlus size={14} /> {t("coverPicker.menu")}
+            </button>
             <button className="rom-context-menu__btn" onClick={() => { setSaveStatesRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Save size={14} /> {t("saveStates.menu")}
             </button>
@@ -9184,6 +9193,10 @@ export default function App() {
 
       {speedrunRom && (
         <SpeedrunModal rom={speedrunRom} t={t} onClose={closeSpeedrun} onNotify={showToast} />
+      )}
+
+      {coverPickerRom && (
+        <CoverPicker rom={coverPickerRom} t={t} onClose={closeCoverPicker} onNotify={showToast} />
       )}
 
       {saveStatesRom && (

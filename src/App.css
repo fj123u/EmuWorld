@@ -6955,3 +6955,19 @@ body {
 .iidb-settings__error { margin: 6px 0 0; font-size: 12px; color: var(--neon-red); }
 .iidb-settings__credit { margin-top: 8px; }
 .iidb-settings__link { color: var(--accent-blue-ink); text-decoration: underline; padding: 0; font-weight: 700; }
+
+/* Cover picker (iiDB) */
+.cover-picker { max-width: 760px; width: min(760px, calc(100vw - 32px)); }
+.cover-picker__body { max-height: 60vh; overflow-y: auto; }
+.cover-picker__hint, .cover-picker__empty { font-size: 13px; color: var(--text-secondary); margin: 4px 0 10px; }
+.cover-picker__game { margin-bottom: 14px; }
+.cover-picker__game-title { font-size: 14px; font-weight: 700; margin: 0 0 8px; }
+.cover-picker__meta { font-weight: 400; color: var(--text-secondary); }
+.cover-picker__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.cover-picker__cover { position: relative; padding: 0; border: 2px solid transparent; border-radius: 10px; overflow: hidden; background: rgba(255, 255, 255, 0.04); cursor: pointer; aspect-ratio: 3 / 4; }
+.cover-picker__cover img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cover-picker__cover:hover, .cover-picker__cover:focus-visible, .cover-picker__cover.gamepad-focus { border-color: var(--accent-blue); }
+.cover-picker__cover:disabled { cursor: wait; opacity: 0.7; }
+.cover-picker__region { position: absolute; left: 4px; bottom: 4px; font-size: 10px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.65); color: #fff; }
+.cover-picker__applying { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); color: var(--neon-green); }
+.cover-picker__credit { margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
