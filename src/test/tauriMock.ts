@@ -103,6 +103,8 @@ export function defaultHandlers(): Record<string, Handler> {
     clear_iidb_api_key: () => null,
     iidb_cover_choices: () => [],
     set_cover_from_url: () => "data:image/webp;base64,NEW",
+    set_cover_from_file: () => "data:image/webp;base64,FILE",
+    "plugin:dialog|open": () => null,
     // Speedrun timer (speedrun.rs)
     get_speedrun: () => ({ splits: [], pb: null, best_segments: [], attempts: 0, completed: 0 }),
     save_speedrun: (args) => (args as { data: unknown }).data,

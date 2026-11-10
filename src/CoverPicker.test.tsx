@@ -52,6 +52,34 @@ describe("cover picker", () => {
     window.removeEventListener(COVER_CHANGED_EVENT, changed);
   });
 
+  it("takes a cover from an image on the PC, even without iiDB", async () => {
+    const backend = mockBackend({
+      iidb_cover_choices: () => { throw "no_key"; },
+      "plugin:dialog|open": () => "C:\\Covers\\tomb raider.jpg",
+    });
+    const onClose = vi.fn();
+    const changed = vi.fn();
+    window.addEventListener(COVER_CHANGED_EVENT, changed);
+    render(<CoverPicker rom={rom} t={t} onClose={onClose} onNotify={() => {}} />);
+    await screen.findByText(/Ajoute ta clé API iiDB/);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Depuis un fichier/ }));
+    });
+    await waitFor(() => expect(backend.calls.find((c) => c.cmd === "set_cover_from_file")?.args).toEqual({ gameName: rom.name, console: rom.console, path: "C:\\Covers\\tomb raider.jpg" }));
+    expect((changed.mock.calls[0][0] as CustomEvent).detail.dataUrl).toBe("data:image/webp;base64,FILE");
+    expect(onClose).toHaveBeenCalled();
+    window.removeEventListener(COVER_CHANGED_EVENT, changed);
+  });
+
+  it("does nothing when the file dialog is cancelled", async () => {
+    const backend = mockBackend();
+    render(<CoverPicker rom={rom} t={t} onClose={() => {}} onNotify={() => {}} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Depuis un fichier/ }));
+    });
+    expect(backend.count("set_cover_from_file")).toBe(0);
+  });
+
   it("explains that the iiDB key is needed", async () => {
     mockBackend({ iidb_cover_choices: () => { throw "no_key"; } });
     render(<CoverPicker rom={rom} t={t} onClose={() => {}} onNotify={() => {}} />);

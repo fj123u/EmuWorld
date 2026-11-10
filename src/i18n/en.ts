@@ -818,6 +818,8 @@ const en: Translations = {
     applied: "Cover updated",
     failed: "Could not apply this cover: {error}",
     creditBefore: "Covers provided by",
+    fromFile: "From a file…",
+    images: "Images",
   },
 };
 

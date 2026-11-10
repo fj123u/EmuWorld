@@ -6971,3 +6971,4 @@ body {
 .cover-picker__region { position: absolute; left: 4px; bottom: 4px; font-size: 10px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.65); color: #fff; }
 .cover-picker__applying { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); color: var(--neon-green); }
 .cover-picker__credit { margin: 8px 0 0; font-size: 12px; color: var(--text-secondary); }
+.cover-picker__actions { display: flex; gap: 8px; margin: 2px 0 10px; }

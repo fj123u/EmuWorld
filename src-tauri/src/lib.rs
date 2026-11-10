@@ -1961,6 +1961,40 @@ async fn set_cover_from_url(game_name: String, console: String, url: String) -> 
     Ok(data_url)
 }
 
+/// Largest image accepted as a cover from the user's files.
+const MAX_COVER_FILE_BYTES: u64 = 25 * 1024 * 1024;
+
+/// Reads an image the user picked for a cover: image extension, sane size.
+fn read_cover_file(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+    if !["png", "jpg", "jpeg", "webp", "gif", "bmp"].contains(&ext.as_str()) {
+        return Err("Format non pris en charge (PNG, JPG, WebP, GIF ou BMP)".into());
+    }
+    let size = fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if size > MAX_COVER_FILE_BYTES {
+        return Err("Image trop lourde (25 Mo maximum)".into());
+    }
+    fs::read(path).map_err(|e| e.to_string())
+}
+
+/// "Choisir la cover" → "Depuis un fichier…": makes an image from the
+/// user's disk the game's cached cover (converted to WebP like the others).
+#[tauri::command]
+fn set_cover_from_file(game_name: String, console: String, path: String) -> Result<String, String> {
+    push_log("INFO", &format!("Cover depuis un fichier pour '{}' ({})", game_name, console));
+    let bytes = read_cover_file(std::path::Path::new(&path)).map_err(|e| {
+        push_log("WARN", &format!("Cover depuis un fichier refusée pour '{}': {}", game_name, e));
+        e
+    })?;
+    let dir = PathBuf::from(&get_config().covers_directory).join(console.replace('/', "-"));
+    let data_url = replace_cached_cover(&dir, &game_name, &bytes).ok_or_else(|| {
+        push_log("ERROR", &format!("Image illisible pour la cover de '{}'", game_name));
+        "Image illisible".to_string()
+    })?;
+    push_log("INFO", &format!("Cover remplacée depuis un fichier pour '{}' ({})", game_name, console));
+    Ok(data_url)
+}
+
 /// One cover search per game at a time: a request for a game already being
 /// searched waits for that search (StrictMode, several views mounting it).
 #[tauri::command]
@@ -6912,6 +6946,7 @@ pub fn run() {
             iidb_api::clear_iidb_api_key,
             iidb_api::iidb_cover_choices,
             set_cover_from_url,
+            set_cover_from_file,
             savestates::rename_save_state,
             savestates::duplicate_save_state,
             savestates::delete_save_state,
@@ -7218,6 +7253,23 @@ mod tests {
     }
 
     /// Builds a throw-away ROM library on disk and returns its root.
+    #[test]
+    fn cover_files_must_be_images_of_a_sane_size() {
+        let dir = std::env::temp_dir().join(format!("emuworld_cover_file_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("box.JPG"), b"jpeg bytes").unwrap();
+        fs::write(dir.join("notes.txt"), b"text").unwrap();
+        assert_eq!(read_cover_file(&dir.join("box.JPG")).unwrap(), b"jpeg bytes");
+        assert!(read_cover_file(&dir.join("notes.txt")).unwrap_err().contains("Format"));
+        assert!(read_cover_file(&dir.join("missing.png")).is_err());
+        let big = fs::File::create(dir.join("huge.png")).unwrap();
+        big.set_len(MAX_COVER_FILE_BYTES + 1).unwrap();
+        drop(big);
+        assert!(read_cover_file(&dir.join("huge.png")).unwrap_err().contains("25 Mo"));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_chosen_cover_replaces_the_cached_one() {
         let dir = std::env::temp_dir().join(format!("emuworld_cover_pick_{}", std::process::id()));

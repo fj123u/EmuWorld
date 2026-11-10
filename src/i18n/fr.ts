@@ -816,6 +816,8 @@ const fr = {
     applied: "Cover mise à jour",
     failed: "Impossible d'appliquer cette cover : {error}",
     creditBefore: "Covers fournies par",
+    fromFile: "Depuis un fichier…",
+    images: "Images",
   },
 };
 

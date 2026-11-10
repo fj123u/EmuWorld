@@ -5,7 +5,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Check, Image as ImageIcon, X } from "lucide-react";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { Check, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { IIDB_SITE } from "./IidbSettings";
 
 export interface CoverChoice {
@@ -70,10 +71,10 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
     return () => { alive = false; };
   }, [rom.name, rom.console]);
 
-  const apply = async (cover: CoverChoice) => {
-    setApplying(cover.url);
+  const applyWith = async (marker: string, command: string, args: Record<string, string>) => {
+    setApplying(marker);
     try {
-      const dataUrl = await invoke<string>("set_cover_from_url", { gameName: rom.name, console: rom.console, url: cover.url });
+      const dataUrl = await invoke<string>(command, { gameName: rom.name, console: rom.console, ...args });
       announceCoverChange({ name: rom.name, console: rom.console, dataUrl });
       onNotify(t("coverPicker.applied"), "success");
       onClose();
@@ -81,6 +82,16 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
       onNotify(t("coverPicker.failed", { error: String(e) }), "error");
       setApplying(null);
     }
+  };
+
+  const apply = (cover: CoverChoice) => applyWith(cover.url, "set_cover_from_url", { url: cover.url });
+
+  const fromFile = async () => {
+    const picked = await openFileDialog({
+      multiple: false,
+      filters: [{ name: t("coverPicker.images"), extensions: ["png", "jpg", "jpeg", "webp", "gif", "bmp"] }],
+    }).catch(() => null);
+    if (typeof picked === "string") await applyWith(picked, "set_cover_from_file", { path: picked });
   };
 
   const open = (url: string) => { openUrl(url).catch(() => window.open(url, "_blank")); };
@@ -120,6 +131,11 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
         <div className="screenshot-gallery__header">
           <h3><ImageIcon size={16} /> {t("coverPicker.title")} · {rom.name}</h3>
           <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={onClose} aria-label={t("coverPicker.close")}><X size={14} /></button>
+        </div>
+        <div className="cover-picker__actions">
+          <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={fromFile} disabled={applying !== null}>
+            <FolderOpen size={14} /> {t("coverPicker.fromFile")}
+          </button>
         </div>
         {games && games.length > 1 && <p className="cover-picker__hint">{t("coverPicker.severalGames")}</p>}
         <div className="cover-picker__body">{body}</div>
