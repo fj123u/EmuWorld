@@ -29,6 +29,14 @@ function play(times: number[], count = 3) {
 }
 
 describe("speedrun timer", () => {
+  it("keeps whole milliseconds, which the backend can store", () => {
+    // performance.now() has decimals; the save used to be refused (u64).
+    const run = play([1000.4, 1087.80000000074506, 2500.25, 4000.9]);
+    expect(run.splits).toEqual([87, 1500, 3001]);
+    const { data } = recordRun(data3(), run);
+    for (const v of [...(data.pb ?? []), ...data.best_segments]) expect(Number.isInteger(v)).toBe(true);
+  });
+
   it("starts on the first split and finishes on the last segment", () => {
     let run = split(newRun(), 1000, 3);
     expect(run.status).toBe("running");

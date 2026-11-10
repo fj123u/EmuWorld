@@ -56,7 +56,9 @@ export function elapsed(run: RunState, now: number): number {
 export function split(run: RunState, now: number, segmentCount: number): RunState {
   if (run.status === "idle") return { ...newRun(), status: "running", startedAt: now };
   if (run.status !== "running") return run;
-  const splits = [...run.splits, elapsed(run, now)];
+  // Whole milliseconds: performance.now() has decimals and the backend
+  // stores times as integers (it refused the save, so no record was kept).
+  const splits = [...run.splits, Math.round(elapsed(run, now))];
   return { ...run, splits, status: splits.length >= segmentCount ? "finished" : "running" };
 }
 
