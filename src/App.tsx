@@ -896,6 +896,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   onNotes?: (rom: RomFile) => void,
   onContextMenu?: (rom: RomFile, x: number, y: number) => void,
 }) => {
+  const { t } = useTranslation();
   const [cover, setCover] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -943,9 +944,9 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
             <button
               className="game-card__retry"
               onClick={(e) => { e.stopPropagation(); fetchCover(true); }}
-              title="Retry cover fetch (bypass cache)"
+              title={t("card.retryTitle")}
             >
-              <RefreshCw size={12} /> Retry
+              <RefreshCw size={12} /> {t("card.retry")}
             </button>
           </div>
         ) : null}
@@ -959,7 +960,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
         <button
           className={`game-card__fav ${entry?.favorite ? "game-card__fav--active" : ""}`}
           onClick={(e) => { e.stopPropagation(); onToggleFavorite(rom); }}
-          title={entry?.favorite ? "Remove from favorites" : "Add to favorites"}
+          title={entry?.favorite ? t("game.removeFavorite") : t("game.addFavorite")}
         >
           {entry?.favorite ? "★" : "☆"}
         </button>
@@ -970,7 +971,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
         <button
           className="game-card__more gamepad-nav-item"
           onClick={(e) => { e.stopPropagation(); onContextMenu(rom, e.clientX, e.clientY); }}
-          title="Plus d'options"
+          title={t("card.moreOptions")}
         >
           ⋯
         </button>
@@ -981,11 +982,11 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
         className="game-card__delete"
         onClick={(e) => {
           e.stopPropagation();
-          if (confirm(`Delete ${rom.name}?`)) {
+          if (confirm(t("game.deleteConfirm", { name: rom.name }))) {
             onDelete(rom);
           }
         }}
-        title="Delete ROM"
+        title={t("game.delete")}
       >
         <Trash2 size={14} />
       </button>
@@ -995,7 +996,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
         <button
           className="game-card__notes"
           onClick={(e) => { e.stopPropagation(); onNotes(rom); }}
-          title="Notes"
+          title={t("game.notes")}
         >
           <StickyNote size={14} />
           {entry?.notes && <span className="game-card__notes-dot" />}
@@ -1015,7 +1016,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
 
       {/* Playtime badge */}
       {entry && entry.seconds > 0 && (
-        <div className="game-card__playtime" title={`${entry.launches} launch${entry.launches === 1 ? "" : "es"}`}>
+        <div className="game-card__playtime" title={t("card.launchesTitle", { count: entry.launches })}>
           ⏱ {formatPlaytime(entry.seconds)}
         </div>
       )}
@@ -1088,6 +1089,7 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
   downloaded: boolean,
   stats?: DownloadStats
 }) => {
+  const { t } = useTranslation();
   const [cover, setCover] = useState<string | null>(null);
   const [loadingCover, setLoadingCover] = useState(false);
 
@@ -1160,7 +1162,7 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
           disabled={downloading || downloaded}
         >
           {downloaded ? (
-            <><Check size={14} /> Downloaded</>
+            <><Check size={14} /> {t("card.downloaded")}</>
           ) : downloading ? (
             <div className="download-stats-container">
               <div className="download-stats-row">
@@ -1175,7 +1177,7 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
               </div>
             </div>
           ) : (
-            <><Download size={14} /> Download</>
+            <><Download size={14} /> {t("card.download")}</>
           )}
         </button>
       </div>
@@ -1187,6 +1189,7 @@ const RomStoreCard = ({ rom, onDownload, downloading, downloaded, stats }: {
    App Component
    ============================ */
 function OverlayWindow() {
+  const { t: tr } = useTranslation();
   const [tab, setTab] = useState<"achievements" | "friends" | "chat" | "notes">("achievements");
   const [notes, setNotes] = useState("");
   const [chatMessages, setChatMessages] = useState<any[]>([]);
@@ -1286,7 +1289,7 @@ function OverlayWindow() {
           <div style={{ display: "flex", gap: 6 }}>
             {(["achievements", "friends", "chat", "notes"] as const).map(t => (
               <button key={t} onClick={() => setTab(t)} style={{ padding: "7px 14px", borderRadius: 8, border: "none", background: tab === t ? "rgba(99,102,241,0.85)" : "rgba(255,255,255,0.06)", color: tab === t ? "#fff" : "rgba(255,255,255,0.7)", cursor: "pointer", fontSize: 13, fontWeight: tab === t ? 600 : 400, transition: "all 0.15s" }}>
-                {t === "achievements" ? "Achievements" : t === "friends" ? "Amis" : t === "chat" ? "Chat" : "Notes"}
+                {t === "achievements" ? tr("overlay.tabAchievements") : t === "friends" ? tr("overlay.tabFriends") : t === "chat" ? tr("overlay.tabChat") : tr("overlay.tabNotes")}
               </button>
             ))}
           </div>
@@ -1301,7 +1304,7 @@ function OverlayWindow() {
               {raInfo && raInfo.achievements && raInfo.achievements.length > 0 ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, padding: "10px 14px", background: "rgba(99,102,241,0.1)", borderRadius: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{raInfo.num_earned || raInfo.achievements.filter((a: any) => a.date_earned).length} / {raInfo.achievements.length} débloqués</span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{tr("overlay.unlockedCount", { earned: raInfo.num_earned || raInfo.achievements.filter((a: any) => a.date_earned).length, total: raInfo.achievements.length })}</span>
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#a78bfa" }}>{raInfo.achievements.filter((a: any) => a.date_earned).reduce((sum: number, a: any) => sum + (a.points || 0), 0)} / {raInfo.achievements.reduce((sum: number, a: any) => sum + (a.points || 0), 0)} pts</span>
                   </div>
                   {raInfo.achievements.map((a: any, i: number) => (
@@ -1312,19 +1315,19 @@ function OverlayWindow() {
                         <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>{a.description}</div>
                       </div>
                       <span style={{ fontSize: 12, opacity: 0.5, marginRight: 8 }}>{a.points} pts</span>
-                      {a.date_earned && <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 600, padding: "3px 8px", background: "rgba(74,222,128,0.1)", borderRadius: 6 }}>Débloqué</span>}
+                      {a.date_earned && <span style={{ color: "#4ade80", fontSize: 11, fontWeight: 600, padding: "3px 8px", background: "rgba(74,222,128,0.1)", borderRadius: 6 }}>{tr("overlay.unlocked")}</span>}
                     </div>
                   ))}
                 </>
               ) : (
-                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>Aucun achievement pour ce jeu</div>
+                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>{tr("overlay.noAchievements")}</div>
               )}
             </div>
           )}
           {tab === "friends" && (
             <div>
               {friends.length === 0 ? (
-                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>Aucun ami ajouté</div>
+                <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 60, fontSize: 14 }}>{tr("overlay.noFriendsAdded")}</div>
               ) : (
                 friends.map((f: any) => {
                   const presence = presences.find((p: any) => p.user_id === f.otherId);
@@ -1338,9 +1341,9 @@ function OverlayWindow() {
                       </div>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 600, fontSize: 14 }}>{f.profile?.username || "Anonyme"}</div>
-                        <div style={{ fontSize: 12, opacity: 0.5 }}>{isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}</div>
+                        <div style={{ fontSize: 12, opacity: 0.5 }}>{isPlaying ? tr("overlay.playing", { game: presence.current_game }) : isOnline ? tr("overlay.online") : tr("overlay.offline")}</div>
                       </div>
-                      <button onClick={() => { setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" }); setTab("chat"); }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>Chat</button>
+                      <button onClick={() => { setChatTarget({ id: f.otherId, username: f.profile?.username || tr("overlay.anonymous") }); setTab("chat"); }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>{tr("overlay.chat")}</button>
                     </div>
                   );
                 })
@@ -1351,33 +1354,33 @@ function OverlayWindow() {
             <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
               {!chatTarget ? (
                 <div>
-                  <div style={{ opacity: 0.5, marginBottom: 12, fontSize: 13 }}>Sélectionne un ami :</div>
+                  <div style={{ opacity: 0.5, marginBottom: 12, fontSize: 13 }}>{tr("overlay.pickFriend")}</div>
                   {friends.map((f: any) => (
                     <button key={f.id} onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" })} style={{ display: "block", width: "100%", padding: "10px 14px", marginBottom: 6, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", fontSize: 13, textAlign: "left" }}>
                       {f.profile?.username || "Anonyme"}
                     </button>
                   ))}
-                  {friends.length === 0 && <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 40, fontSize: 14 }}>Aucun ami</div>}
+                  {friends.length === 0 && <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 40, fontSize: 14 }}>{tr("overlay.noFriends")}</div>}
                 </div>
               ) : (
                 <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                     <span style={{ fontWeight: 600, fontSize: 14 }}>{chatTarget.username}</span>
-                    <button onClick={() => setChatTarget(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 12 }}>← Retour</button>
+                    <button onClick={() => setChatTarget(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 12 }}>{tr("overlay.back")}</button>
                   </div>
                   <div style={{ flex: 1, overflowY: "auto", marginBottom: 12, maxHeight: 220 }}>
                     {chatMessages.map((m: any, i: number) => (
                       <div key={i} style={{ marginBottom: 6, textAlign: m.sender_id === userId ? "right" : "left" }}>
                         <span style={{ display: "inline-block", padding: "6px 12px", borderRadius: 12, background: m.sender_id === userId ? "rgba(99,102,241,0.7)" : "rgba(255,255,255,0.08)", fontSize: 13, maxWidth: "70%" }}>
-                          {m.content?.startsWith("[img]") && m.content.slice(5).replace(/\[\/img\]$/, "").startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} /> : m.content?.startsWith("[img]") ? <span style={{ color: "#aaa", fontStyle: "italic" }}>[image]</span> : m.content}
+                          {m.content?.startsWith("[img]") && m.content.slice(5).replace(/\[\/img\]$/, "").startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? <img src={m.content.slice(5).replace(/\[\/img\]$/, "")} alt="" style={{ maxWidth: "100%", borderRadius: 6 }} /> : m.content?.startsWith("[img]") ? <span style={{ color: "#aaa", fontStyle: "italic" }}>{tr("overlay.image")}</span> : m.content}
                         </span>
                       </div>
                     ))}
                     <div ref={chatEndRef} />
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendMessage(); }} placeholder="Message..." style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 13, outline: "none" }} />
-                    <button onClick={sendMessage} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Envoyer</button>
+                    <input value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendMessage(); }} placeholder={tr("overlay.messagePlaceholder")} style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#fff", fontSize: 13, outline: "none" }} />
+                    <button onClick={sendMessage} style={{ padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>{tr("overlay.send")}</button>
                   </div>
                 </>
               )}
@@ -1385,16 +1388,16 @@ function OverlayWindow() {
           )}
           {tab === "notes" && (
             <div style={{ display: "flex", flexDirection: "column", height: "100%", gap: 10 }}>
-              <textarea value={notes} onChange={e => { setNotes(e.target.value); setNotesSaved(false); }} placeholder="Notes, codes, astuces, progression..." style={{ width: "100%", flex: 1, minHeight: 220, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 14, color: "#fff", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }} />
+              <textarea value={notes} onChange={e => { setNotes(e.target.value); setNotesSaved(false); }} placeholder={tr("overlay.notesPlaceholder")} style={{ width: "100%", flex: 1, minHeight: 220, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: 14, color: "#fff", fontSize: 13, resize: "none", outline: "none", lineHeight: 1.6 }} />
               <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
-                {notesSaved && <span style={{ fontSize: 12, color: "#4ade80" }}>Sauvegardé !</span>}
-                <button onClick={saveNotes} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>Sauvegarder</button>
+                {notesSaved && <span style={{ fontSize: 12, color: "#4ade80" }}>{tr("overlay.saved")}</span>}
+                <button onClick={saveNotes} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: "rgba(99,102,241,0.85)", color: "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500 }}>{tr("overlay.save")}</button>
               </div>
             </div>
           )}
         </div>
         <div style={{ padding: "10px 20px", borderTop: "1px solid rgba(255,255,255,0.06)", textAlign: "center", opacity: 0.35, fontSize: 11 }}>
-          Shift+Tab ou Échap pour fermer
+          {tr("overlay.closeHint")}
         </div>
       </div>
     </div>
@@ -1438,6 +1441,8 @@ export default function App() {
   }, [boxartLogs]);
 
   const { t, locale, setLocale } = useTranslation();
+  /** t() for keys built at runtime: `fallback` when the key does not exist. */
+  const tOr = useCallback((key: string, fallback: string) => { const v = t(key); return v === key ? fallback : v; }, [t]);
   const dateLocale = locale === "en" ? "en-GB" : "fr-FR";
 
   const [page, setPage] = useState<Page>("discover");
@@ -2111,11 +2116,11 @@ export default function App() {
       const msg = e.message || "";
       const rateLimitMatch = msg.match(/after (\d+) seconds/);
       if (msg.includes("Email not confirmed")) {
-        setAuthError(t("auth.emailNotConfirmed") || "Confirme ton email avant de te connecter.");
+        setAuthError(t("auth.emailNotConfirmed"));
       } else if (rateLimitMatch) {
-        setAuthError(`Réessaye dans ${rateLimitMatch[1]} secondes.`);
+        setAuthError(t("auth.retryIn", { seconds: rateLimitMatch[1] }));
       } else if (msg.includes("Invalid login credentials")) {
-        setAuthError(t("auth.invalidCredentials") || "Email ou mot de passe incorrect. Pas encore inscrit ?");
+        setAuthError(t("auth.invalidCredentials"));
       } else {
         setAuthError(msg);
       }
@@ -2646,7 +2651,7 @@ export default function App() {
   const sendMessage = useCallback(async () => {
     if (!user || !chatOpen || !chatInput.trim()) return;
     const content = chatInput.trim();
-    if (content.length > 2000) { showToast(t("common.error") + " — max 2000 chars", "error"); return; }
+    if (content.length > 2000) { showToast(t("chat.tooLong"), "error"); return; }
     setChatInput("");
     const { data } = await supabase.from("messages").insert({
       sender_id: user.id,
@@ -4013,7 +4018,7 @@ export default function App() {
 
   const handleCreateVersus = useCallback(async () => {
     if (!user || !versusModal) return;
-    const desc = versusForm.description || (versusForm.type === "playtime" ? `Qui joue le plus${versusForm.game ? ` à ${versusForm.game}` : ""} en ${versusForm.days} jours ?` : versusForm.type === "launches" ? `Qui lance le plus de jeux en ${versusForm.days} jours ?` : `Qui maintient le plus long streak ?`);
+    const desc = versusForm.description || (versusForm.type === "playtime" ? (versusForm.game ? t("versus.descPlaytimeGame", { game: versusForm.game, days: versusForm.days }) : t("versus.descPlaytime", { days: versusForm.days })) : versusForm.type === "launches" ? t("versus.descLaunches", { days: versusForm.days }) : t("versus.descStreak"));
     const endsAt = new Date(Date.now() + versusForm.days * 86400000).toISOString();
     const { error } = await supabase.from("versus_challenges").insert({
       challenger_id: user.id,
@@ -5547,30 +5552,30 @@ export default function App() {
             className="titlebar__update"
             onClick={handleInstallUpdate}
             disabled={updateStatus === "downloading"}
-            title={`Version ${updateAvailable.version} disponible — clique pour installer`}
+            title={t("titlebar.updateAvailable", { version: updateAvailable.version })}
           >
             {updateStatus === "downloading" ? (
               <>
                 <span className="spinner" />
                 {updateProgress.total
                   ? `${Math.round((updateProgress.done / updateProgress.total) * 100)}%`
-                  : "Téléchargement…"}
+                  : t("titlebar.downloading")}
               </>
             ) : updateStatus === "ready" ? (
-              <>↻ Redémarrage…</>
+              <>{t("titlebar.restarting")}</>
             ) : updateStatus === "error" ? (
-              <>⚠ Échec · réessayer</>
+              <>{t("titlebar.failedRetry")}</>
             ) : (
               <>✨ Mise à jour {updateAvailable.version}</>
             )}
           </button>
         )}
         <div className="titlebar__controls">
-          <button className="titlebar__btn" onClick={minimize} title="Réduire"><Minus size={14} /></button>
-          <button className="titlebar__btn" onClick={toggleFullscreen} title={isFullscreen ? "Quitter le plein écran" : "Plein écran"}>
+          <button className="titlebar__btn" onClick={minimize} title={t("titlebar.minimize")}><Minus size={14} /></button>
+          <button className="titlebar__btn" onClick={toggleFullscreen} title={isFullscreen ? t("titlebar.exitFullscreen") : t("titlebar.fullscreen")}>
             {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
           </button>
-          <button className="titlebar__btn titlebar__btn--close" onClick={close} title="Fermer"><X size={14} /></button>
+          <button className="titlebar__btn titlebar__btn--close" onClick={close} title={t("titlebar.close")}><X size={14} /></button>
         </div>
       </div>
 
@@ -5584,7 +5589,7 @@ export default function App() {
               onClick={() => setPage("discover")}
             >
               <span className="sidebar__item-icon"><Compass size={16} /></span>
-              Discover
+              {t("nav.discover")}
             </button>
             <button
               data-tour="emulators"
@@ -5641,7 +5646,7 @@ export default function App() {
               onClick={() => { setPage("challenges"); loadChallenges(); }}
             >
               <span className="sidebar__item-icon"><Flame size={16} /></span>
-              Challenges
+              {t("nav.challenges")}
             </button>
             <button
               data-tour="friends"
@@ -5668,7 +5673,7 @@ export default function App() {
               onClick={() => setPage("wrap")}
             >
               <span className="sidebar__item-icon"><Gift size={16} /></span>
-              Wrap mensuel
+              {t("nav.monthlyWrap")}
             </button>
             <button
               className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
@@ -5689,7 +5694,7 @@ export default function App() {
               onClick={() => setPage("marketplace")}
             >
               <span className="sidebar__item-icon"><Palette size={16} /></span>
-              Marketplace
+              {t("nav.marketplace")}
             </button>
             <button
               className={`sidebar__item ${page === "changelogs" ? "sidebar__item--active" : ""}`}
@@ -5789,7 +5794,7 @@ export default function App() {
                   onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
                 >
                   <span className="sidebar__item-icon">📂</span>
-                  All Games
+                  {t("nav.allGames")}
                 </button>
                 {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
                   const isCatExpanded = expandedCategories.includes(category);
@@ -5875,7 +5880,7 @@ export default function App() {
               <div className="sidebar__user-info" onClick={() => { setNewPseudo(profile?.username || ""); setShowAccountModal(true); }}>
                 <div className="sidebar__user-avatar">
                   {profile?.avatar_url ? (
-                    <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt="avatar" />
+                    <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt={t("sidebar.avatar")} />
                   ) : (
                     <UserIcon size={20} />
                   )}
@@ -5887,14 +5892,14 @@ export default function App() {
                   <div className="sidebar__user-name">{profile?.username || user.email?.split('@')[0] || 'User'}</div>
                   <div className="sidebar__user-email">{user.email}</div>
                 </div>
-                <button className="sidebar__user-settings" title="Settings">
+                <button className="sidebar__user-settings" title={t("sidebar.accountSettings")}>
                   <Settings size={14} />
                 </button>
               </div>
             ) : (
               <button className="sidebar__login-btn" onClick={() => setShowLoginModal(true)}>
                 <LogIn size={16} />
-                <span>Login / Sign Up</span>
+                <span>{t("sidebar.loginSignUp")}</span>
               </button>
             )}
           </div>
@@ -5925,7 +5930,7 @@ export default function App() {
                     {page === "friends" && t("header.friends")}
                     {page === "stats" && t("header.stats")}
                     {page === "challenges" && "Challenges"}
-                    {page === "wrap" && "Wrap Mensuel"}
+                    {page === "wrap" && t("sidebar.monthlyWrap")}
                     {page === "backup" && t("header.backup")}
                     {page === "controller" && t("header.controller")}
                   </h1>
@@ -5975,10 +5980,10 @@ export default function App() {
                   )}
                   {page === "library" && (
                     <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <button className={`btn btn--ghost btn--sm ${viewMode === "grid" ? "btn--active" : ""}`} onClick={() => setViewMode("grid")} title="Grid view">
+                      <button className={`btn btn--ghost btn--sm ${viewMode === "grid" ? "btn--active" : ""}`} onClick={() => setViewMode("grid")} title={t("toolbar.gridView")}>
                         <LayoutGrid size={14} />
                       </button>
-                      <button className={`btn btn--ghost btn--sm ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title="List view">
+                      <button className={`btn btn--ghost btn--sm ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title={t("toolbar.listView")}>
                         <List size={14} />
                       </button>
                       <select className="library-sort-select gamepad-nav-item" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
@@ -6002,19 +6007,19 @@ export default function App() {
                         </optgroup>
                       </select>
                       <select className="library-sort-select gamepad-nav-item" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
-                        <option value="">Collections</option>
+                        <option value="">{t("toolbar.collections")}</option>
                         {playtime.collections.map(c => (
                           <option key={c.name} value={c.name}>{c.name} ({c.games.length})</option>
                         ))}
                       </select>
-                      <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(true)} title="Gérer les collections">
+                      <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(true)} title={t("toolbar.manageCollections")}>
                         <Package size={14} />
                       </button>
                       <button className="btn btn--ghost btn--sm" onClick={async () => {
                         const all = await invoke<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>("get_all_screenshots");
                         setAllScreenshots(all);
                         setShowAllScreenshots(true);
-                      }} title="Screenshots">
+                      }} title={t("toolbar.screenshots")}>
                         <Camera size={14} />
                       </button>
                       <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
@@ -6032,7 +6037,7 @@ export default function App() {
                         )}
                         <input
                           className="search-bar__input gamepad-nav-item"
-                          placeholder={page === "store" ? "Search in Store..." : "Search..."}
+                          placeholder={page === "store" ? t("toolbar.searchStore") : t("toolbar.search")}
                           value={page === "store" ? storeSearch : search}
                           onChange={(e) => {
                             if (page === "store") setStoreSearch(e.target.value);
@@ -6044,13 +6049,13 @@ export default function App() {
                   )}
                   {page === "library" && (
                     <button className="btn btn--ghost" onClick={() => loadData()}>
-                      <RefreshCw size={14} /> Refresh
+                      <RefreshCw size={14} /> {t("toolbar.refresh")}
                     </button>
                   )}
                   <button
                     className="btn btn--ghost"
                     onClick={enterBigPicture}
-                    title="Mode Big Picture"
+                    title={t("toolbar.bigPicture")}
                   >
                     <Maximize2 size={14} />
                   </button>
@@ -6068,7 +6073,7 @@ export default function App() {
                       </div>
                       {installed.includes(emu.id) && (
                         <div className="emu-card__status emu-card__status--installed">
-                          <CheckCircle size={12} /> Installed
+                          <CheckCircle size={12} /> {t("emulator.installed")}
                         </div>
                       )}
                     </div>
@@ -6076,15 +6081,15 @@ export default function App() {
                     <div className="emu-card__actions">
                       {installed.includes(emu.id) ? (
                         <>
-                          <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
-                          <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> Uninstall</button>
+                          <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> {t("emulator.launch")}</button>
+                          <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> {t("emulators.uninstall")}</button>
                         </>
                       ) : (
                         <button className="btn btn--primary btn--sm" onClick={() => handleInstall(emu.id)} disabled={installing.includes(emu.id)}>
-                          {installing.includes(emu.id) ? <><span className="spinner" /> Installing...</> : <><Download size={12} /> Install</>}
+                          {installing.includes(emu.id) ? <><span className="spinner" /> {t("emulator.installing")}</> : <><Download size={12} /> {t("emulator.install")}</>}
                         </button>
                       )}
-                      <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> Website</a>
+                      <a href={emu.website} target="_blank" rel="noreferrer" className="btn btn--ghost btn--sm"><ExternalLink size={12} /> {t("emulator.website")}</a>
                     </div>
                   </motion.div>
                 );
@@ -6135,8 +6140,8 @@ export default function App() {
                       return (
                         <div className="continue-playing">
                           <div className="continue-playing__header">
-                            <h2 className="continue-playing__title">Jump back in</h2>
-                            <span className="continue-playing__sub">Your favorite and the 3 latest sessions</span>
+                            <h2 className="continue-playing__title">{t("home.jumpBackIn")}</h2>
+                            <span className="continue-playing__sub">{t("home.jumpBackInSub")}</span>
                           </div>
                           <div className="continue-playing__row">
                             {favRom && (
@@ -6206,7 +6211,7 @@ export default function App() {
                               <div className="rgs-console-card__info">
                                 <div className="rgs-console-card__name">{category}</div>
                                 <div className="rgs-console-card__meta">
-                                  {cons.length} console{cons.length > 1 ? "s" : ""} • {emuCount} emulator{emuCount > 1 ? "s" : ""}
+                                  {t("emulators.consoleEmuCount", { consoles: cons.length, emus: emuCount })}
                                 </div>
                               </div>
                             </motion.div>
@@ -6291,7 +6296,7 @@ export default function App() {
                         setVimmSearch("");
                       }}
                     >
-                      <Globe size={14} /> All Consoles
+                      <Globe size={14} /> {t("storeUi.allConsoles")}
                     </button>
                     {selectedVimmConsole && (
                       <>
@@ -6311,8 +6316,8 @@ export default function App() {
                         type="text"
                         className="search-bar__input gamepad-nav-item"
                         placeholder={selectedVimmConsole
-                          ? `Search games on ${selectedVimmConsole.name}...`
-                          : "Search Vimm's Lair (type at least 2 letters)"}
+                          ? t("storeUi.searchVimmOn", { console: selectedVimmConsole.name })
+                          : t("storeUi.searchVimm")}
                         value={vimmSearch}
                         onChange={(e) => setVimmSearch(e.target.value)}
                         autoFocus
@@ -6326,7 +6331,7 @@ export default function App() {
                     vimmLoading ? (
                       <div className="empty-state">
                         <RefreshCw size={48} className="animate-spin" />
-                        <h3 className="empty-state__title">Searching Vimm's Lair...</h3>
+                        <h3 className="empty-state__title">{t("storeUi.searchingVimm")}</h3>
                       </div>
                     ) : vimmGames.length > 0 ? (
                       <div className="rgs-folder-view">
@@ -6383,9 +6388,9 @@ export default function App() {
                     ) : (
                       <div className="empty-state">
                         <div className="empty-state__icon">🔍</div>
-                        <div className="empty-state__title">No games found</div>
+                        <div className="empty-state__title">{t("storeUi.noGamesFound")}</div>
                         <p className="empty-state__text">
-                          No match for "{vimmSearch}"{selectedVimmConsole ? ` on ${selectedVimmConsole.name}` : ""}.
+                          {selectedVimmConsole ? t("storeUi.noMatchForOn", { query: vimmSearch, console: selectedVimmConsole.name }) : t("storeUi.noMatchFor", { query: vimmSearch })}
                         </p>
                       </div>
                     )
@@ -6418,9 +6423,9 @@ export default function App() {
                     /* ---- Console selected but no query yet: hint the user ---- */
                     <div className="empty-state">
                       <div className="empty-state__icon">⌨️</div>
-                      <div className="empty-state__title">Type to search {selectedVimmConsole.name}</div>
+                      <div className="empty-state__title">{t("storeUi.typeToSearch", { console: selectedVimmConsole.name })}</div>
                       <p className="empty-state__text">
-                        Results will appear as you type. Clear the search to pick another console.
+                        {t("storeUi.typeToSearchDesc")}
                       </p>
                     </div>
                   )}
@@ -6477,7 +6482,7 @@ export default function App() {
                         <input
                           type="text"
                           className="search-bar__input gamepad-nav-item"
-                          placeholder="Search RetroGameSets (e.g. Mario, Zelda, PS1...)"
+                          placeholder={t("storeUi.searchRgs")}
                           value={rgsSearchQuery}
                           onChange={(e) => setRgsSearchQuery(e.target.value)}
                         />
@@ -6607,7 +6612,7 @@ export default function App() {
                   {activeCollection === null && (rgsLoading ? (
                     <div className="empty-state">
                       <RefreshCw size={48} className="animate-spin" />
-                      <h3 className="empty-state__title">Loading from RetroGameSets...</h3>
+                      <h3 className="empty-state__title">{t("storeUi.loadingRgs")}</h3>
                     </div>
                   ) : rgsSearchResults.length > 0 ? (
                     /* ---- Search Results Grid ---- */
@@ -6685,7 +6690,7 @@ export default function App() {
                       {rgsConsoles.length === 0 && (
                         <div className="empty-state">
                           <div className="empty-state__icon">📦</div>
-                          <h3 className="empty-state__title">No consoles with downloads</h3>
+                          <h3 className="empty-state__title">{t("storeUi.noConsolesWithDownloads")}</h3>
                         </div>
                       )}
                     </div>
@@ -6698,7 +6703,7 @@ export default function App() {
                           <input 
                             type="text" 
                             className="search-bar__input gamepad-nav-item" 
-                            placeholder="Search in folder..." 
+                            placeholder={t("storeUi.searchInFolder")} 
                             value={rgsFolderSearch}
                             onChange={(e) => setRgsFolderSearch(e.target.value)}
                           />
@@ -6755,7 +6760,7 @@ export default function App() {
                             <div className="rgs-lien-card__stats">
                               <div className="rgs-lien-card__stat">
                                 <Gamepad2 size={14} />
-                                <span>{lien.nb_fichiers !== "0" ? `${lien.nb_fichiers} games` : 'Pack'}</span>
+                                <span>{lien.nb_fichiers !== "0" ? t("storeUi.gamesCount", { count: lien.nb_fichiers }) : t("storeUi.pack")}</span>
                               </div>
                               <div className="rgs-lien-card__stat">
                                 <HardDrive size={14} />
@@ -6778,7 +6783,7 @@ export default function App() {
                             {lien.mot_de_passe && (
                               <div className="rgs-lien-card__password">
                                 <Lock size={14} />
-                                <span>Password required</span>
+                                <span>{t("storeUi.passwordRequired")}</span>
                                 <button 
                                   className="rgs-lien-card__copy-pwd"
                                   onClick={async (e) => {
@@ -6791,7 +6796,7 @@ export default function App() {
                                     }
                                   }}
                                 >
-                                  <Copy size={12} /> Copy
+                                  <Copy size={12} /> {t("storeUi.copy")}
                                 </button>
                               </div>
                             )}
@@ -6808,8 +6813,8 @@ export default function App() {
                       {rgsLiens.length === 0 && (
                         <div className="empty-state">
                           <div className="empty-state__icon">📦</div>
-                          <h3 className="empty-state__title">No downloads available</h3>
-                          <p className="empty-state__text">This console has no download links yet</p>
+                          <h3 className="empty-state__title">{t("storeUi.noDownloads")}</h3>
+                          <p className="empty-state__text">{t("storeUi.noDownloadsDesc")}</p>
                         </div>
                       )}
                     </div>
@@ -7023,7 +7028,7 @@ export default function App() {
                         {filteredGames.length === 0 && (
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
-                            <div className="empty-state__title">No matches</div>
+                            <div className="empty-state__title">{t("storeUi.noMatches")}</div>
                             <p className="empty-state__text">No ROMs match the current search on {consoleFilter}.</p>
                           </div>
                         )}
@@ -7071,8 +7076,8 @@ export default function App() {
                         </div>
                       )}
                       <div className="emu-card__actions">
-                        <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> Launch</button>
-                        <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> Uninstall</button>
+                        <button className="btn btn--success btn--sm" onClick={() => handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 })}><Play size={12} /> {t("emulator.launch")}</button>
+                        <button className="btn btn--danger btn--sm" onClick={() => handleUninstall(emu.id)}><Trash2 size={12} /> {t("emulators.uninstall")}</button>
                       </div>
                     </motion.div>
                   );
@@ -7191,11 +7196,11 @@ export default function App() {
                   </div>
 
                   <div className="settings__group">
-                    <div className="settings__group-title"><Download size={16} /> Limite de bande passante</div>
+                    <div className="settings__group-title"><Download size={16} /> {t("settingsUi.bandwidthTitle")}</div>
                     <div className="settings__field">
                       <div className="settings__field-info">
-                        <label className="settings__field-label">Vitesse max de téléchargement</label>
-                        <p className="settings__field-desc">Limite le débit en temps réel. Prend effet immédiatement, même pendant un download.</p>
+                        <label className="settings__field-label">{t("settingsUi.bandwidthLabel")}</label>
+                        <p className="settings__field-desc">{t("settingsUi.bandwidthDesc")}</p>
                       </div>
                       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                         {[0, 256, 512, 1024, 2048, 5120, 10240].map(val => (
@@ -7208,7 +7213,7 @@ export default function App() {
                               await invoke("save_config", { config: newCfg });
                             }}
                           >
-                            {val === 0 ? "Illimité" : val < 1024 ? `${val} KB/s` : `${val / 1024} MB/s`}
+                            {val === 0 ? t("settingsUi.unlimited") : val < 1024 ? `${val} KB/s` : `${val / 1024} MB/s`}
                           </button>
                         ))}
                       </div>
@@ -7255,16 +7260,16 @@ export default function App() {
                     </div>
                     <div className="settings__field">
                       <div className="settings__field-info">
-                        <label className="settings__field-label">Compresser les covers</label>
-                        <p className="settings__field-desc">Convertit les PNG/JPG en WebP (qualité 85) pour réduire l'espace disque (~80% de gain).</p>
+                        <label className="settings__field-label">{t("settingsUi.compressCovers")}</label>
+                        <p className="settings__field-desc">{t("settingsUi.compressCoversDesc")}</p>
                       </div>
                       <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={async () => {
                         try {
                           const result = await invoke<string>("migrate_covers_to_webp");
                           alert(result);
-                        } catch (e: any) { alert("Erreur: " + e); }
+                        } catch (e: any) { alert(t("settingsUi.compressError", { error: String(e) })); }
                       }}>
-                        <RefreshCw size={14} /> Compresser
+                        <RefreshCw size={14} /> {t("settingsUi.compress")}
                       </button>
                     </div>
                   </div>
@@ -7509,26 +7514,26 @@ export default function App() {
 
                   <div className="settings__group">
                     <div className="settings__group-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span><FileText size={16} /> Logs & Diagnostic</span>
+                      <span><FileText size={16} /> {t("settingsUi.logsTitle")}</span>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button className="btn btn--ghost btn--sm" onClick={async () => {
                           const logs = await invoke<string[]>("get_logs");
                           setAppLogs(logs);
                         }}>
-                          <RefreshCw size={12} /> Rafraîchir
+                          <RefreshCw size={12} /> {t("settingsUi.refresh")}
                         </button>
                         <button className="btn btn--ghost btn--sm" onClick={async () => {
                           await invoke("clear_logs");
                           setAppLogs([]);
                           showToast(tl("toast.logsCleared"), "success");
                         }}>
-                          <Trash2 size={12} /> Effacer
+                          <Trash2 size={12} /> {t("settingsUi.clear")}
                         </button>
                       </div>
                     </div>
                     <div className="logs-container">
                       {appLogs.length === 0 ? (
-                        <p className="settings__field-desc">Aucun log récent. Les logs apparaissent quand tu lances un jeu, installes un émulateur, ou effectues des actions.</p>
+                        <p className="settings__field-desc">{t("settingsUi.noLogs")}</p>
                       ) : (
                         <div className="logs-list">
                           {appLogs.map((log, i) => (
@@ -7554,7 +7559,7 @@ export default function App() {
                     </div>
                     {leaderboardLoading && <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{t("leaderboard.loading")}</p>}
                     {!leaderboardLoading && leaderboard.length === 0 && (
-                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucun joueur avec un profil public trouvé. Active ton profil public dans les paramètres du compte.</p>
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{t("leaderboardUi.empty")}</p>
                     )}
                     {leaderboard.length > 0 && (
                       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -7603,17 +7608,17 @@ export default function App() {
                 <div className="settings-content">
                   {!user ? (
                     <div className="settings__group">
-                      <p className="settings__field-desc">Connecte-toi pour ajouter des amis et voir leur activité.</p>
+                      <p className="settings__field-desc">{t("friendsUi.signInPrompt")}</p>
                     </div>
                   ) : (
                     <>
                       {/* Search for users */}
                       <div className="settings__group">
-                        <div className="settings__group-title"><UserPlus size={16} /> Ajouter un ami</div>
+                        <div className="settings__group-title"><UserPlus size={16} /> {t("friendsUi.addFriendTitle")}</div>
                         <div className="settings__field">
                           <input
                             className="settings__field-input"
-                            placeholder="Rechercher un pseudo..."
+                            placeholder={t("friends.searchPlaceholder")}
                             value={friendSearch}
                             onChange={(e) => { setFriendSearch(e.target.value); searchFriends(e.target.value); }}
                           />
@@ -7640,12 +7645,12 @@ export default function App() {
                                   </div>
                                   <span className="friend-card__name">{u.username}</span>
                                   {alreadyFriend ? (
-                                    <span className="friend-card__badge friend-card__badge--accepted"><UserCheck size={12} /> Ami</span>
+                                    <span className="friend-card__badge friend-card__badge--accepted"><UserCheck size={12} /> {t("friendsUi.friendBadge")}</span>
                                   ) : alreadyPending ? (
-                                    <span className="friend-card__badge friend-card__badge--pending">En attente</span>
+                                    <span className="friend-card__badge friend-card__badge--pending">{t("friendsUi.pendingBadge")}</span>
                                   ) : (
                                     <button className="btn btn--primary btn--sm" onClick={() => sendFriendRequest(u.id)}>
-                                      <UserPlus size={12} /> Ajouter
+                                      <UserPlus size={12} /> {t("friendsUi.add")}
                                     </button>
                                   )}
                                 </div>
@@ -7658,7 +7663,7 @@ export default function App() {
                       {/* Pending requests */}
                       {pendingRequests.filter(f => f.addressee_id === user.id).length > 0 && (
                         <div className="settings__group">
-                          <div className="settings__group-title"><UserPlus size={16} /> Demandes reçues</div>
+                          <div className="settings__group-title"><UserPlus size={16} /> {t("friendsUi.received")}</div>
                           {pendingRequests.filter(f => f.addressee_id === user.id).map(req => (
                             <div key={req.id} className="friend-card">
                               <div className="friend-card__avatar">
@@ -7673,7 +7678,7 @@ export default function App() {
                               <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
                               <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
                                 <button className="btn btn--primary btn--sm" onClick={() => acceptFriendRequest(req.id)}>
-                                  <UserCheck size={12} /> Accepter
+                                  <UserCheck size={12} /> {t("friendsUi.accept")}
                                 </button>
                                 <button className="btn btn--danger btn--sm" onClick={() => declineFriendRequest(req.id)}>
                                   <UserX size={12} />
@@ -7687,7 +7692,7 @@ export default function App() {
                       {/* Sent pending */}
                       {pendingRequests.filter(f => f.requester_id === user.id).length > 0 && (
                         <div className="settings__group">
-                          <div className="settings__group-title"><UserPlus size={16} /> Demandes envoyées</div>
+                          <div className="settings__group-title"><UserPlus size={16} /> {t("friendsUi.sent")}</div>
                           {pendingRequests.filter(f => f.requester_id === user.id).map(req => (
                             <div key={req.id} className="friend-card">
                               <div className="friend-card__avatar">
@@ -7700,9 +7705,9 @@ export default function App() {
                                 )}
                               </div>
                               <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
-                              <span className="friend-card__badge friend-card__badge--pending">En attente...</span>
+                              <span className="friend-card__badge friend-card__badge--pending">{t("friendsUi.pendingDots")}</span>
                               <button className="btn btn--ghost btn--sm" onClick={() => declineFriendRequest(req.id)} style={{ marginLeft: "auto" }}>
-                                <X size={12} /> Annuler
+                                <X size={12} /> {t("friendsUi.cancel")}
                               </button>
                             </div>
                           ))}
@@ -7714,11 +7719,11 @@ export default function App() {
                         <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span><Users size={16} /> Mes amis ({friends.length})</span>
                           <button className="btn btn--ghost btn--sm" onClick={loadFriends} disabled={friendsLoading}>
-                            <RefreshCw size={12} className={friendsLoading ? "animate-spin" : ""} /> Rafraîchir
+                            <RefreshCw size={12} className={friendsLoading ? "animate-spin" : ""} /> {t("friendsUi.refresh")}
                           </button>
                         </div>
                         {friends.length === 0 && !friendsLoading && (
-                          <p className="settings__field-desc">Aucun ami pour l'instant. Cherche un pseudo ci-dessus pour en ajouter !</p>
+                          <p className="settings__field-desc">{t("friendsUi.none")}</p>
                         )}
                         {friends.map(f => {
                           const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
@@ -7741,17 +7746,17 @@ export default function App() {
                               <div className="friend-card__info">
                                 <span className="friend-card__name">{f.profile?.username || "Anonyme"}</span>
                                 <span className="friend-card__activity">
-                                  {isPlaying ? `Joue à ${presence.current_game}` : isOnline ? "En ligne" : "Hors ligne"}
+                                  {isPlaying ? t("overlay.playing", { game: presence.current_game ?? "" }) : isOnline ? t("overlay.online") : t("overlay.offline")}
                                 </span>
                               </div>
                               <div style={{ display: "flex", gap: 4, marginLeft: "auto", alignItems: "center" }}>
                                 {unreadCounts[otherId] > 0 && (
                                   <span className="friend-card__unread">{unreadCounts[otherId]}</span>
                                 )}
-                                <button className="btn btn--ghost btn--sm" title="Défier" onClick={(e) => { e.stopPropagation(); setVersusModal({ friendId: otherId, friendName: f.profile?.username || "Anonyme" }); }}>
+                                <button className="btn btn--ghost btn--sm" title={t("friendsUi.challenge")} onClick={(e) => { e.stopPropagation(); setVersusModal({ friendId: otherId, friendName: f.profile?.username || t("friendsUi.anonymous") }); }}>
                                   <Swords size={12} />
                                 </button>
-                                <button className="btn btn--ghost btn--sm" title="Comparer" onClick={(e) => { e.stopPropagation(); compareWithFriend(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
+                                <button className="btn btn--ghost btn--sm" title={t("friendsUi.compare")} onClick={(e) => { e.stopPropagation(); compareWithFriend(otherId, f.profile?.username || t("friendsUi.anonymous"), f.profile?.avatar_url || null); }}>
                                   <BarChart2 size={12} />
                                 </button>
                                 <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
@@ -7781,16 +7786,16 @@ export default function App() {
                                 <div key={v.id} className="versus-card gamepad-nav-item" tabIndex={0}>
                                   <div className="versus-card__header">
                                     <Swords size={14} />
-                                    <span className="versus-card__type">{v.challenge_type === "playtime" ? "Temps de jeu" : v.challenge_type === "launches" ? "Lancements" : "Streak"}</span>
+                                    <span className="versus-card__type">{v.challenge_type === "playtime" ? t("friendsUi.typePlaytime") : v.challenge_type === "launches" ? t("friendsUi.typeLaunches") : t("friendsUi.typeStreak")}</span>
                                     {v.game_name && <span className="versus-card__game">{v.game_name}</span>}
                                   </div>
                                   <p className="versus-card__desc">{v.goal_description}</p>
                                   <div className="versus-card__scores">
                                     <div className="versus-card__player">
-                                      <span>Toi</span>
+                                      <span>{t("friendsUi.you")}</span>
                                       <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong>
                                     </div>
-                                    <span className="versus-card__vs">VS</span>
+                                    <span className="versus-card__vs">{t("friendsUi.vs")}</span>
                                     <div className="versus-card__player">
                                       <span>{opponent?.username || "Adversaire"}</span>
                                       <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong>
@@ -7813,7 +7818,7 @@ export default function App() {
                       {/* Activity Feed */}
                       {activityFeed.length > 0 && (
                         <div className="settings__group">
-                          <div className="settings__group-title"><Activity size={16} /> Activité récente</div>
+                          <div className="settings__group-title"><Activity size={16} /> {t("friendsUi.recentActivity")}</div>
                           <div className="activity-feed">
                             {activityFeed.map(a => (
                               <div key={a.id} className="activity-feed__item">
@@ -7829,18 +7834,18 @@ export default function App() {
                                 <div className="activity-feed__content">
                                   <span className="activity-feed__text">
                                     <strong>{a.username}</strong>{" "}
-                                    {a.event_type === "game_started" && <>a lancé <em>{a.game_name}</em></>}
+                                    {a.event_type === "game_started" && <>{t("friendsUi.activityStarted")} <em>{a.game_name}</em></>}
                                     {a.event_type === "achievement_unlocked" && <>a débloqué {a.details}</>}
-                                    {a.event_type === "game_added" && <>a ajouté <em>{a.game_name}</em> à sa bibliothèque</>}
-                                    {a.event_type === "game_completed" && <>a terminé <em>{a.game_name}</em></>}
+                                    {a.event_type === "game_added" && <>{t("friendsUi.activityAdded")} <em>{a.game_name}</em> {t("friendsUi.activityAddedEnd")}</>}
+                                    {a.event_type === "game_completed" && <>{t("friendsUi.activityCompleted")} <em>{a.game_name}</em></>}
                                   </span>
                                   <span className="activity-feed__time">
                                     {(() => {
                                       const diff = Date.now() - new Date(a.created_at).getTime();
-                                      if (diff < 60000) return "à l'instant";
-                                      if (diff < 3600000) return `il y a ${Math.floor(diff / 60000)} min`;
-                                      if (diff < 86400000) return `il y a ${Math.floor(diff / 3600000)}h`;
-                                      return `il y a ${Math.floor(diff / 86400000)}j`;
+                                      if (diff < 60000) return t("friendsUi.justNow");
+                                      if (diff < 3600000) return t("friendsUi.minutesAgo", { n: Math.floor(diff / 60000) });
+                                      if (diff < 86400000) return t("friendsUi.hoursAgo", { n: Math.floor(diff / 3600000) });
+                                      return t("friendsUi.daysAgo", { n: Math.floor(diff / 86400000) });
                                     })()}
                                     {a.console && ` · ${a.console}`}
                                   </span>
@@ -7873,16 +7878,16 @@ export default function App() {
                           </button>
                         </div>
                         <div className="chat-panel__messages">
-                          {chatLoading && <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem" }}>Chargement...</p>}
+                          {chatLoading && <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem" }}>{t("friendsUi.loading")}</p>}
                           {!chatLoading && chatMessages.length === 0 && (
-                            <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 40 }}>Aucun message. Dis bonjour !</p>
+                            <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "0.75rem", marginTop: 40 }}>{t("friendsUi.noMessages")}</p>
                           )}
                           {chatMessages.map(msg => (
                             <div key={msg.id} className={`chat-bubble ${msg.sender_id === user!.id ? "chat-bubble--mine" : "chat-bubble--theirs"}`}>
                               {msg.content.startsWith("[img]") && msg.content.slice(5).startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? (
                                 <img className="chat-bubble__image" src={msg.content.slice(5)} alt="" onClick={() => window.open(msg.content.slice(5), "_blank")} />
                               ) : msg.content.startsWith("[img]") ? (
-                                <p className="chat-bubble__text" style={{ color: "#aaa", fontStyle: "italic" }}>[image]</p>
+                                <p className="chat-bubble__text" style={{ color: "#aaa", fontStyle: "italic" }}>{t("friendsUi.image")}</p>
                               ) : (
                                 <p className="chat-bubble__text">{msg.content}</p>
                               )}
@@ -7896,13 +7901,13 @@ export default function App() {
                         <div className="chat-panel__input">
                           <input
                             className="chat-panel__input-field"
-                            placeholder="Écrire un message..."
+                            placeholder={t("friendsUi.writeMessage")}
                             value={chatInput}
                             onChange={(e) => setChatInput(e.target.value)}
                             onKeyDown={(e) => { if (e.key === "Enter") sendMessage(); }}
                             autoFocus
                           />
-                          <label className="chat-panel__image-btn" title="Envoyer une image">
+                          <label className="chat-panel__image-btn" title={t("friendsUi.sendImage")}>
                             <Camera size={16} />
                             <input type="file" accept="image/*" hidden onChange={(e) => {
                               const file = e.target.files?.[0];
@@ -7950,21 +7955,21 @@ export default function App() {
                                   ? `${Math.floor(friendProfile.totalSeconds / 60)} min`
                                   : `${friendProfile.totalSeconds}s`}
                             </span>
-                            <span className="friend-profile-modal__stat-label">Temps total</span>
+                            <span className="friend-profile-modal__stat-label">{t("friendsUi.totalTime")}</span>
                           </div>
                           <div className="friend-profile-modal__stat">
                             <span className="friend-profile-modal__stat-value">{friendProfile.totalLaunches}</span>
-                            <span className="friend-profile-modal__stat-label">Launches</span>
+                            <span className="friend-profile-modal__stat-label">{t("friendsUi.launches")}</span>
                           </div>
                           <div className="friend-profile-modal__stat">
                             <span className="friend-profile-modal__stat-value">{friendProfile.gamesPlayed}</span>
-                            <span className="friend-profile-modal__stat-label">Jeux joués</span>
+                            <span className="friend-profile-modal__stat-label">{t("friendsUi.gamesPlayed")}</span>
                           </div>
                         </div>
 
                         {friendProfile.topGames.length > 0 && (
                           <div className="friend-profile-modal__section">
-                            <h3 className="friend-profile-modal__section-title">Top jeux</h3>
+                            <h3 className="friend-profile-modal__section-title">{t("friendsUi.topGames")}</h3>
                             {friendProfile.topGames.map((g, i) => (
                               <div key={`${g.console}::${g.name}`} className="friend-profile-modal__game">
                                 <span className="friend-profile-modal__game-rank">{i + 1}.</span>
@@ -7979,7 +7984,7 @@ export default function App() {
 
                         {friendProfile.topConsoles.length > 0 && (
                           <div className="friend-profile-modal__section">
-                            <h3 className="friend-profile-modal__section-title">Top consoles</h3>
+                            <h3 className="friend-profile-modal__section-title">{t("friendsUi.topConsoles")}</h3>
                             {friendProfile.topConsoles.map(c => (
                               <div key={c.name} className="friend-profile-modal__game">
                                 <span className="friend-profile-modal__game-name">{c.name}</span>
@@ -8000,7 +8005,7 @@ export default function App() {
                         <button className="friend-profile-modal__close" onClick={() => setCompareData(null)}>
                           <X size={16} />
                         </button>
-                        <h2 style={{ textAlign: "center", marginBottom: 20, fontSize: 18 }}><BarChart2 size={18} style={{ verticalAlign: "middle" }} /> Comparaison</h2>
+                        <h2 style={{ textAlign: "center", marginBottom: 20, fontSize: 18 }}><BarChart2 size={18} style={{ verticalAlign: "middle" }} /> {t("friendsUi.comparison")}</h2>
 
                         <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 16, alignItems: "center", marginBottom: 24 }}>
                           <div style={{ textAlign: "center" }}>
@@ -8009,7 +8014,7 @@ export default function App() {
                             </div>
                             <div style={{ fontWeight: 600, fontSize: 14 }}>{compareData.me.username}</div>
                           </div>
-                          <div style={{ fontSize: 20, fontWeight: 700, opacity: 0.3 }}>VS</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, opacity: 0.3 }}>{t("friendsUi.vs")}</div>
                           <div style={{ textAlign: "center" }}>
                             <div className="friend-card__avatar" style={{ margin: "0 auto 8px", transform: "scale(1.2)" }}>
                               {compareData.friend.avatar_url ? <img src={compareData.friend.avatar_url} alt="" /> : <div className="friend-card__avatar-placeholder">{(compareData.friend.username).slice(0, 2).toUpperCase()}</div>}
@@ -8021,10 +8026,10 @@ export default function App() {
                         {(() => {
                           const fmtT = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s}s`;
                           const rows: { label: string; myVal: string; friendVal: string; myWins: boolean }[] = [
-                            { label: "Temps total", myVal: fmtT(compareData.me.totalSeconds), friendVal: fmtT(compareData.friend.totalSeconds), myWins: compareData.me.totalSeconds > compareData.friend.totalSeconds },
-                            { label: "Lancements", myVal: String(compareData.me.totalLaunches), friendVal: String(compareData.friend.totalLaunches), myWins: compareData.me.totalLaunches > compareData.friend.totalLaunches },
-                            { label: "Jeux joués", myVal: String(compareData.me.gamesPlayed), friendVal: String(compareData.friend.gamesPlayed), myWins: compareData.me.gamesPlayed > compareData.friend.gamesPlayed },
-                            { label: "Achievements", myVal: String(compareData.me.achievements), friendVal: String(compareData.friend.achievements), myWins: compareData.me.achievements > compareData.friend.achievements },
+                            { label: t("friendsUi.totalTime"), myVal: fmtT(compareData.me.totalSeconds), friendVal: fmtT(compareData.friend.totalSeconds), myWins: compareData.me.totalSeconds > compareData.friend.totalSeconds },
+                            { label: t("friendsUi.launches"), myVal: String(compareData.me.totalLaunches), friendVal: String(compareData.friend.totalLaunches), myWins: compareData.me.totalLaunches > compareData.friend.totalLaunches },
+                            { label: t("friendsUi.gamesPlayed"), myVal: String(compareData.me.gamesPlayed), friendVal: String(compareData.friend.gamesPlayed), myWins: compareData.me.gamesPlayed > compareData.friend.gamesPlayed },
+                            { label: t("friendsUi.achievements"), myVal: String(compareData.me.achievements), friendVal: String(compareData.friend.achievements), myWins: compareData.me.achievements > compareData.friend.achievements },
                           ];
                           return (
                             <div style={{ marginBottom: 20 }}>
@@ -8041,7 +8046,7 @@ export default function App() {
 
                         {compareData.commonGames.length > 0 && (
                           <div>
-                            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, opacity: 0.8 }}>Jeux en commun</h3>
+                            <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 10, opacity: 0.8 }}>{t("friendsUi.gamesInCommon")}</h3>
                             {compareData.commonGames.map(g => {
                               const fmtT = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s}s`;
                               return (
@@ -8106,29 +8111,29 @@ export default function App() {
                     <div className="stats-cards">
                       <div className="stats-card">
                         <div className="stats-card__value">{fmtTime(totalSeconds)}</div>
-                        <div className="stats-card__label">Temps total</div>
+                        <div className="stats-card__label">{t("stats.totalPlaytime")}</div>
                       </div>
                       <div className="stats-card">
                         <div className="stats-card__value">{totalLaunches}</div>
-                        <div className="stats-card__label">Launches</div>
+                        <div className="stats-card__label">{t("stats.totalLaunches")}</div>
                       </div>
                       <div className="stats-card">
                         <div className="stats-card__value">{gamesPlayed}</div>
-                        <div className="stats-card__label">Jeux joués</div>
+                        <div className="stats-card__label">{t("stats.gamesPlayed")}</div>
                       </div>
                       <div className="stats-card">
                         <div className="stats-card__value">{favCount}</div>
-                        <div className="stats-card__label">Favoris</div>
+                        <div className="stats-card__label">{t("statsUi.favorites")}</div>
                       </div>
                       <div className="stats-card">
                         <div className="stats-card__value">{streak}j</div>
-                        <div className="stats-card__label">Streak</div>
+                        <div className="stats-card__label">{t("statsUi.streak")}</div>
                       </div>
                     </div>
 
                     {/* Top games bar chart */}
                     <div className="stats-section">
-                      <h3 className="stats-section__title">Top jeux</h3>
+                      <h3 className="stats-section__title">{t("stats.topGames")}</h3>
                       <div className="stats-bars">
                         {topGames.map((g, i) => (
                           <div key={`${g.console}::${g.name}`} className="stats-bar-row">
@@ -8145,7 +8150,7 @@ export default function App() {
 
                     {/* Top consoles */}
                     <div className="stats-section">
-                      <h3 className="stats-section__title">Top consoles</h3>
+                      <h3 className="stats-section__title">{t("stats.topConsoles")}</h3>
                       <div className="stats-bars">
                         {topConsoles.map(([con, secs]) => (
                           <div key={con} className="stats-bar-row">
@@ -8167,7 +8172,7 @@ export default function App() {
                           <div
                             key={d.date}
                             className={`stats-heatmap__cell stats-heatmap__cell--${Math.min(d.count, 4)}`}
-                            title={`${d.date}: ${d.count} jeu${d.count > 1 ? "x" : ""}`}
+                            title={t("statsUi.heatmapDay", { date: d.date, count: d.count })}
                           />
                         ))}
                       </div>
@@ -8183,7 +8188,7 @@ export default function App() {
                       <div className="challenges-page__empty">
                         <Flame size={48} style={{ opacity: 0.3 }} />
                         <p>{t("challenges.noneActive")}</p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>Reviens bientôt !</p>
+                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{t("statsUi.comeBackSoon")}</p>
                       </div>
                     ) : (
                       challenges.map((ch: any) => {
@@ -8194,7 +8199,7 @@ export default function App() {
                         const progress = myPart ? Math.min(100, Math.round((myPart.progress / ch.goal_value) * 100)) : 0;
                         const daysLeft = Math.max(0, Math.ceil((ch.end.getTime() - Date.now()) / 86400000));
                         const fmtProgress = (p: number, goalType: string, goalValue: number) => {
-                          if (goalType === "launches") return `${p}/${goalValue} sessions`;
+                          if (goalType === "launches") return t("statsUi.sessions", { progress: p, goal: goalValue });
                           const pMin = Math.floor(p / 60);
                           const gMin = Math.floor(goalValue / 60);
                           return pMin >= 60 ? `${Math.floor(pMin / 60)}h${String(pMin % 60).padStart(2, "0")}/${Math.floor(gMin / 60)}h${String(gMin % 60).padStart(2, "0")}` : `${pMin}/${gMin} min`;
@@ -8203,8 +8208,8 @@ export default function App() {
                           <div key={ch.challenge_id} className="challenge-card gamepad-nav-item" tabIndex={0}>
                             <div className="challenge-card__badge">{ch.badge_icon}</div>
                             <div className="challenge-card__info">
-                              <h3 className="challenge-card__title">{ch.title}</h3>
-                              <p className="challenge-card__desc">{ch.description}</p>
+                              <h3 className="challenge-card__title">{tOr(`challengePool.${ch.id}`, ch.title)}</h3>
+                              <p className="challenge-card__desc">{tOr(`challengePool.${ch.id}Desc`, ch.description)}</p>
                               <div className="challenge-card__meta">
                                 <span><Calendar size={12} /> {daysLeft}j restants</span>
                                 <span><Users size={12} /> {allParts.length} participants</span>
@@ -8215,17 +8220,17 @@ export default function App() {
                                     <div className="challenge-card__progress-fill" style={{ width: `${progress}%` }} />
                                   </div>
                                   <span className="challenge-card__progress-text">
-                                    {myPart.completed ? "✓ Terminé !" : `${progress}% — ${fmtProgress(myPart.progress, ch.goal_type, ch.goal_value)}`}
+                                    {myPart.completed ? t("statsUi.done") : `${progress}% — ${fmtProgress(myPart.progress, ch.goal_type, ch.goal_value)}`}
                                   </span>
                                 </div>
                               ) : (
                                 <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.challenge_id)}>
-                                  <Flame size={12} /> Participer
+                                  <Flame size={12} /> {t("statsUi.join")}
                                 </button>
                               )}
                               {allParts.length > 0 && (
                                 <div className="challenge-card__leaderboard">
-                                  <div className="challenge-card__leaderboard-title"><Trophy size={12} /> Classement</div>
+                                  <div className="challenge-card__leaderboard-title"><Trophy size={12} /> {t("statsUi.leaderboard")}</div>
                                   {allParts.slice(0, 10).map((p: any, i: number) => (
                                     <div key={p.id} className={`challenge-card__rank ${p.user_id === user?.id ? "challenge-card__rank--me" : ""}`}>
                                       <span className="challenge-card__rank-pos">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
@@ -8394,29 +8399,29 @@ export default function App() {
               {page === "backup" && (
                 <div className="settings-content">
                   <div className="settings__group">
-                    <div className="settings__group-title"><Cloud size={16} /> Backblaze B2 — Cloud Backup</div>
+                    <div className="settings__group-title"><Cloud size={16} /> {t("backupUi.b2Title")}</div>
                     <p className="settings__field-desc" style={{ marginBottom: 12 }}>
                       Sauvegardez vos saves sur le cloud (Backblaze B2 — 10GB gratuit). Vos sauvegardes de tous les émulateurs sont zipées et uploadées.
                     </p>
                     <div className="settings__field">
-                      <label className="settings__field-label">Key ID</label>
-                      <input className="settings__field-input" value={b2KeyId} onChange={(e) => setB2KeyId(e.target.value)} placeholder="Application Key ID" />
+                      <label className="settings__field-label">{t("backupUi.keyId")}</label>
+                      <input className="settings__field-input" value={b2KeyId} onChange={(e) => setB2KeyId(e.target.value)} placeholder={t("backupUi.keyId")} />
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">Application Key</label>
-                      <input className="settings__field-input" type="password" value={b2AppKey} onChange={(e) => setB2AppKey(e.target.value)} placeholder="Application Key" />
+                      <label className="settings__field-label">{t("backupUi.appKey")}</label>
+                      <input className="settings__field-input" type="password" value={b2AppKey} onChange={(e) => setB2AppKey(e.target.value)} placeholder={t("backupUi.appKey")} />
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">Bucket ID</label>
-                      <input className="settings__field-input" value={b2BucketId} onChange={(e) => setB2BucketId(e.target.value)} placeholder="Bucket ID" />
+                      <label className="settings__field-label">{t("backupUi.bucketId")}</label>
+                      <input className="settings__field-input" value={b2BucketId} onChange={(e) => setB2BucketId(e.target.value)} placeholder={t("backupUi.bucketId")} />
                     </div>
                     <div className="settings__field">
-                      <label className="settings__field-label">Bucket Name</label>
-                      <input className="settings__field-input" value={b2BucketName} onChange={(e) => setB2BucketName(e.target.value)} placeholder="Bucket Name" />
+                      <label className="settings__field-label">{t("backupUi.bucketName")}</label>
+                      <input className="settings__field-input" value={b2BucketName} onChange={(e) => setB2BucketName(e.target.value)} placeholder={t("backupUi.bucketName")} />
                     </div>
                     <div className="settings__field" style={{ justifyContent: "flex-end", gap: 8 }}>
                       <button className="btn btn--primary btn--sm" onClick={handleSaveB2Config} disabled={!b2KeyId || !b2AppKey || !b2BucketId}>
-                        <Check size={14} /> Sauvegarder
+                        <Check size={14} /> {t("backupUi.save")}
                       </button>
                     </div>
                   </div>
@@ -8424,7 +8429,7 @@ export default function App() {
                   {b2KeyId && b2AppKey && (
                     <div className="settings__group">
                       <div className="settings__group-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span><HardDrive size={16} /> Saves locales</span>
+                        <span><HardDrive size={16} /> {t("backupUi.localSaves")}</span>
                         <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{localSaves.length} fichiers</span>
                       </div>
                       {localSaves.length > 0 && (() => {
@@ -8449,10 +8454,10 @@ export default function App() {
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}>
                           {backupLoading ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
-                          {backupLoading ? " Backup..." : " Backup vers le cloud"}
+                          {" "}{backupLoading ? t("backupUi.backingUp") : t("backupUi.backupToCloud")}
                         </button>
                         <button className="btn btn--ghost btn--sm" onClick={handleListCloudBackups} disabled={backupLoading}>
-                          <RefreshCw size={14} /> Voir les backups cloud
+                          <RefreshCw size={14} /> {t("backupUi.viewCloud")}
                         </button>
                       </div>
                     </div>
@@ -8460,7 +8465,7 @@ export default function App() {
 
                   {cloudBackups.length > 0 && (
                     <div className="settings__group">
-                      <div className="settings__group-title"><Cloud size={16} /> Backups disponibles</div>
+                      <div className="settings__group-title"><Cloud size={16} /> {t("backupUi.available")}</div>
                       {cloudBackups.map((b, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
                           <div>
@@ -8469,7 +8474,7 @@ export default function App() {
                           </div>
                           <div style={{ display: "flex", gap: "4px" }}>
                             <button className="btn btn--ghost btn--sm" onClick={() => handleRestoreBackup(b.file_id)} disabled={backupLoading}>
-                              <Download size={14} /> Restore
+                              <Download size={14} /> {t("backupUi.restore")}
                             </button>
                             <button className="btn btn--danger btn--sm" onClick={() => handleDeleteBackup(b.file_id, b.file_name)} disabled={backupLoading}>
                               <Trash2 size={14} />
@@ -8486,19 +8491,19 @@ export default function App() {
                 <div className="controller-page">
                   {/* Controller selection */}
                   <div className="settings__group">
-                    <div className="settings__group-title"><Gamepad2 size={16} /> Manette active</div>
+                    <div className="settings__group-title"><Gamepad2 size={16} /> {t("controllerUi.active")}</div>
                     {!gamepadActive ? (
                       <div className="controller-empty">
                         <div className="controller-empty__icon">🎮</div>
-                        <p className="controller-empty__text">Connectez une manette pour commencer</p>
-                        <p className="controller-empty__hint">Compatible Xbox, PlayStation, Switch Pro Controller et plus</p>
+                        <p className="controller-empty__text">{t("controllerUi.connectPrompt")}</p>
+                        <p className="controller-empty__hint">{t("controllerUi.compatible")}</p>
                       </div>
                     ) : (
                       <div className="controller-select">
                         <button className="controller-select__item controller-select__item--active">
                           <span className="controller-select__icon">🎮</span>
                           <span className="controller-select__name">{gamepadName}</span>
-                          <span className="controller-select__index">Player 1</span>
+                          <span className="controller-select__index">{t("controllerUi.player1")}</span>
                           <Check size={16} className="controller-select__check" />
                         </button>
                       </div>
@@ -8511,11 +8516,11 @@ export default function App() {
                     const gpState = gamepadStateRef.current;
                     return (
                       <div className="settings__group">
-                        <div className="settings__group-title"><Activity size={16} /> État en direct</div>
+                        <div className="settings__group-title"><Activity size={16} /> {t("controllerUi.liveState")}</div>
                         <div className="controller-live">
                           <div className="controller-live__sticks">
                             <div className="controller-live__stick">
-                              <div className="controller-live__stick-label">Left Stick</div>
+                              <div className="controller-live__stick-label">{t("controllerUi.leftStick")}</div>
                               <div className="controller-live__stick-ring">
                                 <div
                                   className="controller-live__stick-dot"
@@ -8526,7 +8531,7 @@ export default function App() {
                               </div>
                             </div>
                             <div className="controller-live__stick">
-                              <div className="controller-live__stick-label">Right Stick</div>
+                              <div className="controller-live__stick-label">{t("controllerUi.rightStick")}</div>
                               <div className="controller-live__stick-ring">
                                 <div
                                   className="controller-live__stick-dot"
@@ -8552,8 +8557,8 @@ export default function App() {
                   {/* Button mapping */}
                   {gamepadActive && (
                     <div className="settings__group">
-                      <div className="settings__group-title"><Settings size={16} /> Mapping des touches</div>
-                      <p className="settings__field-desc">Cliquez sur un bouton puis appuyez sur la touche de votre manette pour reassigner.</p>
+                      <div className="settings__group-title"><Settings size={16} /> {t("controllerUi.mappingTitle")}</div>
+                      <p className="settings__field-desc">{t("controllerUi.mappingDesc")}</p>
                       <div className="controller-mapping">
                         {gamepadConfig.mappings.map(mapping => (
                           <div key={mapping.action} className="controller-mapping__row">
@@ -8562,7 +8567,7 @@ export default function App() {
                               className={`controller-mapping__btn gamepad-nav-item ${remappingAction === mapping.action ? "controller-mapping__btn--listening" : ""}`}
                               onClick={() => setRemappingAction(remappingAction === mapping.action ? null : mapping.action)}
                             >
-                              {remappingAction === mapping.action ? "Appuyez..." : `Button ${mapping.buttonIndex}`}
+                              {remappingAction === mapping.action ? t("controllerUi.pressKey") : t("controllerUi.buttonN", { n: mapping.buttonIndex })}
                             </button>
                           </div>
                         ))}
@@ -8573,7 +8578,7 @@ export default function App() {
                   {/* Deadzone */}
                   {gamepadActive && (
                     <div className="settings__group">
-                      <div className="settings__group-title"><Activity size={16} /> Deadzone</div>
+                      <div className="settings__group-title"><Activity size={16} /> {t("controllerUi.deadzone")}</div>
                       <div className="controller-deadzone">
                         <input
                           type="range"
@@ -8596,7 +8601,7 @@ export default function App() {
                         className="btn btn--danger btn--sm gamepad-nav-item"
                         onClick={() => setGamepadConfig({ selectedIndex: gamepadConfig.selectedIndex, deadzone: 0.15, mappings: [...DEFAULT_GAMEPAD_MAPPINGS] })}
                       >
-                        <RefreshCw size={14} /> Réinitialiser le mapping
+                        <RefreshCw size={14} /> {t("controllerUi.resetMapping")}
                       </button>
                     </div>
                   )}
@@ -8668,7 +8673,7 @@ export default function App() {
                                   <div className="discover-versus__bar-me" style={{ width: `${(myProgress / total) * 100}%` }} />
                                 </div>
                                 <div className="discover-versus__scores">
-                                  <span className="discover-versus__me">Toi: <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong></span>
+                                  <span className="discover-versus__me">{t("friendsUi.youColon")} <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong></span>
                                   <span className="discover-versus__them">{opponent?.username || "Adversaire"}: <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong></span>
                                 </div>
                                 {v.ends_at && <div className="discover-versus__timer">Fin : {new Date(v.ends_at).toLocaleDateString(dateLocale)}</div>}
@@ -8683,7 +8688,7 @@ export default function App() {
                       <div className="discover-hero gamepad-nav-item" onClick={() => handleLaunch(gameOfTheDay)}>
                         <div className="discover-hero__bg" />
                         <div className="discover-hero__content">
-                          <span className="discover-hero__badge"><Star size={14} /> Jeu du jour</span>
+                          <span className="discover-hero__badge"><Star size={14} /> {t("discover.gameOfTheDay")}</span>
                           <h2 className="discover-hero__title">{gameOfTheDay.name}</h2>
                           <p className="discover-hero__console">{gameOfTheDay.console}</p>
                           {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`] && (
@@ -8691,13 +8696,13 @@ export default function App() {
                               {formatTime(playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].seconds)} joué · {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches} lancement{playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches > 1 ? "s" : ""}
                             </p>
                           )}
-                          <button className="btn btn--primary btn--sm discover-hero__play"><Play size={14} /> Jouer</button>
+                          <button className="btn btn--primary btn--sm discover-hero__play"><Play size={14} /> {t("discover.play")}</button>
                         </div>
                       </div>
                     )}
 
                     <section className="discover-section">
-                      <h3 className="discover-section__title"><Compass size={16} /> Suggestion du jour</h3>
+                      <h3 className="discover-section__title"><Compass size={16} /> {t("discover.suggestion")}</h3>
                       <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 12, padding: "16px 20px", border: "1px solid rgba(99,102,241,0.15)", display: "flex", alignItems: "center", gap: 16 }}>
                         <SuggestionCover gameName={suggestion.name} console={suggestion.console} />
                         <div style={{ flex: 1 }}>
@@ -8705,16 +8710,16 @@ export default function App() {
                           <div style={{ fontSize: 13, opacity: 0.6, marginTop: 2 }}>{suggestion.console}</div>
                         </div>
                         {suggestionInLibrary ? (
-                          <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(suggestionInLibrary)}><Play size={14} /> Jouer</button>
+                          <button className="btn btn--primary btn--sm" onClick={() => handleLaunch(suggestionInLibrary)}><Play size={14} /> {t("discover.play")}</button>
                         ) : (
-                          <button className="btn btn--ghost btn--sm" onClick={() => { setVimmSearch(suggestion.name); setPage("store"); }}>Trouver dans le Store</button>
+                          <button className="btn btn--ghost btn--sm" onClick={() => { setVimmSearch(suggestion.name); setPage("store"); }}>{t("discover.findInStore")}</button>
                         )}
                       </div>
                     </section>
 
                     {recentGames.length > 0 && (
                       <section className="discover-section">
-                        <h3 className="discover-section__title"><ClockIcon size={16} /> Joués récemment</h3>
+                        <h3 className="discover-section__title"><ClockIcon size={16} /> {t("discover.recentlyPlayed")}</h3>
                         <div className="discover-grid">
                           {recentGames.map(g => {
                             const rom = roms.find(r => r.name === g.name && r.console === g.console);
@@ -8735,7 +8740,7 @@ export default function App() {
 
                     {topGames.length > 0 && (
                       <section className="discover-section">
-                        <h3 className="discover-section__title"><Trophy size={16} /> Top jeux</h3>
+                        <h3 className="discover-section__title"><Trophy size={16} /> {t("discover.topGames")}</h3>
                         <div className="discover-top-list">
                           {topGames.map((g, i) => {
                             const rom = roms.find(r => r.name === g.name && r.console === g.console);
@@ -8755,7 +8760,7 @@ export default function App() {
 
                     {unplayed.length > 0 && (
                       <section className="discover-section">
-                        <h3 className="discover-section__title"><Compass size={16} /> À découvrir</h3>
+                        <h3 className="discover-section__title"><Compass size={16} /> {t("discover.toDiscover")}</h3>
                         <div className="discover-grid">
                           {unplayed.map(rom => (
                             <div key={rom.path} className="discover-card gamepad-nav-item" onClick={() => handleLaunch(rom)}>
@@ -8775,7 +8780,7 @@ export default function App() {
                         <Compass size={48} />
                         <h3>{t("library.noGames")}</h3>
                         <p>{t("library.noGamesDesc")}</p>
-                        <button className="btn btn--primary" onClick={() => setPage("store")}>Ouvrir le Store</button>
+                        <button className="btn btn--primary" onClick={() => setPage("store")}>{t("discover.openStore")}</button>
                       </div>
                     )}
                   </div>
@@ -8785,11 +8790,11 @@ export default function App() {
               {page === "marketplace" && (
                 <div className="marketplace">
                   <div className="marketplace__header">
-                    <h1 className="page-title">Marketplace</h1>
-                    <p className="page-subtitle">Thèmes partagés par la communauté</p>
+                    <h1 className="page-title">{t("marketplace.title")}</h1>
+                    <p className="page-subtitle">{t("marketplace.subtitle")}</p>
                     {user && (
                       <button className="btn btn--primary btn--sm" onClick={() => setPublishingTheme(true)}>
-                        <Palette size={14} /> Publier mon thème
+                        <Palette size={14} /> {t("marketplace.publishMine")}
                       </button>
                     )}
                   </div>
@@ -8798,24 +8803,24 @@ export default function App() {
                     <motion.div className="marketplace__publish" initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
                       <input
                         className="marketplace__input gamepad-nav-item"
-                        placeholder="Nom du thème..."
+                        placeholder={t("marketplace.namePlaceholder")}
                         value={newThemeName}
                         onChange={(e) => setNewThemeName(e.target.value)}
                         autoFocus
                       />
                       <input
                         className="marketplace__input gamepad-nav-item"
-                        placeholder="Description (optionnel)..."
+                        placeholder={t("marketplace.descPlaceholder")}
                         value={newThemeDesc}
                         onChange={(e) => setNewThemeDesc(e.target.value)}
                       />
                       <div className="marketplace__publish-info">
                         Thème actuel : <strong>{theme === "default" ? "Discord Dark" : theme}</strong>
-                        {accentHue !== null && <> + accent <span className="marketplace__hue-badge" style={{ background: `hsl(${accentHue}, 80%, 65%)` }} /></>}
+                        {accentHue !== null && <> {t("marketplace.plusAccent")} <span className="marketplace__hue-badge" style={{ background: `hsl(${accentHue}, 80%, 65%)` }} /></>}
                       </div>
                       <div className="marketplace__publish-actions">
-                        <button className="btn btn--ghost btn--sm" onClick={() => setPublishingTheme(false)}>Annuler</button>
-                        <button className="btn btn--primary btn--sm" onClick={handlePublishTheme} disabled={!newThemeName.trim()}>Publier</button>
+                        <button className="btn btn--ghost btn--sm" onClick={() => setPublishingTheme(false)}>{t("marketplace.cancel")}</button>
+                        <button className="btn btn--primary btn--sm" onClick={handlePublishTheme} disabled={!newThemeName.trim()}>{t("marketplace.publishBtn")}</button>
                       </div>
                     </motion.div>
                   )}
@@ -8824,27 +8829,27 @@ export default function App() {
                     <div className="loading-spinner" style={{ margin: "3rem auto" }}><span className="spinner" /></div>
                   ) : (
                     <div className="marketplace__grid">
-                      {marketplaceThemes.map((t) => (
-                        <motion.div key={t.id} className="marketplace__card gamepad-nav-item" whileHover={{ scale: 1.02 }}>
-                          <div className="marketplace__card-preview" data-theme={t.base_theme !== "default" ? t.base_theme : undefined}>
+                      {marketplaceThemes.map((theme) => (
+                        <motion.div key={theme.id} className="marketplace__card gamepad-nav-item" whileHover={{ scale: 1.02 }}>
+                          <div className="marketplace__card-preview" data-theme={theme.base_theme !== "default" ? theme.base_theme : undefined}>
                             <div className="marketplace__card-colors">
-                              <span className="marketplace__swatch" style={{ background: t.accent_hue !== null ? `hsl(${t.accent_hue}, 80%, 65%)` : t.base_theme === "midnight" ? "#3b82f6" : t.base_theme === "retro" ? "#22c55e" : t.base_theme === "sakura" ? "#ec4899" : t.base_theme === "sunset" ? "#f59e0b" : t.base_theme === "oled" ? "#ffffff" : "#5865F2" }} />
+                              <span className="marketplace__swatch" style={{ background: theme.accent_hue !== null ? `hsl(${theme.accent_hue}, 80%, 65%)` : theme.base_theme === "midnight" ? "#3b82f6" : theme.base_theme === "retro" ? "#22c55e" : theme.base_theme === "sakura" ? "#ec4899" : theme.base_theme === "sunset" ? "#f59e0b" : theme.base_theme === "oled" ? "#ffffff" : "#5865F2" }} />
                               <span className="marketplace__swatch marketplace__swatch--dark" />
                             </div>
                           </div>
                           <div className="marketplace__card-info">
-                            <h3 className="marketplace__card-name">{t.name}</h3>
-                            {t.description && <p className="marketplace__card-desc">{t.description}</p>}
+                            <h3 className="marketplace__card-name">{theme.name}</h3>
+                            {theme.description && <p className="marketplace__card-desc">{theme.description}</p>}
                             <div className="marketplace__card-meta">
-                              {t.profile?.avatar_url && <img src={t.profile.avatar_url} className="marketplace__card-avatar" alt="" />}
-                              <span className="marketplace__card-author">{t.profile?.username || "Anonyme"}</span>
-                              <span className="marketplace__card-downloads"><Download size={12} /> {t.downloads}</span>
+                              {theme.profile?.avatar_url && <img src={theme.profile.avatar_url} className="marketplace__card-avatar" alt="" />}
+                              <span className="marketplace__card-author">{theme.profile?.username || t("marketplace.anonymous")}</span>
+                              <span className="marketplace__card-downloads"><Download size={12} /> {theme.downloads}</span>
                             </div>
                           </div>
                           <div className="marketplace__card-actions">
-                            <button className="btn btn--primary btn--sm" onClick={() => handleApplyMarketplaceTheme(t)}>Appliquer</button>
-                            {user?.id === t.user_id && (
-                              <button className="btn btn--danger btn--sm" onClick={() => handleDeleteMarketplaceTheme(t.id)}><Trash2 size={12} /></button>
+                            <button className="btn btn--primary btn--sm" onClick={() => handleApplyMarketplaceTheme(theme)}>{t("marketplace.apply")}</button>
+                            {user?.id === theme.user_id && (
+                              <button className="btn btn--danger btn--sm" onClick={() => handleDeleteMarketplaceTheme(theme.id)}><Trash2 size={12} /></button>
                             )}
                           </div>
                         </motion.div>
@@ -9150,19 +9155,19 @@ export default function App() {
             </div>
             <div className="versus-modal__field">
               <label>{t("versus.specificGame")}</label>
-              <input className="versus-modal__input gamepad-nav-item" tabIndex={0} placeholder="Tous les jeux..." value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
+              <input className="versus-modal__input gamepad-nav-item" tabIndex={0} placeholder={t("versusUi.allGames")} value={versusForm.game} onChange={(e) => setVersusForm({ ...versusForm, game: e.target.value })} />
             </div>
             <div className="versus-modal__field">
               <label>{t("versus.duration")}</label>
               <select value={versusForm.days} onChange={(e) => setVersusForm({ ...versusForm, days: parseInt(e.target.value) })} className="versus-modal__select gamepad-nav-item" tabIndex={0}>
-                <option value={3}>3 jours</option>
-                <option value={7}>7 jours</option>
-                <option value={14}>14 jours</option>
-                <option value={30}>30 jours</option>
+                <option value={3}>{t("versusUi.days", { n: 3 })}</option>
+                <option value={7}>{t("versusUi.days", { n: 7 })}</option>
+                <option value={14}>{t("versusUi.days", { n: 14 })}</option>
+                <option value={30}>{t("versusUi.days", { n: 30 })}</option>
               </select>
             </div>
             <div className="versus-modal__actions">
-              <button className="btn btn--ghost" onClick={() => setVersusModal(null)}>Annuler</button>
+              <button className="btn btn--ghost" onClick={() => setVersusModal(null)}>{t("versusUi.cancel")}</button>
               <button className="btn btn--primary" onClick={handleCreateVersus}><Swords size={14} /> {t("versus.sendChallenge")}</button>
             </div>
           </motion.div>
@@ -9324,7 +9329,7 @@ export default function App() {
             </div>
             {screenshotGallery.entries.length === 0 ? (
               <p className="settings__field-desc" style={{ textAlign: "center", padding: 40 }}>
-                No screenshots yet. Press <strong>Ctrl+F12</strong> while playing to capture.
+                {t("screenshotsUi.none")} <strong>Ctrl+F12</strong> {t("screenshotsUi.noneEnd")}
               </p>
             ) : (
               <div className="screenshot-gallery__grid">
@@ -9348,12 +9353,12 @@ export default function App() {
         <div className="rom-context-overlay" onClick={() => setShowAllScreenshots(false)}>
           <div className="screenshot-gallery screenshot-gallery--all" onClick={(e) => e.stopPropagation()}>
             <div className="screenshot-gallery__header">
-              <h3><Camera size={16} /> All Screenshots</h3>
+              <h3><Camera size={16} /> {t("screenshotsUi.all")}</h3>
               <button className="btn btn--ghost btn--sm" onClick={() => setShowAllScreenshots(false)}><X size={14} /></button>
             </div>
             {allScreenshots.length === 0 ? (
               <p className="settings__field-desc" style={{ textAlign: "center", padding: 40 }}>
-                No screenshots yet. Press <strong>Ctrl+F12</strong> while playing to capture.
+                {t("screenshotsUi.none")} <strong>Ctrl+F12</strong> {t("screenshotsUi.noneEnd")}
               </p>
             ) : (
               <div className="screenshot-gallery__games">
@@ -9412,7 +9417,7 @@ export default function App() {
             >
               <div className="notes-modal__header">
                 <Package size={16} />
-                <span>Collections</span>
+                <span>{t("collectionsUi.title")}</span>
                 <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(false)}><X size={14} /></button>
               </div>
               <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
@@ -9420,16 +9425,16 @@ export default function App() {
                   className="settings__field-input"
                   value={newCollectionName}
                   onChange={(e) => setNewCollectionName(e.target.value)}
-                  placeholder="Nouvelle collection..."
+                  placeholder={t("collectionsUi.newPlaceholder")}
                   onKeyDown={(e) => { if (e.key === "Enter" && newCollectionName.trim()) handleCreateCollection(newCollectionName.trim()); }}
                   style={{ flex: 1 }}
                 />
                 <button className="btn btn--primary btn--sm" onClick={() => { if (newCollectionName.trim()) handleCreateCollection(newCollectionName.trim()); }} disabled={!newCollectionName.trim()}>
-                  <Check size={14} /> Créer
+                  <Check size={14} /> {t("collectionsUi.create")}
                 </button>
               </div>
               {playtime.collections.length === 0 ? (
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Aucune collection. Crée-en une pour organiser tes jeux !</p>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>{t("collectionsUi.none")}</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 250, overflowY: "auto" }}>
                   {playtime.collections.map(col => (
@@ -9474,12 +9479,12 @@ export default function App() {
                 className="notes-modal__textarea"
                 value={notesModal.text}
                 onChange={(e) => setNotesModal({ ...notesModal, text: e.target.value })}
-                placeholder="Codes, astuces, progression..."
+                placeholder={t("notesUi.placeholder")}
                 autoFocus
               />
               <div className="notes-modal__actions">
-                <button className="btn btn--ghost btn--sm" onClick={() => setNotesModal(null)}>Annuler</button>
-                <button className="btn btn--primary btn--sm" onClick={handleSaveNotes}><Check size={14} /> Sauvegarder</button>
+                <button className="btn btn--ghost btn--sm" onClick={() => setNotesModal(null)}>{t("notesUi.cancel")}</button>
+                <button className="btn btn--primary btn--sm" onClick={handleSaveNotes}><Check size={14} /> {t("notesUi.save")}</button>
               </div>
             </motion.div>
           </motion.div>
@@ -9506,7 +9511,7 @@ export default function App() {
               </div>
               <div className="recs-modal__list">
                 {recsModal.recs.length === 0 ? (
-                  <p className="recs-modal__empty">Pas de recommandations trouvées pour ce jeu.</p>
+                  <p className="recs-modal__empty">{t("recsUi.none")}</p>
                 ) : (
                   recsModal.recs.map((rec) => (
                     <div key={rec.name} className="recs-modal__item">
@@ -9521,7 +9526,7 @@ export default function App() {
                         className="btn btn--primary btn--sm"
                         onClick={() => { setRecsModal(null); setStoreMode("vimm"); setVimmSearch(rec.name); setPage("store"); }}
                       >
-                        <Search size={12} /> Trouver
+                        <Search size={12} /> {t("recsUi.find")}
                       </button>
                     </div>
                   ))
@@ -9561,25 +9566,25 @@ export default function App() {
                     className="reviews-modal__textarea gamepad-nav-item"
                     value={reviewDraft.comment}
                     onChange={(e) => setReviewDraft(d => ({ ...d, comment: e.target.value }))}
-                    placeholder="Ton avis sur ce jeu (optionnel)..."
+                    placeholder={t("reviewsUi.placeholder")}
                     rows={2}
                   />
                   <div className="reviews-modal__form-actions">
                     <button className="btn btn--primary btn--sm" disabled={reviewDraft.rating === 0} onClick={handleSubmitReview}>
-                      <Send size={12} /> Publier
+                      <Send size={12} /> {t("guidesUi.publish")}
                     </button>
                     {reviewsModal.reviews.some((r: any) => r.user_id === user.id) && (
-                      <button className="btn btn--ghost btn--sm" onClick={handleDeleteReview}><Trash2 size={12} /> Supprimer mon avis</button>
+                      <button className="btn btn--ghost btn--sm" onClick={handleDeleteReview}><Trash2 size={12} /> {t("reviewsUi.deleteMine")}</button>
                     )}
                   </div>
                 </div>
               )}
-              {!user && <p className="reviews-modal__login-hint">Connecte-toi pour laisser un avis.</p>}
+              {!user && <p className="reviews-modal__login-hint">{t("reviewsUi.signIn")}</p>}
               <div className="reviews-modal__list">
                 {reviewsModal.loading ? (
-                  <p className="reviews-modal__empty">Chargement...</p>
+                  <p className="reviews-modal__empty">{t("reviewsUi.loading")}</p>
                 ) : reviewsModal.reviews.length === 0 ? (
-                  <p className="reviews-modal__empty">Aucun avis pour ce jeu. Sois le premier !</p>
+                  <p className="reviews-modal__empty">{t("reviewsUi.none")}</p>
                 ) : (
                   reviewsModal.reviews.map((r: any) => (
                     <div key={r.id} className="reviews-modal__review">
@@ -9624,13 +9629,13 @@ export default function App() {
                     className={`guide-modal__tab gamepad-nav-item ${guideModal.tab === tab ? "guide-modal__tab--active" : ""}`}
                     onClick={() => setGuideModal({ ...guideModal, tab, writing: false })}
                   >
-                    {tab === "presentation" ? "📖 Présentation" : tab === "tips" ? "💡 Conseils" : tab === "achievements" ? "🏆 Succès" : "🔑 Secrets"}
+                    {tab === "presentation" ? t("guidesUi.tabPresentation") : tab === "tips" ? t("guidesUi.tabTips") : tab === "achievements" ? t("guidesUi.tabAchievements") : t("guidesUi.tabSecrets")}
                   </button>
                 ))}
               </div>
               <div className="guide-modal__content">
                 {guideModal.loading ? (
-                  <p className="guide-modal__empty">Chargement...</p>
+                  <p className="guide-modal__empty">{t("guidesUi.loading")}</p>
                 ) : (() => {
                   const filtered = guideModal.guides.filter((g: any) => g.section === guideModal.tab);
                   const scraped = guideModal.scraped;
@@ -9664,7 +9669,7 @@ export default function App() {
                       {filtered.length === 0 && !guideModal.writing && !hasScrapedContent ? (
                         <div className="guide-modal__empty">
                           <p>{t("guidesExtra.noInSection")}</p>
-                          {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> Écrire le premier</button>}
+                          {user && <button className="btn btn--primary btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: true })}><BookOpen size={12} /> {t("guidesUi.writeFirst")}</button>}
                         </div>
                       ) : (
                         <>
@@ -9677,12 +9682,12 @@ export default function App() {
                                 <button
                                   className={`guide-modal__vote-btn gamepad-nav-item ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
                                   onClick={() => handleVoteGuide(g.id)}
-                                  title="Utile"
+                                  title={t("guidesUi.useful")}
                                 >
                                   <ThumbsUp size={12} /> {g.upvotes}
                                 </button>
                                 {g.user_id === user?.id && (
-                                  <button className="btn btn--ghost btn--sm" onClick={() => handleDeleteGuide(g.id)} title="Supprimer"><Trash2 size={12} /></button>
+                                  <button className="btn btn--ghost btn--sm" onClick={() => handleDeleteGuide(g.id)} title={t("guidesUi.delete")}><Trash2 size={12} /></button>
                                 )}
                               </div>
                               <h4 className="guide-modal__entry-title">{g.title}</h4>
@@ -9705,20 +9710,20 @@ export default function App() {
                       className="guide-modal__write-title gamepad-nav-item"
                       value={guideDraft.title}
                       onChange={(e) => setGuideDraft(d => ({ ...d, title: e.target.value }))}
-                      placeholder="Titre du guide..."
+                      placeholder={t("guides.titlePlaceholder")}
                       autoFocus
                     />
                     <textarea
                       className="guide-modal__write-content gamepad-nav-item"
                       value={guideDraft.content}
                       onChange={(e) => setGuideDraft(d => ({ ...d, content: e.target.value }))}
-                      placeholder="Écris ton guide ici... (astuces, stratégies, walkthroughs...)"
+                      placeholder={t("guides.contentPlaceholder")}
                       rows={6}
                     />
                     <div className="guide-modal__write-actions">
-                      <button className="btn btn--ghost btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: false })}>Annuler</button>
+                      <button className="btn btn--ghost btn--sm" onClick={() => setGuideModal({ ...guideModal, writing: false })}>{t("guidesUi.cancel")}</button>
                       <button className="btn btn--primary btn--sm" disabled={!guideDraft.title.trim() || !guideDraft.content.trim()} onClick={handleSubmitGuide}>
-                        <Send size={12} /> Publier
+                        <Send size={12} /> {t("guidesUi.publish")}
                       </button>
                     </div>
                   </div>
@@ -9801,7 +9806,7 @@ export default function App() {
                     ? `${Math.floor(sessionRecap.sessionSeconds / 60)} min`
                     : `${sessionRecap.sessionSeconds}s`}
                 </span>
-                <span className="session-recap__stat-label">cette session</span>
+                <span className="session-recap__stat-label">{t("sessionUi.thisSession")}</span>
               </div>
               <div className="session-recap__stat">
                 <span className="session-recap__stat-value">{sessionRecap.totalLaunches}</span>
@@ -9813,7 +9818,7 @@ export default function App() {
                     ? `${Math.floor(sessionRecap.totalSeconds / 3600)}h${String(Math.floor((sessionRecap.totalSeconds % 3600) / 60)).padStart(2, '0')}`
                     : `${Math.floor(sessionRecap.totalSeconds / 60)} min`}
                 </span>
-                <span className="session-recap__stat-label">total</span>
+                <span className="session-recap__stat-label">{t("sessionUi.total")}</span>
               </div>
             </div>
           </motion.div>
@@ -9852,7 +9857,7 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="account-modal__header">
-                <h2 className="account-modal__title">Account Settings</h2>
+                <h2 className="account-modal__title">{t("account.title")}</h2>
                 <button className="account-modal__close" onClick={() => setShowAccountModal(false)}>
                   <X size={20} />
                 </button>
@@ -9861,11 +9866,11 @@ export default function App() {
               <div className="account-modal__content">
                 {/* Avatar Section */}
                 <div className="account-modal__section">
-                  <label className="account-modal__label">Profile Picture</label>
+                  <label className="account-modal__label">{t("account.picture")}</label>
                   <div className="account-modal__avatar-container">
                     <div className="account-modal__avatar-wrapper">
                       {profile?.avatar_url ? (
-                        <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt="Avatar" className="account-modal__avatar" />
+                        <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt={t("account.avatar")} className="account-modal__avatar" />
                       ) : (
                         <div className="account-modal__avatar-placeholder">
                           <UserIcon size={32} />
@@ -9877,8 +9882,8 @@ export default function App() {
                       </label>
                     </div>
                     <div className="account-modal__avatar-info">
-                      <p className="account-modal__text">Click the camera to upload a new photo.</p>
-                      <p className="account-modal__hint">Maximum size: 2MB</p>
+                      <p className="account-modal__text">{t("account.uploadHint")}</p>
+                      <p className="account-modal__hint">{t("account.maxSize")}</p>
                     </div>
                   </div>
                 </div>
@@ -9886,16 +9891,16 @@ export default function App() {
                 {/* Gaming Profile Section — kept minimal here; full stats live on the web profile */}
                 {profileStats && (profileStats.total_seconds > 0 || profileStats.favorite_count > 0) && (
                   <div className="account-modal__section">
-                    <label className="account-modal__label">Gaming Profile</label>
+                    <label className="account-modal__label">{t("account.gamingProfile")}</label>
                     <div className="gaming-profile">
                       <div className="gaming-profile__tiles">
                         <div className="gaming-profile__tile">
                           <div className="gaming-profile__tile-value">{formatPlaytime(profileStats.total_seconds) || "0m"}</div>
-                          <div className="gaming-profile__tile-label">Total playtime</div>
+                          <div className="gaming-profile__tile-label">{t("account.totalPlaytime")}</div>
                         </div>
                         <div className="gaming-profile__tile">
                           <div className="gaming-profile__tile-value">{profileStats.games_played}</div>
-                          <div className="gaming-profile__tile-label">Games played</div>
+                          <div className="gaming-profile__tile-label">{t("account.gamesPlayed")}</div>
                         </div>
                       </div>
                     </div>
@@ -9912,7 +9917,7 @@ export default function App() {
                       <div
                         key={a.id}
                         className={`achievement-badge ${a.unlocked ? "achievement-badge--unlocked" : ""} ${a.hidden && !a.unlocked ? "achievement-badge--hidden" : ""}`}
-                        title={a.hidden && !a.unlocked ? "Achievement secret — ???" : a.unlocked ? `${a.name} — ${a.description}\nDébloqué le ${a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString(dateLocale) : ""}` : `${a.name} — ${a.description}`}
+                        title={a.hidden && !a.unlocked ? t("account.secretAchievement") : a.unlocked ? t("account.unlockedOn", { name: a.name, description: a.description, date: a.unlocked_at ? new Date(a.unlocked_at).toLocaleDateString(dateLocale) : "" }) : t("account.achievementTitle", { name: a.name, description: a.description })}
                       >
                         <span className="achievement-badge__icon">{a.hidden && !a.unlocked ? "❓" : a.icon}</span>
                         <span className="achievement-badge__name">{a.hidden && !a.unlocked ? "???" : a.name}</span>
@@ -9923,7 +9928,7 @@ export default function App() {
 
                 {/* Username Section */}
                 <div className="account-modal__section">
-                  <label className="account-modal__label">Display Name</label>
+                  <label className="account-modal__label">{t("account.displayName")}</label>
                   <div className="account-modal__field">
                     <UserIcon size={16} className="account-modal__field-icon" />
                     <input
@@ -9931,7 +9936,7 @@ export default function App() {
                       className="account-modal__input"
                       value={newPseudo || profile?.username || ""}
                       onChange={(e) => setNewPseudo(e.target.value)}
-                      placeholder="Enter new pseudo"
+                      placeholder={t("account.newPseudo")}
                     />
                     <button 
                       className="account-modal__save" 
@@ -9945,7 +9950,7 @@ export default function App() {
 
                 {/* Cloud & public profile */}
                 <div className="account-modal__section">
-                  <label className="account-modal__label">Public Profile</label>
+                  <label className="account-modal__label">{t("account.publicProfile")}</label>
                   <div className="public-profile-toggle">
                     <div className="public-profile-toggle__info">
                       <div className="public-profile-toggle__title">
@@ -9953,15 +9958,15 @@ export default function App() {
                       </div>
                       <div className="public-profile-toggle__desc">
                         {profile?.public_profile
-                          ? "Your playtime stats and favorites are visible to anyone with your profile link."
-                          : "Only you can see your stats. Flip this on to get a shareable profile URL."}
+                          ? t("account.publicOn")
+                          : t("account.publicOff")}
                       </div>
                     </div>
                     <button
                       className={`public-profile-toggle__switch ${profile?.public_profile ? "public-profile-toggle__switch--on" : ""}`}
                       onClick={handleTogglePublicProfile}
                       disabled={isTogglingPublic}
-                      title="Toggle public profile"
+                      title={t("account.togglePublic")}
                     >
                       <span className="public-profile-toggle__knob" />
                     </button>
@@ -9995,7 +10000,7 @@ export default function App() {
 
                 {/* Linked Accounts Section */}
                 <div className="account-modal__section">
-                  <label className="account-modal__label">Linked Connections</label>
+                  <label className="account-modal__label">{t("account.linked")}</label>
                   <div className="account-modal__identities">
                     {user.identities?.map((id) => (
                       <div key={id.id} className="account-modal__identity">
@@ -10020,7 +10025,7 @@ export default function App() {
                   }}
                 >
                   <LogOut size={16} />
-                  Sign Out
+                  {t("account.signOut")}
                 </button>
                 <button
                   className="account-modal__web-btn"
@@ -10137,14 +10142,14 @@ export default function App() {
                       </div>
                     ))}
                     {raGameInfo.achievements.length === 0 && (
-                      <div className="ra-modal__empty">Aucun achievement trouvé pour ce jeu.</div>
+                      <div className="ra-modal__empty">{t("raUi.none")}</div>
                     )}
                   </div>
                 </>
               ) : (
                 <div className="ra-modal__empty">
                   <p>{t("ra.notFound")}</p>
-                  <p className="ra-modal__hint">Vérifiez que vos identifiants sont configurés dans les Settings.</p>
+                  <p className="ra-modal__hint">{t("raUi.checkCredentials")}</p>
                 </div>
               )}
             </motion.div>
@@ -10165,12 +10170,12 @@ export default function App() {
             {onboardingStep === 0 && (
               <div className="onboarding-modal__step">
                 <div className="onboarding-modal__icon">🎮</div>
-                <h1 className="onboarding-modal__title">Bienvenue sur EmuWorld</h1>
+                <h1 className="onboarding-modal__title">{t("onboarding.welcome")}</h1>
                 <p className="onboarding-modal__desc">
-                  Ton lanceur d'émulateurs tout-en-un. On va configurer quelques trucs en 30 secondes.
+                  {t("onboarding.welcomeDesc")}
                 </p>
                 <button className="btn btn--primary btn--lg" onClick={() => setOnboardingStep(1)}>
-                  C'est parti
+                  {t("onboarding.start")}
                 </button>
               </div>
             )}
@@ -10178,26 +10183,26 @@ export default function App() {
             {onboardingStep === 1 && (
               <div className="onboarding-modal__step">
                 <div className="onboarding-modal__icon">📁</div>
-                <h1 className="onboarding-modal__title">Dossier ROMs</h1>
+                <h1 className="onboarding-modal__title">{t("onboarding.romsTitle")}</h1>
                 <p className="onboarding-modal__desc">
-                  Où sont tes ROMs ? EmuWorld va scanner ce dossier pour trouver tes jeux.
+                  {t("onboarding.romsDesc")}
                 </p>
                 {config.roms_directory && (
                   <div className="onboarding-modal__path">{config.roms_directory}</div>
                 )}
                 <button className="btn btn--primary" onClick={async () => {
-                  const selected = await open({ directory: true, title: "Choisis ton dossier ROMs" });
+                  const selected = await open({ directory: true, title: t("onboarding.romsDialog") });
                   if (selected) {
                     const newConfig = { ...config, roms_directory: selected as string };
                     setConfig(newConfig);
                     await invoke("save_config", { config: newConfig });
                   }
                 }}>
-                  <FolderOpen size={16} /> Choisir le dossier
+                  <FolderOpen size={16} /> {t("onboarding.chooseFolder")}
                 </button>
                 <div className="onboarding-modal__nav">
-                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(0)}>Retour</button>
-                  <button className="btn btn--primary" onClick={() => setOnboardingStep(2)} disabled={!config.roms_directory}>Suivant</button>
+                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(0)}>{t("onboarding.back")}</button>
+                  <button className="btn btn--primary" onClick={() => setOnboardingStep(2)} disabled={!config.roms_directory}>{t("onboarding.next")}</button>
                 </div>
               </div>
             )}
@@ -10205,26 +10210,26 @@ export default function App() {
             {onboardingStep === 2 && (
               <div className="onboarding-modal__step">
                 <div className="onboarding-modal__icon">🕹️</div>
-                <h1 className="onboarding-modal__title">Dossier Émulateurs</h1>
+                <h1 className="onboarding-modal__title">{t("onboarding.emusTitle")}</h1>
                 <p className="onboarding-modal__desc">
-                  Où installer les émulateurs ? EmuWorld téléchargera et gérera tout pour toi.
+                  {t("onboarding.emusDesc")}
                 </p>
                 {config.emulators_directory && (
                   <div className="onboarding-modal__path">{config.emulators_directory}</div>
                 )}
                 <button className="btn btn--primary" onClick={async () => {
-                  const selected = await open({ directory: true, title: "Choisis ton dossier émulateurs" });
+                  const selected = await open({ directory: true, title: t("onboarding.emusDialog") });
                   if (selected) {
                     const newConfig = { ...config, emulators_directory: selected as string };
                     setConfig(newConfig);
                     await invoke("save_config", { config: newConfig });
                   }
                 }}>
-                  <FolderOpen size={16} /> Choisir le dossier
+                  <FolderOpen size={16} /> {t("onboarding.chooseFolder")}
                 </button>
                 <div className="onboarding-modal__nav">
-                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(1)}>Retour</button>
-                  <button className="btn btn--primary" onClick={() => setOnboardingStep(3)} disabled={!config.emulators_directory}>Suivant</button>
+                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(1)}>{t("onboarding.back")}</button>
+                  <button className="btn btn--primary" onClick={() => setOnboardingStep(3)} disabled={!config.emulators_directory}>{t("onboarding.next")}</button>
                 </div>
               </div>
             )}
@@ -10232,9 +10237,9 @@ export default function App() {
             {onboardingStep === 3 && (
               <div className="onboarding-modal__step">
                 <div className="onboarding-modal__icon">✨</div>
-                <h1 className="onboarding-modal__title">C'est prêt !</h1>
+                <h1 className="onboarding-modal__title">{t("onboarding.readyTitle")}</h1>
                 <p className="onboarding-modal__desc">
-                  Tu peux maintenant installer des émulateurs, scanner tes ROMs et télécharger des jeux depuis le Store. Amuse-toi bien !
+                  {t("onboarding.readyDesc")}
                 </p>
                 <button className="btn btn--primary btn--lg" onClick={() => {
                   localStorage.setItem("emuworld_onboarding_done", "1");
@@ -10242,14 +10247,14 @@ export default function App() {
                   loadData();
                   setTourStep(0);
                 }}>
-                  Lancer EmuWorld
+                  {t("onboarding.launch")}
                 </button>
                 <button className="btn btn--ghost" onClick={() => {
                   localStorage.setItem("emuworld_onboarding_done", "1");
                   setShowOnboarding(false);
                   loadData();
                 }}>
-                  Passer le tutoriel
+                  {t("onboarding.skipTour")}
                 </button>
               </div>
             )}
@@ -10260,11 +10265,11 @@ export default function App() {
       {/* ===== GUIDED TOUR ===== */}
       {tourStep !== null && (() => {
         const steps = [
-          { selector: "[data-tour='store']", title: "1. Télécharge un jeu", desc: "Va dans le Store pour télécharger des ROMs à l'unité.", position: "right" as const, page: "store" as Page },
-          { selector: "[data-tour='emulators']", title: "2. Installe un émulateur", desc: "Installe l'émulateur correspondant à ta console en un clic.", position: "right" as const, page: "catalog" as Page },
-          { selector: "[data-tour='library']", title: "3. Ta bibliothèque", desc: "Tous tes jeux apparaissent ici avec leurs covers.", position: "right" as const, page: "library" as Page },
-          { selector: "[data-tour='play']", title: "4. Joue !", desc: "Clique sur un jeu pour le lancer. L'émulateur s'ouvre automatiquement.", position: "top" as const, page: "library" as Page },
-          { selector: "[data-tour='friends']", title: "5. Ajoute des amis", desc: "Retrouve tes potes, regarde ce à quoi ils jouent et discute avec eux.", position: "right" as const, page: "friends" as Page },
+          { selector: "[data-tour='store']", title: t("tour.storeTitle"), desc: t("tour.storeDesc"), position: "right" as const, page: "store" as Page },
+          { selector: "[data-tour='emulators']", title: t("tour.emulatorsTitle"), desc: t("tour.emulatorsDesc"), position: "right" as const, page: "catalog" as Page },
+          { selector: "[data-tour='library']", title: t("tour.libraryTitle"), desc: t("tour.libraryDesc"), position: "right" as const, page: "library" as Page },
+          { selector: "[data-tour='play']", title: t("tour.playTitle"), desc: t("tour.playDesc"), position: "top" as const, page: "library" as Page },
+          { selector: "[data-tour='friends']", title: t("tour.friendsTitle"), desc: t("tour.friendsDesc"), position: "right" as const, page: "friends" as Page },
         ];
         const step = steps[tourStep];
         if (step.page && page !== step.page) setPage(step.page);
@@ -10284,11 +10289,11 @@ export default function App() {
               <h3 className="tour-tooltip__title">{step.title}</h3>
               <p className="tour-tooltip__desc">{step.desc}</p>
               <div className="tour-tooltip__nav">
-                {tourStep > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setTourStep(tourStep - 1)}>Précédent</button>}
+                {tourStep > 0 && <button className="btn btn--ghost btn--sm" onClick={() => setTourStep(tourStep - 1)}>{t("tour.prev")}</button>}
                 {tourStep < steps.length - 1 ? (
-                      <button className="btn btn--primary btn--sm" onClick={() => setTourStep(tourStep + 1)}>Suivant</button>
+                      <button className="btn btn--primary btn--sm" onClick={() => setTourStep(tourStep + 1)}>{t("tour.next")}</button>
                     ) : (
-                      <button className="btn btn--primary btn--sm" onClick={() => setTourStep(null)}>Terminer</button>
+                      <button className="btn btn--primary btn--sm" onClick={() => setTourStep(null)}>{t("tour.finish")}</button>
                     )}
                   </div>
                   <span className="tour-tooltip__count">{tourStep + 1}/{steps.length}</span>
@@ -10579,8 +10584,8 @@ export default function App() {
             >
               <div className="login-modal__header">
                 <div className="login-modal__logo">🎮</div>
-                <h2 className="login-modal__title">{isSignUp ? 'Create Account' : 'Welcome Back'}</h2>
-                <p className="login-modal__subtitle">{isSignUp ? 'Join EmuWorld today' : 'Sign in to your account'}</p>
+                <h2 className="login-modal__title">{isSignUp ? t("login.createTitle") : t("login.welcomeBack")}</h2>
+                <p className="login-modal__subtitle">{isSignUp ? t("login.createSubtitle") : t("login.signInSubtitle")}</p>
               </div>
 
               {authError && (
@@ -10602,7 +10607,7 @@ export default function App() {
               </div>
 
               <div className="login-modal__divider">
-                <span>or continue with email</span>
+                <span>{t("login.orEmail")}</span>
               </div>
 
               <div className="login-modal__form">
@@ -10611,7 +10616,7 @@ export default function App() {
                     <UserIcon size={16} className="login-modal__field-icon" />
                     <input
                       type="text"
-                      placeholder="Username (pseudo)"
+                      placeholder={t("login.usernamePlaceholder")}
                       value={loginPseudo}
                       onChange={(e) => setLoginPseudo(e.target.value)}
                       className="login-modal__input"
@@ -10622,7 +10627,7 @@ export default function App() {
                   <Mail size={16} className="login-modal__field-icon" />
                   <input
                     type="email"
-                    placeholder="Email"
+                    placeholder={t("login.emailPlaceholder")}
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     className="login-modal__input"
@@ -10634,7 +10639,7 @@ export default function App() {
                   </button>
                   <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Password"
+                    placeholder={t("login.passwordPlaceholder")}
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     className="login-modal__input"
@@ -10642,13 +10647,13 @@ export default function App() {
                   />
                 </div>
                 <button className="login-modal__submit" onClick={handleEmailAuth} disabled={authLoading}>
-                  {authLoading ? 'Loading...' : isSignUp ? 'Create Account' : 'Sign In'}
+                  {authLoading ? t("login.loading") : isSignUp ? t("login.createButton") : t("login.signInButton")}
                 </button>
               </div>
 
               <div className="login-modal__footer">
                 <button className="login-modal__switch" onClick={() => { setIsSignUp(!isSignUp); setAuthError(null); }}>
-                  {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+                  {isSignUp ? t("login.haveAccount") : t("login.noAccount")}
                 </button>
               </div>
             </motion.div>

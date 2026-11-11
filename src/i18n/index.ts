@@ -7,6 +7,7 @@ export type Locale = "fr" | "en";
 const translations: Record<Locale, Translations> = { fr, en };
 
 const STORAGE_KEY = "emuworld-locale";
+const LOCALE_EVENT = "emuworld:locale";
 
 function detectLocale(): Locale {
   const stored = localStorage.getItem(STORAGE_KEY);
@@ -39,9 +40,18 @@ export function useTranslation() {
     localStorage.setItem(STORAGE_KEY, locale);
   }, [locale]);
 
+  // Every component using the hook (game cards, store cards…) follows a
+  // language change made anywhere in the app.
+  useEffect(() => {
+    const onChange = (e: Event) => setLocaleState((e as CustomEvent<Locale>).detail);
+    window.addEventListener(LOCALE_EVENT, onChange);
+    return () => window.removeEventListener(LOCALE_EVENT, onChange);
+  }, []);
+
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     localStorage.setItem(STORAGE_KEY, l);
+    window.dispatchEvent(new CustomEvent<Locale>(LOCALE_EVENT, { detail: l }));
   }, []);
 
   const t = useCallback(
