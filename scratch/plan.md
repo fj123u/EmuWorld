@@ -13,6 +13,7 @@ Style : fond pointillé clair (variante sombre), icônes et jaquettes à double 
 - [ ] **Navigation** — barre d'icônes en pilule : Accueil, Jeux, Store, Social, Succès, Réglages à la place des 15 entrées de la barre latérale (tutoriel `data-tour`, navigation manette et tests à adapter)
 - [ ] **Page Accueil** — reprendre la partie, consoles, joués récemment, amis en ligne, défi de la semaine
 - [ ] **Pages une par une** — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
+- [ ] **Icône de l'app** — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
 
 ### 🕹️ Multijoueur
 

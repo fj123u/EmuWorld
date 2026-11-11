@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Icône EmuWorld v3 — console claire à boutons colorés (choisie le 11/11/2026).
+       Source pour `npx tauri icon scratch/icon-v3.svg` au moment de la v3. -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7FC4F2"/>
+      <stop offset=".5" stop-color="#8E9BF5"/>
+      <stop offset="1" stop-color="#C58CF0"/>
+    </linearGradient>
+  </defs>
+  <rect x="15" y="15" width="226" height="226" rx="60" fill="#FFFFFF" stroke="url(#g)" stroke-width="14"/>
+  <rect x="58" y="76" width="140" height="104" rx="30" fill="#7C8AF0" stroke="#7C8AF0" stroke-width="26" stroke-linejoin="round"/>
+  <rect x="58" y="76" width="140" height="104" rx="30" fill="#E3E7FF" stroke="#FFFFFF" stroke-width="10" stroke-linejoin="round"/>
+  <path d="M112 95h32" fill="none" stroke="#7C8AF0" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="96" cy="134" r="19" fill="#5BB5EF"/>
+  <circle cx="160" cy="117" r="9" fill="#E3A92B"/>
+  <circle cx="177" cy="134" r="9" fill="#E06FA4"/>
+  <circle cx="160" cy="151" r="9" fill="#45B987"/>
+  <circle cx="143" cy="134" r="9" fill="#E98B3A"/>
+</svg>
