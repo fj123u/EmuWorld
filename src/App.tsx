@@ -931,6 +931,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
       whileTap={{ scale: 0.98 }}
       className="game-card"
       data-rom-path={rom.path}
+      style={consoleHue(rom.console) !== null ? ({ "--console-hue": consoleHue(rom.console) } as React.CSSProperties) : undefined}
       onMouseEnter={() => onHover?.(cover)}
       onMouseLeave={() => onHover?.(null)}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(rom, e.clientX, e.clientY); }}
@@ -7542,10 +7543,9 @@ export default function App() {
                         <Check size={14} /> {t("settings.raSaveApi")}
                       </button>
                       <button
-                        className="btn btn--primary btn--sm"
+                        className="btn btn--trophy btn--sm"
                         onClick={handleRaLogin}
                         disabled={!raUsername || !raPassword || raLoginLoading}
-                        style={{ background: "var(--sec-trophy)", color: "var(--on-accent)" }}
                       >
                         {raLoginLoading ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
                         {raLoginLoading ? ` ${t("settings.raConnecting")}` : ` ${t("settings.raLogin")}`}
@@ -7566,9 +7566,8 @@ export default function App() {
                         </div>
                         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                           <button
-                            className="btn btn--primary btn--sm"
+                            className="btn btn--success btn--sm"
                             onClick={handleConfigureRaEmulators}
-                            style={{ background: "var(--ok)" }}
                           >
                             <Gamepad2 size={14} /> {t("settings.raConfigureEmulators")}
                           </button>
@@ -7576,7 +7575,6 @@ export default function App() {
                             className="btn btn--primary btn--sm"
                             onClick={handleDownloadRaCores}
                             disabled={raDownloadingCores}
-                            style={{ background: "var(--accent)" }}
                           >
                             {raDownloadingCores ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
                             {raDownloadingCores ? ` ${t("settings.raDownloading")}` : ` ${t("settings.raInstallCores")}`}
@@ -8567,7 +8565,7 @@ export default function App() {
                         );
                       })()}
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "var(--ok)" }}>
+                        <button className="btn btn--success btn--sm" onClick={handleBackupToCloud} disabled={backupLoading}>
                           {backupLoading ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
                           {" "}{backupLoading ? t("backupUi.backingUp") : t("backupUi.backupToCloud")}
                         </button>

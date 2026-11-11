@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   { version: "3.0.0", date: "2026-11-11", changes: [
     "🎨 Nouveau look v3 : thème clair par défaut (fond pointillé, panneaux blancs, couleurs douces, titres en Outfit) et thème sombre au choix dans les Réglages",
     "🎨 Les anciens thèmes (Midnight, OLED, Rétro, Sakura, Sunset) deviennent des variantes du thème sombre, à appliquer depuis la Marketplace ; un thème déjà choisi est gardé",
+    "🎨 Boutons en pilule, champs arrondis, cartes en panneaux simples et jaquettes à double contour dans la couleur de leur console",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

@@ -2588,12 +2588,6 @@ h1, h2, h3 { font-family: var(--font-title); font-weight: 700; }
   text-transform: uppercase;
 }
 
-.btn--success {
-  background: var(--neon-green-glow) !important;
-  border-color: var(--neon-green) !important;
-  color: var(--neon-green) !important;
-}
-
 /* Ensure the fixed grid works for store too */
 .grid--fixed {
   display: grid;
@@ -7024,3 +7018,357 @@ h1, h2, h3 { font-family: var(--font-title); font-weight: 700; }
 .marketplace__variants { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
 .marketplace__section-title { font-size: 1.1rem; }
 .marketplace__active { font-size: 0.8rem; font-weight: 800; color: var(--ok); }
+
+/* ================================================
+   EmuWorld v3 — base components (step 2), from scratch/ui-v3/components.css
+   Dépend de tokens.css. Toutes les classes sont préfixées v3- pour
+   cohabiter avec l'ancien CSS pendant la migration.
+   ================================================ */
+
+/* ─── Double contour : liseré couleur du panneau + anneau coloré.
+       La couleur vient de --k (accent, section ou console). ─── */
+.v3-ring {
+  border: 3px solid var(--panel);
+  box-shadow: 0 0 0 3px var(--k);
+}
+
+/* ─── Cadre principal en dégradé (un seul par écran) ─── */
+.v3-frame {
+  background:
+    linear-gradient(var(--panel), var(--panel)) padding-box,
+    var(--grad) border-box;
+  border: 4px solid transparent;
+  border-radius: 28px;
+  padding: 22px;
+}
+
+/* ─── Carte ─── */
+.v3-card {
+  background: var(--panel);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+/* ─── Boutons : toujours ≥ 44 px de haut (souris, tactile, manette) ─── */
+.v3-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: var(--radius-pill);
+  font-weight: 800;
+  font-size: 15px;
+  background: var(--soft);
+  color: var(--ink);
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.v3-btn:hover { background: var(--soft-hover); }
+.v3-btn:active { transform: scale(0.97); }
+.v3-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.v3-btn--go { background: var(--grad-soft); color: var(--on-accent); }   /* un seul par écran */
+.v3-btn--go:hover { background: var(--grad); }
+.v3-btn--danger { background: var(--danger-soft); color: var(--danger); }
+.v3-btn--sm { min-height: 44px; padding: 0 14px; font-size: 14px; }
+
+/* ─── Pastille ─── */
+.v3-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--radius-pill);
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--soft);
+  color: var(--ink);
+}
+
+/* ─── Champ ─── */
+.v3-input {
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background: var(--soft);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+}
+.v3-input::placeholder { color: var(--faint); }
+.v3-input:focus { outline: none; border-color: var(--accent); background: var(--panel); }
+
+/* ─── Jaquette (avec .v3-ring) ─── */
+.v3-cover {
+  border-radius: var(--radius-md);
+  aspect-ratio: 3 / 4;
+  background: color-mix(in srgb, var(--k) 28%, var(--panel));
+  overflow: hidden;
+}
+.v3-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ─── Tuile de console (avec .v3-ring) ─── */
+.v3-tile {
+  border-radius: 20px;
+  min-height: 104px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--k) 16%, var(--panel));
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-start;
+  text-align: left;
+}
+.v3-tile__name { font-family: var(--font-title); font-size: 19px; }
+
+/* ─── Avatar (avec .v3-ring) ─── */
+.v3-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-weight: 900;
+  font-size: 14px;
+  color: var(--on-accent);
+  background: color-mix(in srgb, var(--k) 35%, #fff);
+  overflow: hidden;
+}
+.v3-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ─── Barre de progression ─── */
+.v3-progress { height: 12px; border-radius: var(--radius-pill); background: var(--soft); overflow: hidden; }
+.v3-progress > span { display: block; height: 100%; border-radius: inherit; background: var(--grad); }
+
+/* ─── Touche manette (A, B, X, Y dans un bouton) ─── */
+.v3-key {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+/* ─── Barre de navigation en pilule ─── */
+.v3-dock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel);
+  border-radius: var(--radius-pill);
+  padding: 6px 10px;
+  box-shadow: var(--shadow-soft);
+}
+.v3-dock__item {
+  min-width: 52px;
+  height: 52px;
+  padding: 0 8px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--ink);
+  transition: background var(--transition-fast);
+}
+.v3-dock__item:hover { background: var(--soft); }
+.v3-dock__item.active { background: var(--soft); padding: 0 16px 0 10px; }
+.v3-dock__label { display: none; }
+.v3-dock__item.active .v3-dock__label { display: inline; }   /* le nom n'apparaît que sur la section ouverte */
+.v3-dock__badge {
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--danger); color: #fff;
+  font-size: 12px; font-weight: 900;
+  display: grid; place-items: center;
+}
+
+/* ─── Onglets d'une section (les anciennes pages regroupées) ─── */
+.v3-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.v3-tabs__item {
+  min-height: 44px; padding: 0 16px;
+  border-radius: var(--radius-pill);
+  font-weight: 800; color: var(--mut);
+}
+.v3-tabs__item:hover { background: var(--soft); color: var(--ink); }
+.v3-tabs__item.active { background: var(--panel); color: var(--ink); box-shadow: var(--shadow-soft); }
+
+/* ─── Icône de section à double contour (voir SectionIcon.tsx) ─── */
+.v3-icon { --f: var(--accent-fill); width: 34px; height: 34px; flex: none; stroke-linejoin: round; stroke-linecap: round; }
+.v3-icon .o { fill: var(--k); stroke: var(--k); stroke-width: 6; }          /* contour coloré */
+.v3-icon .i { fill: var(--f); stroke: #fff; stroke-width: 2.2; }            /* remplissage pastel + liseré blanc */
+.v3-icon .d { fill: none; stroke: var(--k); stroke-width: 2.4; }            /* détails */
+
+/* ─── Focus clavier et manette : même anneau partout ─── */
+.v3-btn:focus-visible,
+.v3-dock__item:focus-visible,
+.v3-tabs__item:focus-visible,
+.v3-tile:focus-visible,
+.gamepad-nav-item:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .v3-btn, .v3-dock__item { transition: none; }
+  .v3-btn:active { transform: none; }
+}
+
+/* ════════════════════════════════════════════════
+   v3 layer over the older classes (step 2): the JSX keeps its class names,
+   these rules give them the v3 look. Same selectors as the old rules, placed
+   last, so they win without !important.
+   ════════════════════════════════════════════════ */
+
+/* ─── Buttons: pills, ≥ 44 px, no 3D edge ─── */
+.btn {
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border-radius: var(--radius-pill);
+  font-size: 14px;
+  font-weight: 800;
+  border: 2px solid transparent;
+  box-shadow: none;
+  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled, .btn--disabled { opacity: 0.5; cursor: not-allowed; }
+.btn--sm { min-height: 44px; padding: 0 14px; font-size: 13px; border-radius: var(--radius-pill); }
+.btn--lg { min-height: 52px; padding: 0 28px; font-size: 16px; }
+
+/* Primary: soft accent (many per screen). The gradient (.btn--go) is for the
+   one main action of a screen. */
+.btn--primary,
+.btn--primary:hover,
+.btn--primary:active { border: 2px solid transparent; box-shadow: none; transform: none; }
+.btn--primary { background: var(--accent-fill); color: var(--accent-strong); }
+.btn--primary:hover { background: color-mix(in srgb, var(--accent) 26%, var(--panel)); }
+.btn--primary:active { transform: scale(0.97); }
+
+.btn--go { background: var(--grad-soft); color: var(--on-accent); border: 2px solid transparent; box-shadow: none; }
+.btn--go:hover { background: var(--grad); }
+
+.btn--success,
+.btn--success:hover { border: 2px solid transparent; box-shadow: none; transform: none; }
+.btn--success { background: color-mix(in srgb, var(--ok) 16%, var(--panel)); color: color-mix(in srgb, var(--ok) 70%, var(--ink)); }
+.btn--success:hover { background: color-mix(in srgb, var(--ok) 26%, var(--panel)); }
+
+.btn--trophy { background: color-mix(in srgb, var(--sec-trophy) 22%, var(--panel)); color: color-mix(in srgb, var(--sec-trophy) 45%, var(--ink)); }
+.btn--trophy:hover { background: color-mix(in srgb, var(--sec-trophy) 32%, var(--panel)); }
+
+.btn--danger,
+.btn--danger:hover { border: 2px solid transparent; box-shadow: none; }
+.btn--danger { background: var(--danger-soft); color: color-mix(in srgb, var(--danger) 80%, var(--ink)); }
+.btn--danger:hover { background: color-mix(in srgb, var(--danger) 24%, var(--panel)); color: color-mix(in srgb, var(--danger) 80%, var(--ink)); }
+
+.btn--ghost,
+.btn--ghost:hover { border: 2px solid transparent; box-shadow: none; }
+.btn--ghost { background: var(--soft); color: var(--ink); }
+.btn--ghost:hover { background: var(--soft-hover); color: var(--ink); }
+
+.btn--active { background: var(--accent-soft) !important; border-color: var(--accent) !important; color: var(--ink); }
+
+/* The one main action of a few screens: the gradient. */
+.sidebar__login-btn,
+.login-modal__submit,
+.account-modal__save {
+  background: var(--grad-soft);
+  color: var(--on-accent);
+  border: none;
+  box-shadow: none;
+  border-radius: var(--radius-pill);
+}
+.sidebar__login-btn:hover,
+.login-modal__submit:hover,
+.account-modal__save:hover { background: var(--grad); box-shadow: none; transform: none; }
+.sidebar__login-btn:active,
+.login-modal__submit:active,
+.account-modal__save:active { box-shadow: none; transform: scale(0.98); }
+
+/* ─── Fields: pills on --soft, accent outline when focused ─── */
+.settings__field-input,
+.marketplace__input,
+.versus-modal__input,
+.library-sort-select,
+.lobby-panel__invite-select {
+  min-height: 44px;
+  padding-left: 16px;
+  padding-right: 16px;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-color: var(--soft);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: none;
+}
+.library-sort-select { padding-right: 30px; background-position: right 12px center; }
+.settings__field-input:focus,
+.marketplace__input:focus,
+.versus-modal__input:focus,
+.library-sort-select:focus,
+.lobby-panel__invite-select:focus { outline: none; border-color: var(--accent); background-color: var(--panel); }
+textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 12px; padding-bottom: 12px; }
+.settings__field-input::placeholder,
+.marketplace__input::placeholder,
+.versus-modal__input::placeholder { color: var(--faint); }
+
+.search-bar {
+  min-height: 44px;
+  background: var(--soft);
+  border: 2px solid transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: none;
+}
+.search-bar:focus-within { border-color: var(--accent); background: var(--panel); box-shadow: none; }
+
+/* ─── Cards: plain panels, 24 px corners, light shadow ─── */
+.emu-card,
+.store-card,
+.rgs-console-card,
+.rgs-constructeur-card,
+.changelog-card,
+.stats-card,
+.marketplace__card,
+.continue-playing,
+.gaming-profile__tile {
+  background: var(--panel);
+  border: none;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-soft);
+}
+.emu-card:hover,
+.store-card:hover,
+.rgs-console-card:hover,
+.rgs-constructeur-card:hover,
+.marketplace__card:hover { border-color: transparent; box-shadow: var(--shadow-lg), 0 0 0 3px var(--k); }
+.continue-playing::before { display: none; }
+
+/* ─── Game cards: the cover carries the double outline in the console color ─── */
+.game-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: var(--radius-md);
+}
+.game-card:hover { box-shadow: none; }
+.game-card__cover {
+  border-radius: var(--radius-md);
+  border: 3px solid var(--panel);
+  box-shadow: 0 0 0 3px var(--k);
+  background: color-mix(in srgb, var(--k) 28%, var(--panel));
+}
+.game-card:hover .game-card__cover { box-shadow: 0 0 0 3px var(--k), var(--shadow-lg); }
+.game-card__placeholder { background: transparent; }
+/* Name and details sit on the page under the cover (no card behind them). */
+.game-card__info { background: transparent; border: none; padding: 10px 4px 4px; }
+.game-card__name { font-weight: 900; color: var(--ink); }
+.game-card__meta { color: var(--mut); }
