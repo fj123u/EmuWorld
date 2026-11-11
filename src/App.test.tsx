@@ -96,6 +96,8 @@ describe("App", () => {
     const { container } = await renderApp();
     // tauriMock answers plugin:app|version with "0.0.0-test"; it used to be a hardcoded "v2.5.3".
     await waitFor(() => expect(container.querySelector(".titlebar__version")?.textContent).toBe("v0.0.0-test"));
+    // v3: the app icon, not an emoji.
+    expect(container.querySelector(".titlebar__logo-icon")?.tagName).toBe("IMG");
   });
 
   it("opens every page without crashing", async () => {

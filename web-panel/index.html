@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>EmuWorld</title>
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet" />
   <style>
@@ -53,6 +54,8 @@
       background: linear-gradient(135deg, var(--purple), var(--cyan));
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
+    .nav__brand { display: inline-flex; align-items: center; gap: 10px; }
+    .nav__logo { width: 28px; height: 28px; }
     .nav__links { display: flex; gap: 18px; align-items: center; }
     .nav__link {
       font-size: 14px; color: var(--muted); transition: color 0.15s;
@@ -479,7 +482,7 @@
 </head>
 <body>
   <nav class="nav">
-    <button class="nav__brand nav__link" data-route="home">EmuWorld</button>
+    <button class="nav__brand nav__link" data-route="home"><img src="icon.svg" alt="" class="nav__logo" />EmuWorld</button>
     <div class="nav__links">
       <button class="nav__link" data-route="leaderboard">Leaderboard</button>
       <button class="nav__link" id="nav-me-btn" style="display:none;">

@@ -7407,3 +7407,11 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 /* Big Picture clock: readable from the couch */
 .big-picture__header .titlebar__clock { position: static; transform: none; font-size: 22px; padding: 12px 24px; background: var(--panel); box-shadow: var(--shadow-soft); border: none; }
 .big-picture__header .titlebar__clock * { font-size: inherit; }
+
+/* ─── v3 app icon (src/assets/app-icon.svg = scratch/icon-v3.svg) ─── */
+img.app-logo { display: block; object-fit: contain; }
+img.titlebar__logo-icon { width: 26px; height: 26px; background: none; box-shadow: none; border-radius: 0; }
+.big-picture__logo { display: inline-flex; align-items: center; gap: 12px; }
+.big-picture__logo img.app-logo { width: 42px; height: 42px; }
+img.login-modal__logo { width: 64px; height: 64px; margin: 0 auto 8px; }
+img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }

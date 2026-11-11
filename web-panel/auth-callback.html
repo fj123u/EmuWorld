@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>EmuWorld · OAuth callback</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   :root {
@@ -36,11 +37,7 @@
   .logo {
     width: 72px; height: 72px;
     margin: 0 auto 20px;
-    border-radius: 22px;
-    background: linear-gradient(135deg, #7b86f5, var(--blurple));
-    display: grid; place-items: center;
-    font-size: 32px;
-    box-shadow: inset 0 -3px 0 rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.2), 0 6px 18px rgba(88,101,242,0.35);
+    display: block;
   }
   h1 { font-size: 22px; font-weight: 900; margin-bottom: 8px; }
   p { color: var(--muted); font-size: 14px; line-height: 1.5; }
@@ -86,7 +83,7 @@
 </head>
 <body>
   <div class="card">
-    <div class="logo">🎮</div>
+    <img class="logo" src="icon.svg" alt="EmuWorld" />
     <h1>Connexion EmuWorld</h1>
     <p>On transmet ton identification à l'application, tu peux fermer cette fenêtre.</p>
     <div class="status" id="status">

@@ -16,7 +16,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 - [x] **Page Accueil** *(fait le 11/11 : src/HomePage.tsx + src/home.ts)* — reprendre la partie, consoles, joués récemment, amis en ligne, défi de la semaine
 - [x] **Pages une par une** *(fait le 11/11 : Bibliothèque, Social + page Lobbies, Store, Stats, Réglages)* — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
 - [x] **Mode Big Picture** *(fait le 11/11 ; la barre à 6 sections n'y est pas : Big Picture ne montre que la bibliothèque)* — refait dans le même style (tailles télé, focus manette)
-- [ ] **Icône de l'app** — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
+- [x] **Icône de l'app** *(fait le 11/11 ; reste à téléverser scratch/emuworld_logo_1024.png comme asset Discord `emuworld_logo`)* — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
 
 ### 🕹️ Multijoueur
 

@@ -17,6 +17,7 @@ import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KE
 import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
 import { Dock, SectionTabs, type Page } from "./navigation";
 import { HomePage } from "./HomePage";
+import appIcon from "./assets/app-icon.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
@@ -5756,7 +5757,7 @@ export default function App() {
     return (
       <div className="big-picture">
         <div className="big-picture__header">
-          <div className="big-picture__logo">🎮 EmuWorld</div>
+          <div className="big-picture__logo"><img src={appIcon} alt="" className="app-logo" /> EmuWorld</div>
           <Clock />
           <button className="big-picture__exit" onClick={exitBigPicture}>
             <X size={20} /> ESC
@@ -5843,7 +5844,7 @@ export default function App() {
     <>
       <div className="titlebar" data-tauri-drag-region onDoubleClick={maximize}>
         <div className="titlebar__logo" data-tauri-drag-region>
-          <div className="titlebar__logo-icon">🎮</div>
+          <img src={appIcon} alt="" className="titlebar__logo-icon app-logo" />
           <span data-tauri-drag-region>EmuWorld</span>
         </div>
         <Clock />
@@ -10067,7 +10068,7 @@ export default function App() {
 
             {onboardingStep === 0 && (
               <div className="onboarding-modal__step">
-                <div className="onboarding-modal__icon">🎮</div>
+                <img src={appIcon} alt="" className="onboarding-modal__icon app-logo" />
                 <h1 className="onboarding-modal__title">{t("onboarding.welcome")}</h1>
                 <p className="onboarding-modal__desc">
                   {t("onboarding.welcomeDesc")}
@@ -10481,7 +10482,7 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="login-modal__header">
-                <div className="login-modal__logo">🎮</div>
+                <img src={appIcon} alt="" className="login-modal__logo app-logo" />
                 <h2 className="login-modal__title">{isSignUp ? t("login.createTitle") : t("login.welcomeBack")}</h2>
                 <p className="login-modal__subtitle">{isSignUp ? t("login.createSubtitle") : t("login.signInSubtitle")}</p>
               </div>
