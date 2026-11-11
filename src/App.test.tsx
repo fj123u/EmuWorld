@@ -494,6 +494,13 @@ describe("library (v3)", () => {
 });
 
 describe("home page", () => {
+  it("opens in the dark theme on a first launch", async () => {
+    localStorage.removeItem("emuworld_theme");
+    document.documentElement.removeAttribute("data-theme");
+    await renderApp();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
   it("offers the last game played and opens a console of the library from its tile", async () => {
     const r = await renderApp();
     const frame = await waitFor(() => {
@@ -506,6 +513,8 @@ describe("home page", () => {
     expect(frame.textContent).toContain("Super Mario Bros. 3 (Europe)");
     const tiles = [...r.container.querySelectorAll<HTMLElement>(".home-tile")];
     expect(tiles.map((b) => b.querySelector(".v3-tile__name")?.textContent)).toEqual(["Game Boy Advance", "NES", "Xbox"]);
+    // Each tile shows its console's logo, like the library.
+    for (const tile of tiles) expect(tile.querySelector(".home-tile__logo .console-logo")).not.toBeNull();
     await act(async () => {
       fireEvent.click(tiles[1]);
     });
@@ -596,6 +605,8 @@ describe("cover picker in Big Picture", () => {
     // v3: game cards take their console color, buttons are shown as pills.
     expect(r.container.querySelector(".big-picture .bp-card")?.getAttribute("style")).toContain("--console-hue");
     expect(bpHints(r.container)).toContain("AConfirmer");
+    // The console's logo next to its name is readable from the couch.
+    expect(r.container.querySelector<HTMLElement>(".big-picture__current-console .console-logo")?.style.height).toBe("44px");
     await press(13); // down: first item of the dialog
     await press(0); // A
     await waitFor(() => expect(r.backend.count("plugin:dialog|open")).toBe(1));
@@ -635,7 +646,7 @@ describe("gamepad in the v3 navigation", () => {
   }
   const focused = (c: HTMLElement) => c.querySelector<HTMLElement>(".gamepad-focused");
 
-  it("moves along the section bar, opens a section with A, goes down into the page and back up", async () => {
+  it("moves along the section bar, opens a section with A, goes down to its tabs, into the page and back up", async () => {
     const r = await renderApp();
     await pad(null); // pad connected
     await press(15); // right: Accueil -> Jeux
@@ -644,10 +655,29 @@ describe("gamepad in the v3 navigation", () => {
     await waitFor(() => expect(r.container.querySelector<HTMLElement>("main.main-content")!.dataset.page).toBe("library"));
     // The pad stays on the open section of the bar.
     await waitFor(() => expect(focused(r.container)?.getAttribute("data-section")).toBe("games"));
-    await press(13); // down: into the page
+    await press(13); // down: the open tab of the section
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
+    await press(12); // up: back to the open section
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-section")).toBe("games"));
+    await press(13);
+    await press(13); // down again: into the page
     await waitFor(() => expect(focused(r.container)?.closest("main.main-content")).not.toBeNull());
     await press(12); // up from the first row: back to the bar, on the open tab
     await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
+  });
+
+  it("RB / LB open the next / previous tab in the order of the bar", async () => {
+    const r = await renderApp();
+    await pad(null);
+    const page = () => r.container.querySelector<HTMLElement>("main.main-content")!.dataset.page;
+    navTo(r.container, "Roms");
+    await press(5); // RB: Roms → Console (was Installé)
+    await waitFor(() => expect(page()).toBe("catalog"));
+    navTo(r.container, "Store");
+    await press(5); // RB: Store → Marketplace (was Réglages)
+    await waitFor(() => expect(page()).toBe("marketplace"));
+    await press(4); // LB
+    await waitFor(() => expect(page()).toBe("store"));
   });
 });
 

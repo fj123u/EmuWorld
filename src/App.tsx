@@ -14,14 +14,14 @@ import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
-import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
-import { Dock, SectionTabs, type Page } from "./navigation";
+import { BASE_THEMES, DARK_VARIANTS, DEFAULT_THEME, themeNameKey, themeSwatch } from "./themes";
+import { Dock, SectionTabs, adjacentTabPage, type Page } from "./navigation";
 import { HomePage } from "./HomePage";
 import appIcon from "./assets/app-icon.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
-import { spatialNext, type Direction } from "./gamepadSpatial";
+import { boxOf, moveFocus, spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
@@ -463,6 +463,12 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
 // Gamepad navigation zones: the v3 top bar, then the page.
 const TOP_NAV_SEL = ".v3-topbar .gamepad-nav-item";
 const CONTENT_NAV_SEL = ".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item";
+/** An item inside another one (a button on a card) is reached through it (A / menu). */
+const CONTENT_ITEM_SEL = CONTENT_NAV_SEL.replace(/\.main-content /g, "");
+/** Boxes of the page's items for the pad; nested items get no box, so they are skipped. */
+function contentNavBoxes(items: NodeListOf<HTMLElement>) {
+  return [...items].map(el => el.parentElement?.closest(CONTENT_ITEM_SEL) ? { left: 0, top: 0, width: 0, height: 0 } : boxOf(el));
+}
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -1494,7 +1500,7 @@ export default function App() {
   const [filterMode, setFilterMode] = useState<"all" | "favorites" | "unplayed" | "rated" | SmartPlaylist>("all");
   const [collectionFilter, setCollectionFilter] = useState<string | null>(null);
   const [showCollectionModal, setShowCollectionModal] = useState(false);
-  const [theme, setThemeState] = useState<string>(() => localStorage.getItem("emuworld_theme") || "default");
+  const [theme, setThemeState] = useState<string>(() => localStorage.getItem("emuworld_theme") || DEFAULT_THEME);
   const [accentHue, setAccentHueState] = useState<number | null>(() => {
     const saved = localStorage.getItem("emuworld_accent_hue");
     return saved ? parseInt(saved) : null;
@@ -3024,6 +3030,8 @@ export default function App() {
   remappingActionRef.current = remappingAction;
   const pageRef = useRef(page);
   pageRef.current = page;
+  // LB / RB open a tab like a click (navigateTo is defined further down).
+  const navigateToRef = useRef<(p: Page) => void>(setPage);
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
   const bpSelectedIndexRef = useRef(bpSelectedIndex);
@@ -3048,7 +3056,6 @@ export default function App() {
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
 
   useEffect(() => {
-    const pages: Page[] = ["discover", "catalog", "library", "installed", "store", "controller", "leaderboard", "challenges", "friends", "stats", "wrap", "settings", "changelogs"];
     let navCooldown = 0;
 
     const unlisten = listen<{ connected: boolean; name: string; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
@@ -3273,12 +3280,9 @@ export default function App() {
         if (moveDown || moveUp || moveRight || moveLeft) {
           const items = bpGridItems();
           if (items.length > 0) {
-            const cols = Math.max(1, Math.round((items[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (items[0]?.clientWidth ?? 200) + 20)));
-            let idx = bpSelectedIndexRef.current;
-            if (moveRight) idx = Math.min(idx + 1, items.length - 1);
-            if (moveLeft) idx = Math.max(idx - 1, 0);
-            if (moveDown) idx = Math.min(idx + cols, items.length - 1);
-            if (moveUp) idx = Math.max(idx - cols, 0);
+            // The item on screen in that direction (the back button is above the grid).
+            const dir: Direction = moveDown ? "down" : moveUp ? "up" : moveLeft ? "left" : "right";
+            const idx = Math.max(0, moveFocus(items.map(boxOf), Math.min(bpSelectedIndexRef.current, items.length - 1), dir));
             setBpSelectedIndex(idx);
             items.forEach(el => el.classList.remove("gamepad-focused"));
             items[idx]?.classList.add("gamepad-focused");
@@ -3311,44 +3315,44 @@ export default function App() {
       }
 
       if (moveDown || moveUp || moveRight || moveLeft) {
-        // Two zones: the top bar (sections, account, tabs) and the page.
+        // Two zones: the top bar (sections, account, tabs) and the page. The
+        // pad goes to the item on screen in that direction (grids: up/down).
         const sidebarItems = document.querySelectorAll<HTMLElement>(TOP_NAV_SEL);
         const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_NAV_SEL);
         const allItems = [...sidebarItems, ...contentItems];
+        const dir: Direction = moveDown ? "down" : moveUp ? "up" : moveLeft ? "left" : "right";
 
         if (allItems.length > 0) {
           let idx = focusIndexRef.current;
-          const inSidebar = idx < sidebarItems.length;
-
-          if (inSidebar) {
-            // In the top bar: left/right moves along it, down goes into the page.
-            if (moveRight) idx = Math.min(idx + 1, sidebarItems.length - 1);
-            if (moveLeft) idx = Math.max(idx - 1, 0);
-            if (moveDown && contentItems.length > 0) idx = sidebarItems.length; // first content item
-          } else {
-            // In content: free movement with left/right + up/down by row
-            const contentIdx = idx - sidebarItems.length;
-            const currentContent = contentItems[contentIdx] ?? contentItems[0];
-            const isLinear = currentContent?.classList.contains("gamepad-nav-item") || currentContent?.classList.contains("vimm-game-row") || currentContent?.classList.contains("changelog-card") || currentContent?.classList.contains("leaderboard-entry") || currentContent?.classList.contains("btn") || currentContent?.classList.contains("settings__field-input") || currentContent?.classList.contains("friend-card") || currentContent?.classList.contains("store-source-toggle__btn") || currentContent?.classList.contains("theme-picker__item");
-            const cols = isLinear ? 1 : (currentContent ? Math.max(1, Math.round((currentContent.parentElement?.clientWidth ?? 300) / Math.max(1, currentContent.clientWidth + 16))) : 1);
-            let newContentIdx = contentIdx;
-
-            if (moveDown) newContentIdx = Math.min(contentIdx + cols, contentItems.length - 1);
-            if (moveUp) {
-              if (contentIdx < cols) {
-                // First row of the page → back to the top bar (the open tab, else the open section)
-                const top = [...sidebarItems];
-                const back = Math.max(0, top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active")), top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
-                focusIndexRef.current = back;
-                setFocusIndex(back);
-                lastGamepadButtonsRef.current = [...buttons];
-                return;
-              }
-              newContentIdx = Math.max(contentIdx - cols, 0);
+          if (idx < sidebarItems.length) {
+            const top = [...sidebarItems];
+            const current = top[idx];
+            const activeTab = top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active"));
+            const activeSection = top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active"));
+            // Sections ↔ tabs: through the open ones.
+            const next = dir === "up" && current?.classList.contains("v3-tabs__item") && activeSection >= 0 ? activeSection
+              : dir === "down" && idx === activeSection && activeTab >= 0 ? activeTab
+              : moveFocus(top.map(boxOf), idx, dir);
+            if (next !== idx) idx = next;
+            else if (dir === "down" && contentItems.length > 0) {
+              // Below the bar: the page's item nearest to it (else its first one).
+              const boxes = contentNavBoxes(contentItems);
+              const below = spatialNext([boxOf(current), ...boxes], 0, "down") - 1;
+              idx = sidebarItems.length + (below >= 0 ? below : Math.max(0, boxes.findIndex(b => b.width > 0 || b.height > 0)));
             }
-            if (moveRight) newContentIdx = Math.min(contentIdx + 1, contentItems.length - 1);
-            if (moveLeft) newContentIdx = Math.max(contentIdx - 1, 0);
-            idx = sidebarItems.length + newContentIdx;
+          } else {
+            const contentIdx = Math.min(idx - sidebarItems.length, contentItems.length - 1);
+            const next = moveFocus(contentNavBoxes(contentItems), contentIdx, dir);
+            if (next === contentIdx && dir === "up") {
+              // Top of the page → back to the top bar (the open tab, else the open section)
+              const top = [...sidebarItems];
+              const back = Math.max(0, top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active")), top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
+              focusIndexRef.current = back;
+              setFocusIndex(back);
+              lastGamepadButtonsRef.current = [...buttons];
+              return;
+            }
+            idx = sidebarItems.length + next;
           }
 
           idx = Math.max(0, Math.min(idx, allItems.length - 1));
@@ -3429,12 +3433,10 @@ export default function App() {
         }
       }
 
-      // LB/RB = switch page
-      if (getAction("prevPage")) {
-        setPage(p => { const idx = pages.indexOf(p); return idx > 0 ? pages[idx - 1] : p; });
-      }
-      if (getAction("nextPage")) {
-        setPage(p => { const idx = pages.indexOf(p); return idx < pages.length - 1 ? pages[idx + 1] : p; });
+      // LB/RB = previous / next tab, in the order of the top bar
+      if (getAction("prevPage") || getAction("nextPage")) {
+        const next = adjacentTabPage(pageRef.current, getAction("prevPage") ? -1 : 1);
+        if (next !== pageRef.current) navigateToRef.current(next);
       }
       if (getAction("settings")) {
         setPage("controller");
@@ -5635,6 +5637,7 @@ export default function App() {
     }
     setPage(p);
   };
+  navigateToRef.current = navigateTo;
   const incomingRequests = pendingRequests.filter(f => f.addressee_id === user?.id).length;
   const userName = profile?.username || user?.email?.split("@")[0] || "";
   const topBar = (
@@ -5794,7 +5797,7 @@ export default function App() {
                 ← {t("nav.library")}
               </button>
               <span className="big-picture__current-console">
-                <ConsoleLogo name={bpConsoleFilter} size={24} /> {bpConsoleFilter}
+                <ConsoleLogo name={bpConsoleFilter} size={44} /> {bpConsoleFilter}
               </span>
               <span className="big-picture__game-count">{t(bpRoms.length === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: bpRoms.length })}</span>
             </div>
@@ -8585,6 +8588,7 @@ export default function App() {
                     onPlay={handleLaunch}
                     onLobby={handleCreateLobby}
                     onOpenConsole={openLibraryConsole}
+                    consoleLogo={(name) => <ConsoleLogo name={name} size={36} />}
                     onSeeAllGames={() => navigateTo("library")}
                     onOpenStore={() => navigateTo("store")}
                     onOpenFriend={(f) => viewFriendProfile(f.id, f.name, f.avatarUrl)}

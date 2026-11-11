@@ -6,6 +6,9 @@
 
 export const BASE_THEMES = ["default", "dark"] as const;
 
+/** Theme of a first launch (nothing saved yet): dark since 2026-11-12. */
+export const DEFAULT_THEME = "dark";
+
 export interface ThemeVariant {
   id: string;
   /** Accent and panel, for the swatches of the marketplace cards. */

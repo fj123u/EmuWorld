@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DARK_VARIANTS, isDarkTheme, themeNameKey, themeSwatch } from "./themes";
+import { DARK_VARIANTS, DEFAULT_THEME, isDarkTheme, themeNameKey, themeSwatch } from "./themes";
 import fr from "./i18n/fr";
 
 const css = readFileSync(join(__dirname, "App.css"), "utf8");
@@ -10,6 +10,11 @@ describe("themes", () => {
   it("light by default, every other theme is a dark one", () => {
     expect(isDarkTheme("default")).toBe(false);
     for (const id of ["dark", "midnight", "oled", "retro", "sakura", "sunset"]) expect(isDarkTheme(id)).toBe(true);
+  });
+
+  it("starts dark when nothing is saved", () => {
+    expect(DEFAULT_THEME).toBe("dark");
+    expect(isDarkTheme(DEFAULT_THEME)).toBe(true);
   });
 
   it("keeps the themes saved before v3 (marketplace base_theme) working", () => {

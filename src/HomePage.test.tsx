@@ -72,6 +72,12 @@ describe("home page", () => {
     expect(p.onSeeAllGames).toHaveBeenCalled();
   });
 
+  it("shows each console's logo on its tile", () => {
+    renderHome({ consoleLogo: (name) => <img className="console-logo" src={`logo/${name}.svg`} alt="" /> });
+    const tile = screen.getByRole("button", { name: /Game Boy Advance\s*31 jeux/ });
+    expect(tile.querySelector(".home-tile__logo img")?.getAttribute("src")).toBe("logo/Game Boy Advance.svg");
+  });
+
   it("lists recently played games", () => {
     const { p } = renderHome();
     expect(screen.getByText("Game Boy Advance · 48 min")).toBeTruthy();

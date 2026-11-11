@@ -17,6 +17,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 - [x] **Pages une par une** *(fait le 11/11 : Bibliothèque, Social + page Lobbies, Store, Stats, Réglages)* — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
 - [x] **Mode Big Picture** *(fait le 11/11 ; la barre à 6 sections n'y est pas : Big Picture ne montre que la bibliothèque)* — refait dans le même style (tailles télé, focus manette)
 - [x] **Icône de l'app** *(fait le 11/11 ; reste à téléverser scratch/emuworld_logo_1024.png comme asset Discord `emuworld_logo`)* — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
+- [x] **Retours du premier test** *(fait le 12/11)* — thème sombre par défaut, logos sur les tuiles de l'Accueil, plus de voile au survol des jeux et consoles, recherche du Store sur une ligne, manette haut/bas selon la position à l'écran, LB/RB dans l'ordre des onglets, cadre Big Picture corrigé
 
 ### 🕹️ Multijoueur
 
@@ -34,6 +35,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 
 ### 👥 Social & profil
 
+- [ ] **Refonte complète des défis** *(moyen, demandé le 12/11/2026 : « ils sont vraiment nuls »)* — tout repenser : défis tirés de la vraie bibliothèque du joueur (pas « joue à un Resident Evil » quand il n'en a aucun), variés (finir un jeu, découvrir une console jamais lancée, série de jours, défi entre amis), progression visible, récompenses qui comptent (badges, XP, thème), carte « Défi de la semaine » de l'Accueil revue en même temps
 - [ ] **Profil personnalisable** *(quick win)* — bannière, bio, jeu favori épinglé, badges mis en avant sur le profil public
 - [ ] **Système de parrainage** *(quick win)* — code d'invitation, badges quand un ami s'inscrit
 - [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage Discord/amis, comparaison, slideshow

@@ -65,6 +65,8 @@ export interface HomePageProps<R extends HomeRom> {
   onPlay: (rom: R) => void;
   onLobby: (rom: R) => void;
   onOpenConsole: (name: string) => void;
+  /** The console's logo on its tile (same as the library's tiles). */
+  consoleLogo?: (name: string) => ReactNode;
   onSeeAllGames: () => void;
   onOpenStore: () => void;
   onOpenFriend: (friend: HomeFriend) => void;
@@ -135,6 +137,7 @@ export function HomePage<R extends HomeRom>(p: HomePageProps<R>) {
             <div className="home-tiles">
               {p.consoles.map((c) => (
                 <button key={c.name} className="v3-tile v3-ring home-tile gamepad-nav-item" style={hueStyle(c.name)} onClick={() => p.onOpenConsole(c.name)}>
+                  {p.consoleLogo && <span className="library-tile__logo home-tile__logo" aria-hidden="true">{p.consoleLogo(c.name)}</span>}
                   <span className="v3-tile__name">{c.name}</span>
                   <span className="v3-pill home-tile__count">{t(c.count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: c.count })}</span>
                 </button>

@@ -68,3 +68,29 @@ describe("v3 Big Picture (TV sizes)", () => {
     expect(finalValue(".bp-hint", "font-size")).toBe("20px");
   });
 });
+
+describe("v3 fixes after the first test", () => {
+  it("keeps games and consoles in their own colors under the mouse", () => {
+    expect(finalValue(".game-card:hover .game-card__overlay", "display")).toBe("none");
+    expect(finalValue(".game-card:hover .game-card__cover", "box-shadow")).toBe(finalValue(".game-card__cover", "box-shadow"));
+    expect(finalValue(".home-game:hover .v3-cover", "box-shadow")).toBe(finalValue(".v3-ring", "box-shadow"));
+    expect(finalValue(".library-tile:hover", "box-shadow")).toBe(finalValue(".v3-ring", "box-shadow"));
+    expect(finalValue(".rgs-console-card:hover", "box-shadow")).toBe(finalValue(".rgs-console-card", "box-shadow"));
+    expect(finalValue(".big-picture__console-card:hover", "background")).toBe(finalValue(".big-picture__console-card", "background"));
+    expect(finalValue(".big-picture__console-card:hover", "box-shadow")).toBe(finalValue(".big-picture__console-card", "box-shadow"));
+  });
+
+  it("drops the old pad outline around a focused game (offset in Big Picture)", () => {
+    expect(finalValue(".bp-card.gamepad-focused", "outline")).toBe("none !important");
+    expect(finalValue(".game-card.gamepad-focused", "outline")).toBe("none !important");
+  });
+
+  it("puts the Store search bar and its buttons on one row", () => {
+    expect(finalValue(".rgs-search-header", "display")).toBe("flex");
+    expect(finalValue(".rgs-search-header", "gap")).toBe("12px");
+  });
+
+  it("writes the library menus in the app's font", () => {
+    expect(finalValue(".library-sort-select", "font-family")).toBe("inherit");
+  });
+});

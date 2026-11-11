@@ -21,6 +21,13 @@ export const CHANGELOG: ChangelogEntry[] = [
     "📊 Stats, Wrap mensuel, Réglages, Manette, Backup et Changelogs au style v3 : réglages en cartes, chiffres et titres en Outfit, barres en dégradé, le Wrap du mois dans un cadre, choix du thème en pilules",
     "📺 Big Picture au nouveau style, en tailles télé : consoles en grandes tuiles à leur couleur, jaquettes à double contour, le jeu sélectionné dans un cadre en dégradé, anneau de focus bien visible, et les touches de la manette affichées en pastilles",
     "🎨 Nouvelle icône : une console claire à boutons colorés, dans le dégradé de la v3, pour l'app, l'installeur, la barre de titre, Big Picture et le web panel",
+    "🌙 Le thème sombre est celui par défaut au premier lancement (le clair reste dans les Réglages)",
+    "🕹️ Manette : haut et bas vont vraiment à la ligne du dessus ou du dessous, partout (grilles de jeux, consoles, Big Picture, Accueil en deux colonnes)",
+    "🔀 LB / RB suivent l'ordre des onglets : Roms → Console → Installé, Store → Marketplace…",
+    "🏷️ Les tuiles de consoles de l'Accueil ont leur logo, comme dans la Bibliothèque",
+    "🖱️ Plus de voile ni de changement de couleur au survol d'un jeu ou d'une console : ils gardent leurs couleurs",
+    "🛒 Store : la recherche RetroGameSets et ses boutons tiennent sur une ligne au lieu de se coller",
+    "📺 Big Picture : le jeu sélectionné n'a plus de cadre décalé, et le logo de la console est lisible",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

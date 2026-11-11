@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { Dock, PAGE_LABEL_KEYS, SECTIONS, SectionTabs, TAB_PAGES, sectionOf, type Page } from "./navigation";
+import { Dock, PAGE_LABEL_KEYS, SECTIONS, SectionTabs, TAB_PAGES, adjacentTabPage, sectionOf, type Page } from "./navigation";
 import fr from "./i18n/fr";
 
 const t = (key: string) => key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], fr) as string ?? key;
@@ -39,5 +39,18 @@ describe("v3 navigation", () => {
     expect(navigate).toHaveBeenCalledWith("installed");
     rerender(<SectionTabs page="discover" navigate={navigate} t={t} />);
     expect(screen.queryAllByRole("tab")).toHaveLength(0);
+  });
+});
+
+describe("LB / RB", () => {
+  it("follow the tabs of the bar, across sections", () => {
+    expect(adjacentTabPage("library", 1)).toBe("catalog"); // Roms → Console
+    expect(adjacentTabPage("catalog", 1)).toBe("installed");
+    expect(adjacentTabPage("store", 1)).toBe("marketplace"); // not Settings
+    expect(adjacentTabPage("marketplace", 1)).toBe("lobby");
+    expect(adjacentTabPage("catalog", -1)).toBe("library");
+    expect(adjacentTabPage("discover", -1)).toBe("discover");
+    expect(adjacentTabPage("changelogs", 1)).toBe("changelogs");
+    expect(adjacentTabPage("account", 1)).toBe("controller"); // the account dialog is in Settings
   });
 });

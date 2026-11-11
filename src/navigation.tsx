@@ -29,6 +29,17 @@ export const SECTIONS: { id: Section; labelKey: string; pages: Page[] }[] = [
 /** Pages that have a tab (all but "account"). */
 export const TAB_PAGES: Page[] = SECTIONS.flatMap((s) => s.pages).filter((p) => p !== "account");
 
+/**
+ * LB / RB: the previous / next tab, in the order of the bar (Roms → Console →
+ * Installé → Store → Marketplace…), across sections; stays on the first and
+ * last. The account dialog belongs to Settings.
+ */
+export function adjacentTabPage(page: Page, step: -1 | 1): Page {
+  const idx = TAB_PAGES.indexOf(page === "account" ? "settings" : page);
+  const next = TAB_PAGES[idx + step];
+  return idx < 0 || !next ? page : next;
+}
+
 /** Label of each page's tab. */
 export const PAGE_LABEL_KEYS: Record<Exclude<Page, "account">, string> = {
   discover: "nav.discover",
