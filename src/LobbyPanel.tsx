@@ -40,6 +40,8 @@ interface Props {
   chat?: ReactNode;
   /** Friends to invite as buttons (Big Picture: a <select> can't be opened with a pad). */
   inviteButtons?: boolean;
+  /** "floating": the small panel over the app; "page": the Lobbies page (v3 mockup). */
+  variant?: "floating" | "page";
   t: (key: string, params?: Record<string, string | number>) => string;
   onInvite: (friendId: string) => void;
   onReady: () => void;
@@ -57,7 +59,7 @@ const STEPS: Record<string, { host: string; client: string }> = {
   ryubing: { host: "lobby.stepsRyubingHost", client: "lobby.stepsRyubingClient" },
 };
 
-export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat, inviteButtons }: Props) {
+export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat, inviteButtons, variant = "floating" }: Props) {
   const [codeDraft, setCodeDraft] = useState("");
   const [copied, setCopied] = useState(false);
   const members = lobby.members ?? [];
@@ -65,11 +67,19 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
   const me = members.find((m) => m.user_id === userId);
   const playing = lobby.status === "playing";
   const invitable = friends.filter((f) => !members.some((m) => m.user_id === f.id));
+  const isPage = variant === "page";
+  // The page uses buttons (pad-friendly) and gives the main action the gradient.
+  const asButtons = inviteButtons || isPage;
+  const mainAction = isPage ? "btn--go" : "btn--success";
+  const nameOf = (m: LobbyMemberView) => (m.user_id === userId ? t("lobby.you") : m.profile?.username || t("lobby.player"));
+  const hostName = members.find((m) => m.user_id === lobby.host_id)?.profile?.username || t("lobby.player");
 
-  return (
-    <motion.div className="lobby-panel" role="region" aria-label={t("lobby.title")} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+  const content = (
+    <>
       <div className="lobby-panel__header">
-        <h3>{t("lobby.title")}</h3>
+        {isPage
+          ? <span className="v3-pill">{isHost ? t("lobbyPage.yourLobby") : t("lobbyPage.lobbyOf", { name: hostName })}</span>
+          : <h3>{t("lobby.title")}</h3>}
         <button className="btn btn--danger btn--sm gamepad-nav-item" onClick={onLeave}>
           {isHost ? t("lobby.dissolve") : t("lobby.leave")}
         </button>
@@ -84,8 +94,9 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
       <div className="lobby-panel__members">
         {members.map((m) => (
           <div key={m.user_id} className={`lobby-panel__member ${m.is_ready ? "lobby-panel__member--ready" : ""}`}>
+            {isPage && <span className="v3-avatar v3-ring lobby-panel__avatar" aria-hidden="true">{(m.profile?.username || nameOf(m)).slice(0, 2).toUpperCase()}</span>}
             <span>
-              {m.user_id === userId ? t("lobby.you") : m.profile?.username || t("lobby.player")}
+              {nameOf(m)}
               {m.user_id === lobby.host_id ? ` · ${t("lobby.host")}` : ""}
             </span>
             <span className="lobby-panel__status">{m.is_ready ? t("lobby.readyStatus") : t("lobby.waiting")}</span>
@@ -133,7 +144,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
         </div>
       )}
       <div className="lobby-panel__actions">
-        {isHost && !playing && invitable.length > 0 && inviteButtons && (
+        {isHost && !playing && invitable.length > 0 && asButtons && (
           <div className="lobby-panel__invite-buttons">
             <span>{t("lobby.inviteTitle")}</span>
             {invitable.map((f) => (
@@ -141,7 +152,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
             ))}
           </div>
         )}
-        {isHost && !playing && invitable.length > 0 && !inviteButtons && (
+        {isHost && !playing && invitable.length > 0 && !asButtons && (
           <select
             className="lobby-panel__invite-select gamepad-nav-item"
             aria-label={t("lobby.inviteFriend")}
@@ -154,7 +165,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
         )}
         {!me?.is_ready && !playing && (
           myRomName ? (
-            <button className="btn btn--success btn--sm gamepad-nav-item" onClick={onReady}>{t("lobby.ready")}</button>
+            <button className={`btn ${mainAction} btn--sm gamepad-nav-item`} onClick={onReady}>{t("lobby.ready")}</button>
           ) : (
             <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={onGetGame}>
               <Download size={12} /> {t("lobby.downloadGame")}
@@ -162,7 +173,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
           )
         )}
         {isHost && !playing && !awaitingHostCode && everyoneReady(members) && (
-          <button className="btn btn--success gamepad-nav-item" disabled={busy !== null} onClick={onLaunch}>
+          <button className={`btn ${mainAction} gamepad-nav-item`} disabled={busy !== null} onClick={onLaunch}>
             <Play size={14} /> {t("lobby.launch")}
           </button>
         )}
@@ -170,11 +181,17 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
           <span className="lobby-panel__hint">{t("lobby.needFriend")}</span>
         )}
         {!isHost && playing && myRomName && (
-          <button className="btn btn--success gamepad-nav-item" disabled={busy !== null} onClick={onJoin}>
+          <button className={`btn ${mainAction} gamepad-nav-item`} disabled={busy !== null} onClick={onJoin}>
             <Play size={14} /> {t("lobby.joinGame")}
           </button>
         )}
       </div>
-    </motion.div>
+    </>
+  );
+
+  return isPage ? (
+    <section className="lobby-panel lobby-panel--page v3-frame" role="region" aria-label={t("lobby.title")}>{content}</section>
+  ) : (
+    <motion.div className="lobby-panel" role="region" aria-label={t("lobby.title")} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>{content}</motion.div>
   );
 }

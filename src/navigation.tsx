@@ -8,7 +8,7 @@ import type { CSSProperties } from "react";
 export type Page =
   | "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs"
   | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats"
-  | "friends" | "challenges" | "wrap" | "marketplace";
+  | "friends" | "challenges" | "wrap" | "marketplace" | "lobby";
 
 export type Section = "home" | "games" | "store" | "social" | "trophy" | "settings";
 
@@ -21,7 +21,7 @@ export const SECTIONS: { id: Section; labelKey: string; pages: Page[] }[] = [
   { id: "home", labelKey: "nav.home", pages: ["discover"] },
   { id: "games", labelKey: "nav.games", pages: ["library", "catalog", "installed"] },
   { id: "store", labelKey: "nav.store", pages: ["store", "marketplace"] },
-  { id: "social", labelKey: "nav.social", pages: ["friends", "challenges", "leaderboard"] },
+  { id: "social", labelKey: "nav.social", pages: ["lobby", "friends", "leaderboard", "challenges"] },
   { id: "trophy", labelKey: "nav.trophies", pages: ["stats", "wrap"] },
   { id: "settings", labelKey: "nav.settings", pages: ["settings", "controller", "backup", "changelogs", "account"] },
 ];
@@ -37,6 +37,7 @@ export const PAGE_LABEL_KEYS: Record<Exclude<Page, "account">, string> = {
   installed: "nav.installed",
   store: "nav.store",
   marketplace: "nav.marketplace",
+  lobby: "nav.lobbies",
   friends: "nav.friends",
   challenges: "nav.challenges",
   leaderboard: "nav.leaderboard",

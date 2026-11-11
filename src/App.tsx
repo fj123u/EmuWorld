@@ -24,6 +24,7 @@ import { spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
+import { LobbyPage } from "./LobbyPage";
 import { acceptLobbyInvite, LobbyInviteGone, supabaseLobbyChat } from "./lobbyApi";
 import { LobbyChat } from "./LobbyChat";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
@@ -5620,6 +5621,7 @@ export default function App() {
       case "leaderboard": loadLeaderboard(); break;
       case "challenges": loadChallenges(); break;
       case "friends": loadFriends(); break;
+      case "lobby": loadLobbyInvites(); break;
       case "backup": invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); break;
       default: break;
     }
@@ -5630,7 +5632,7 @@ export default function App() {
   const topBar = (
     <header className="v3-topbar">
       <div className="v3-topbar__row">
-        <Dock page={page} navigate={navigateTo} t={t} badges={{ social: incomingRequests }} />
+        <Dock page={page} navigate={navigateTo} t={t} badges={{ social: incomingRequests + lobbyInvites.length }} />
         <div className="v3-topbar__user">
           <button className="v3-topbar__bp gamepad-nav-item" onClick={enterBigPicture} title={t("toolbar.bigPicture")} aria-label={t("toolbar.bigPicture")}>
             <Maximize2 size={18} />
@@ -5666,6 +5668,45 @@ export default function App() {
     </header>
   );
 
+  // The lobby panel: floating over the app, or the open lobby of the Lobbies page.
+  const renderLobbyPanel = (variant: "floating" | "page") => currentLobby && (
+    <LobbyPanel
+      variant={variant}
+      lobby={currentLobby}
+      userId={user?.id ?? null}
+      friends={shareFriends}
+      myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
+      busy={lobbyBusy}
+      method={hostAwaitingCode ?? parseNetplayCode(currentLobby.netplay_code)?.method ?? null}
+      hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
+      awaitingHostCode={hostAwaitingCode !== null}
+      onPublishCode={publishHostCode}
+      inviteButtons={bigPictureMode}
+      chat={user && (
+        <LobbyChat
+          lobbyId={currentLobby.id}
+          userId={user.id}
+          names={Object.fromEntries((currentLobby.members || []).map(m => [m.user_id, m.profile?.username || ""]))}
+          api={lobbyChatApi}
+          t={t}
+          onLog={lobbyLog}
+        />
+      )}
+      t={t}
+      onInvite={handleInviteToLobby}
+      onReady={handleReadyLobby}
+      onLaunch={handleLaunchLobby}
+      onJoin={() => { if (currentLobby) joinLobbyGame(currentLobby); }}
+      onLeave={handleLeaveLobby}
+      onGetGame={() => { setBigPictureMode(false); setPage("store"); }}
+    />
+  );
+  const declineLobbyInvite = async (lobbyId: string) => {
+    await supabase.from("lobby_members").delete().eq("lobby_id", lobbyId).eq("user_id", user?.id);
+    lobbyLog("INFO", `invitation au lobby ${lobbyId} refusée`);
+    loadLobbyInvites();
+  };
+
   // Lobby (invitations + panel) and toasts: shown in the app and in Big Picture.
   const lobbyUi = (
     <>
@@ -5680,44 +5721,14 @@ export default function App() {
                 <div><small>{inv.game_name} ({inv.game_console})</small></div>
                 <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
                   <button className="btn btn--success btn--sm" onClick={() => handleJoinLobby(inv.id)}>{t("versus.accept")}</button>
-                  <button className="btn btn--ghost btn--sm" onClick={async () => { await supabase.from("lobby_members").delete().eq("lobby_id", inv.id).eq("user_id", user?.id); loadLobbyInvites(); }}>{t("versus.decline")}</button>
+                  <button className="btn btn--ghost btn--sm" onClick={() => declineLobbyInvite(inv.id)}>{t("versus.decline")}</button>
                 </div>
               </div>
             ))}
           </motion.div>
         )}
 
-        {currentLobby && (
-          <LobbyPanel
-            lobby={currentLobby}
-            userId={user?.id ?? null}
-            friends={shareFriends}
-            myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
-            busy={lobbyBusy}
-            method={hostAwaitingCode ?? parseNetplayCode(currentLobby.netplay_code)?.method ?? null}
-            hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
-            awaitingHostCode={hostAwaitingCode !== null}
-            onPublishCode={publishHostCode}
-            inviteButtons={bigPictureMode}
-            chat={user && (
-              <LobbyChat
-                lobbyId={currentLobby.id}
-                userId={user.id}
-                names={Object.fromEntries((currentLobby.members || []).map(m => [m.user_id, m.profile?.username || ""]))}
-                api={lobbyChatApi}
-                t={t}
-                onLog={lobbyLog}
-              />
-            )}
-            t={t}
-            onInvite={handleInviteToLobby}
-            onReady={handleReadyLobby}
-            onLaunch={handleLaunchLobby}
-            onJoin={() => { if (currentLobby) joinLobbyGame(currentLobby); }}
-            onLeave={handleLeaveLobby}
-            onGetGame={() => { setBigPictureMode(false); setPage("store"); }}
-          />
-        )}
+        {renderLobbyPanel("floating")}
     </>
   );
   const toastsUi = (
@@ -7468,28 +7479,20 @@ export default function App() {
                           };
                           const isMe = entry.user_id === user?.id;
                           return (
-                            <div key={entry.user_id} className="leaderboard-entry" style={{
-                              display: "flex", alignItems: "center", gap: 12, padding: "10px 12px",
-                              borderRadius: 8, background: isMe ? "rgba(99, 102, 241, 0.15)" : "rgba(255,255,255,0.03)",
-                              border: isMe ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid transparent",
-                            }}>
-                              <span style={{ fontSize: "1.2rem", width: 32, textAlign: "center" }}>{medal}</span>
-                              {entry.avatar_url ? (
-                                <img src={entry.avatar_url} alt="" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover" }} />
-                              ) : (
-                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700 }}>
-                                  {entry.username.slice(0, 2).toUpperCase()}
-                                </div>
-                              )}
-                              <div style={{ flex: 1 }}>
-                                <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{entry.username} {isMe && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>(toi)</span>}</div>
-                                <div style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                                  {entry.week_games} jeu{entry.week_games > 1 ? "x" : ""} cette semaine · {entry.total_launches} launches total
+                            <div key={entry.user_id} className={`leaderboard-entry${isMe ? " leaderboard-entry--me" : ""}`}>
+                              <span className="leaderboard-entry__medal">{medal}</span>
+                              <span className="v3-avatar v3-ring leaderboard-entry__avatar">
+                                {entry.avatar_url ? <img src={entry.avatar_url} alt="" /> : entry.username.slice(0, 2).toUpperCase()}
+                              </span>
+                              <div className="leaderboard-entry__text">
+                                <div className="leaderboard-entry__name">{entry.username} {isMe && <span className="leaderboard-entry__muted">{t("leaderboardUi.you")}</span>}</div>
+                                <div className="leaderboard-entry__muted">
+                                  {t("leaderboardUi.weekGames", { count: entry.week_games })} · {t("leaderboardUi.totalLaunches", { count: entry.total_launches })}
                                 </div>
                               </div>
-                              <div style={{ textAlign: "right" }}>
-                                <div style={{ fontWeight: 700, fontSize: "0.9rem", color: "var(--accent)" }}>{fmtTime(entry.week_seconds)}</div>
-                                <div style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>total {fmtTime(entry.total_seconds)}</div>
+                              <div className="leaderboard-entry__time">
+                                <div className="leaderboard-entry__week">{fmtTime(entry.week_seconds)}</div>
+                                <div className="leaderboard-entry__muted">{t("leaderboardUi.total", { time: fmtTime(entry.total_seconds) })}</div>
                               </div>
                             </div>
                           );
@@ -8670,6 +8673,27 @@ export default function App() {
                 );
               })()}
 
+              {page === "lobby" && (
+                <LobbyPage
+                  t={t}
+                  signedIn={!!user}
+                  current={currentLobby ? {
+                    id: currentLobby.id,
+                    game: currentLobby.game_name,
+                    console: currentLobby.game_console,
+                    host: currentLobby.host_id === user?.id ? t("lobby.you") : (currentLobby.members || []).find(m => m.user_id === currentLobby.host_id)?.profile?.username || t("lobby.player"),
+                    players: (currentLobby.members || []).length,
+                  } : null}
+                  invites={lobbyInvites.map(l => ({ id: l.id, game: l.game_name, console: l.game_console, host: l.host_profile?.username || t("lobby.player") }))}
+                  games={roms.filter(r => lobbyEmulatorFor(r.console) !== null).sort((x, y) => x.name.localeCompare(y.name))}
+                  panel={renderLobbyPanel("page")}
+                  onAccept={handleJoinLobby}
+                  onDecline={declineLobbyInvite}
+                  onCreate={handleCreateLobby}
+                  onSignIn={() => setShowLoginModal(true)}
+                />
+              )}
+
               {page === "marketplace" && (
                 <div className="marketplace">
                   <div className="marketplace__header">
@@ -9084,7 +9108,7 @@ export default function App() {
         </div>
       )}
 
-      {lobbyUi}
+      {page !== "lobby" && lobbyUi}
 
       {romContextMenu && (
         <div className="rom-context-overlay" onClick={() => setRomContextMenu(null)}>

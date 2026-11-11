@@ -28,6 +28,7 @@ const en: Translations = {
     games: "Games",
     social: "Social",
     trophies: "Achievements",
+    lobbies: "Lobbies",
   },
 
   // Header / Page titles
@@ -983,6 +984,10 @@ const en: Translations = {
   },
   leaderboardUi: {
     empty: "No player with a public profile found. Turn on your public profile in the account settings.",
+    you: "(you)",
+    weekGames: "{count} game(s) this week",
+    totalLaunches: "{count} launches in total",
+    total: "{time} in total",
   },
   friendsUi: {
     signInPrompt: "Sign in to add friends and see what they play.",
@@ -1248,6 +1253,22 @@ const en: Translations = {
     retro: "Retro",
     sakura: "Sakura",
     sunset: "Sunset",
+  },
+  lobbyPage: {
+    title: "Lobbies",
+    consoleHost: "{console} · host {host}",
+    players: "{count} player(s)",
+    youreIn: "You're in",
+    join: "Join",
+    signIn: "Sign in to create a lobby and play online with your friends.",
+    pickGame: "Pick a game playable online",
+    create: "Create",
+    noOnlineGames: "No game of your library can be played online yet.",
+    none: "No lobby and no invitation. Create a lobby, then invite your friends.",
+    noLobbyTitle: "No open lobby",
+    noLobbyText: "Create a lobby or accept an invitation: it will show here, with its players and its chat.",
+    lobbyOf: "{name}'s lobby",
+    yourLobby: "Your lobby",
   },
 };
 

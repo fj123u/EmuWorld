@@ -16,6 +16,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🏠 Nouvel Accueil : reprends ta dernière partie (ou le jeu du jour), ouvre une console depuis ses tuiles, retrouve tes jeux récents, tes amis en ligne, le défi de la semaine et ton résumé du mois. Les suggestions et le top jeux restent en dessous",
     "🖥️ Le bouton Big Picture est maintenant dans la barre du haut, sur toutes les pages",
     "📚 Bibliothèque v3 : la console ouverte en grand titre avec son nombre de jeux et ton temps de jeu, les filtres en onglets (Tous, Favoris, Non joués, Notés), les jeux dans un cadre, les fabricants et consoles en tuiles à leur couleur, et l'aide des boutons de la manette sous la grille",
+    "👥 Nouvelle page Lobbies (Social) : ton lobby et tes invitations à gauche, le lobby ouvert à droite avec les joueurs en places, le chat et « Je suis prêt » ; crée un lobby en choisissant un de tes jeux jouables en ligne. Amis, Classement et Défis passent au nouveau style",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

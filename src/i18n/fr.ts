@@ -26,6 +26,7 @@ const fr = {
     games: "Jeux",
     social: "Social",
     trophies: "Succès",
+    lobbies: "Lobbies",
   },
 
   // Header / Page titles
@@ -981,6 +982,10 @@ const fr = {
   },
   leaderboardUi: {
     empty: "Aucun joueur avec un profil public trouvé. Active ton profil public dans les paramètres du compte.",
+    you: "(toi)",
+    weekGames: "{count} jeu(x) cette semaine",
+    totalLaunches: "{count} lancements au total",
+    total: "total {time}",
   },
   friendsUi: {
     signInPrompt: "Connecte-toi pour ajouter des amis et voir leur activité.",
@@ -1246,6 +1251,22 @@ const fr = {
     retro: "Rétro",
     sakura: "Sakura",
     sunset: "Sunset",
+  },
+  lobbyPage: {
+    title: "Lobbies",
+    consoleHost: "{console} · hôte {host}",
+    players: "{count} joueur(s)",
+    youreIn: "Tu y es",
+    join: "Rejoindre",
+    signIn: "Connecte-toi pour créer un lobby et jouer en ligne avec tes amis.",
+    pickGame: "Choisis un jeu jouable en ligne",
+    create: "Créer",
+    noOnlineGames: "Aucun jeu de ta bibliothèque ne se joue en ligne pour l'instant.",
+    none: "Pas de lobby en cours ni d'invitation. Crée un lobby puis invite tes amis.",
+    noLobbyTitle: "Aucun lobby ouvert",
+    noLobbyText: "Crée un lobby ou accepte une invitation : il s'affichera ici, avec ses joueurs et son chat.",
+    lobbyOf: "Lobby de {name}",
+    yourLobby: "Ton lobby",
   },
 };
 

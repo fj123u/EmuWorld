@@ -9,9 +9,9 @@ describe("v3 navigation", () => {
   it("puts every page in exactly one section", () => {
     const all = SECTIONS.flatMap((s) => s.pages);
     expect(new Set(all).size).toBe(all.length);
-    expect(all).toHaveLength(16);
-    // The 15 pages of the old sidebar all have a tab (account opens as a dialog).
-    expect(TAB_PAGES).toHaveLength(15);
+    expect(all).toHaveLength(17);
+    // The 15 pages of the old sidebar and the Lobbies page have a tab (account opens as a dialog).
+    expect(TAB_PAGES).toHaveLength(16);
     for (const p of TAB_PAGES) expect(fr.nav[PAGE_LABEL_KEYS[p as Exclude<Page, "account">].split(".")[1] as keyof typeof fr.nav], p).toBeTruthy();
     expect(sectionOf("installed")).toBe("games");
     expect(sectionOf("account")).toBe("settings");
@@ -27,7 +27,7 @@ describe("v3 navigation", () => {
     expect(items.every((b) => b.classList.contains("gamepad-nav-item"))).toBe(true);
     expect(screen.getByRole("button", { name: "Social" }).textContent).toContain("2");
     fireEvent.click(screen.getByRole("button", { name: "Social" }));
-    expect(navigate).toHaveBeenCalledWith("friends");
+    expect(navigate).toHaveBeenCalledWith("lobby");
   });
 
   it("shows the tabs of the open section with their counts, none for Home", () => {

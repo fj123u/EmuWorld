@@ -136,3 +136,27 @@ describe("lobby panel", () => {
     expect(onInvite).toHaveBeenCalledWith("max");
   });
 });
+
+describe("lobby panel on the Lobbies page", () => {
+  it("names whose lobby it is, shows players as places and gives the main action the gradient", () => {
+    renderPanel({ variant: "page", userId: "friend", friends: [] });
+    expect(screen.getByText("Lobby de fj123u")).toBeTruthy();
+    expect(document.querySelectorAll(".lobby-panel__avatar")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Je suis prêt !" }).className).toContain("btn--go");
+    expect(document.querySelector(".lobby-panel--page")?.classList.contains("v3-frame")).toBe(true);
+  });
+
+  it("says it is your lobby and invites friends with buttons", () => {
+    const { onInvite } = renderPanel({ variant: "page", friends: [{ id: "max", username: "Max" }] });
+    expect(screen.getByText("Ton lobby")).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "+ Max" }));
+    expect(onInvite).toHaveBeenCalledWith("max");
+  });
+
+  it("stays the small floating panel elsewhere", () => {
+    renderPanel();
+    expect(document.querySelector(".lobby-panel--page")).toBeNull();
+    expect(document.querySelectorAll(".lobby-panel__avatar")).toHaveLength(0);
+  });
+});

@@ -122,8 +122,8 @@ describe("App", () => {
       await open(section);
       for (const tab of [...container.querySelectorAll<HTMLElement>(".v3-tabs__item[data-nav-page]")]) await open(tab);
     }
-    // Same 15 pages as the old sidebar: the test must not visit fewer.
-    expect([...visited].sort()).toEqual(["backup", "catalog", "challenges", "changelogs", "controller", "discover", "friends", "installed", "leaderboard", "library", "marketplace", "settings", "stats", "store", "wrap"]);
+    // The 15 pages of the old sidebar, plus the Lobbies page: the test must not visit fewer.
+    expect([...visited].sort()).toEqual(["backup", "catalog", "challenges", "changelogs", "controller", "discover", "friends", "installed", "leaderboard", "library", "lobby", "marketplace", "settings", "stats", "store", "wrap"]);
     // Commands answered with `null` because tauriMock.ts has no handler.
     // Not a failure, but a hint the mock should learn the real return shape.
     if (backend.unknown.size > 0) {
