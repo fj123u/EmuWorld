@@ -691,6 +691,15 @@ const en: Translations = {
     noGames: "No games in your library",
     noGamesDesc: "Add ROMs from the Store or scan a folder to get started!",
     noScreenshots: "No screenshots yet. Press Ctrl+F12 while playing to capture.",
+    filters: "Filters",
+    sortBy: "Sort by",
+    sortName: "A-Z",
+    playedTotal: "{time} played",
+    noMatchOn: "No ROMs match the current search on {console}.",
+    hintOptions: "Options",
+    hintFavorite: "Favorite",
+    hintBack: "Back",
+    hintPages: "Pages",
   },
 
   // Wrap

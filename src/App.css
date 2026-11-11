@@ -7112,3 +7112,34 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 .v3-topbar__bp:hover { background: var(--soft); }
 /* Home: the frame is the title (mockup), no page header above it */
 .main-content[data-page="discover"] .main-content__header { display: none; }
+
+/* ─── v3 library (mockup "Bibliothèque") ─── */
+.library-pills { display: inline-flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.library-pills .v3-pill { background: var(--panel); box-shadow: var(--shadow-soft); }
+.library-pills__count { box-shadow: 0 0 0 3px var(--k) !important; }
+.main-content[data-page="library"] .main-content__title { font-size: 40px; line-height: 1.05; }
+
+.library-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 4px 0 20px; }
+.library-toolbar .v3-tabs__item { background: transparent; }
+.library-toolbar .v3-tabs__item.active { background: var(--panel); box-shadow: 0 0 0 3px var(--k), var(--shadow-soft); }
+.library-toolbar__right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+.library-frame { padding: 26px; }
+.library-frame .game-grid { margin: 0; }
+
+.rgs-console-grid:has(.library-tile) { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 18px; }
+.library-tile { min-height: 132px; gap: 10px; }
+.library-tile__logo { height: 40px; display: flex; align-items: center; }
+.library-tile__logo img, .library-tile__logo svg { max-height: 40px; width: auto; }
+.library-tile__name { overflow-wrap: anywhere; }
+.library-tile__count { background: var(--panel); }
+.library-tile:hover { box-shadow: 0 0 0 3px var(--k), var(--shadow-lg); }
+
+.library-hints {
+  display: inline-flex; flex-wrap: wrap; gap: 20px; margin-top: 18px;
+  padding: 10px 20px; border-radius: var(--radius-pill);
+  background: var(--panel); box-shadow: var(--shadow-soft);
+  font-weight: 800; color: var(--ink);
+}
+.library-hints > span { display: inline-flex; align-items: center; gap: 8px; }
+.v3-key--wide { width: auto; padding: 0 6px; border-radius: var(--radius-pill); }

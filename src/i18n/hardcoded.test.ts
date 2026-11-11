@@ -11,7 +11,7 @@ const SRC = join(__dirname, "..");
 /** Brand names, keys and symbols: identical in French and English. */
 const ALLOWED = new Set([
   "EmuWorld", "🎮 EmuWorld", "RetroArch", "RetroAchievements", "Wikipedia", "Vimm's Lair",
-  "Ctrl+F12", "ESC", "HC", "iiDB", "Discord", "Google",
+  "Ctrl+F12", "ESC", "HC", "LB RB", "iiDB", "Discord", "Google",
 ]);
 
 const LETTERS = /[A-Za-zÀ-ÿ]{2,}/;

@@ -17,7 +17,7 @@ import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KE
 import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
 import { Dock, SectionTabs, type Page } from "./navigation";
 import { HomePage } from "./HomePage";
-import { consoleTiles, friendsOnline, monthSummary, recentGames } from "./home";
+import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { spatialNext, type Direction } from "./gamepadSpatial";
@@ -5545,6 +5545,71 @@ export default function App() {
     setConsoleFilter(name);
   };
 
+  // ─── v3 library: filters as pill tabs, the rest of the tools on the right ───
+  const libraryMainFilters = ["all", "favorites", "unplayed", "rated"] as const;
+  const libraryFilterKeys: Record<(typeof libraryMainFilters)[number], string> = { all: "library.filterAll", favorites: "library.filterFavorites", unplayed: "library.filterUnplayed", rated: "library.filterRated" };
+  const libraryToolbar = (
+    <div className="library-toolbar">
+      <div className="v3-tabs" role="tablist" aria-label={t("library.filters")}>
+        {libraryMainFilters.map(f => (
+          <button key={f} role="tab" aria-selected={filterMode === f} className={`v3-tabs__item gamepad-nav-item${filterMode === f ? " active" : ""}`} onClick={() => setFilterMode(f)}>
+            {t(libraryFilterKeys[f])}
+          </button>
+        ))}
+      </div>
+      <select
+        className="library-sort-select gamepad-nav-item"
+        aria-label={t("library.smartPlaylists")}
+        value={isSmartPlaylist(filterMode) ? filterMode : ""}
+        onChange={(e) => setFilterMode((e.target.value || "all") as typeof filterMode)}
+      >
+        <option value="">{t("library.smartPlaylists")}</option>
+        {SMART_PLAYLISTS.map(p => (
+          <option key={p} value={p}>
+            {t(`library.smart.${p}`)} ({roms.filter(r => matchesSmartPlaylist(p, playtime.games[`${r.console}::${r.name}`])).length})
+          </option>
+        ))}
+      </select>
+      <select className="library-sort-select gamepad-nav-item" aria-label={t("toolbar.collections")} value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
+        <option value="">{t("toolbar.collections")}</option>
+        {playtime.collections.map(c => (
+          <option key={c.name} value={c.name}>{c.name} ({c.games.length})</option>
+        ))}
+      </select>
+      <div className="library-toolbar__right">
+        <select className="library-sort-select gamepad-nav-item" aria-label={t("library.sortBy")} value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
+          <option value="name">{t("library.sortName")}</option>
+          <option value="playtime">{t("library.sortPlaytime")}</option>
+          <option value="rating">{t("library.sortRating")}</option>
+          <option value="last_played">{t("library.sortLastPlayed")}</option>
+          <option value="launches">{t("library.sortLaunches")}</option>
+        </select>
+        <button className={`btn btn--ghost btn--sm gamepad-nav-item ${viewMode === "grid" ? "btn--active" : ""}`} onClick={() => setViewMode("grid")} title={t("toolbar.gridView")} aria-label={t("toolbar.gridView")}>
+          <LayoutGrid size={14} />
+        </button>
+        <button className={`btn btn--ghost btn--sm gamepad-nav-item ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title={t("toolbar.listView")} aria-label={t("toolbar.listView")}>
+          <List size={14} />
+        </button>
+        <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => setShowCollectionModal(true)} title={t("toolbar.manageCollections")} aria-label={t("toolbar.manageCollections")}>
+          <Package size={14} />
+        </button>
+        <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
+          const all = await invoke<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>("get_all_screenshots");
+          setAllScreenshots(all);
+          setShowAllScreenshots(true);
+        }} title={t("toolbar.screenshots")} aria-label={t("toolbar.screenshots")}>
+          <Camera size={14} />
+        </button>
+        <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => loadData()} title={t("toolbar.refresh")} aria-label={t("toolbar.refresh")}>
+          <RefreshCw size={14} />
+        </button>
+        <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
+          <Download size={14} /> {t("library.importRom")}
+        </button>
+      </div>
+    </div>
+  );
+
   // ─── v3 navigation: section bar + tabs (src/navigation.tsx) ───
   // Same side effects as the old sidebar buttons (reset filters, load data).
   const navigateTo = (p: Page) => {
@@ -5803,7 +5868,7 @@ export default function App() {
                   <h1 className="main-content__title">
                     {page === "discover" && t("nav.discover")}
                     {page === "catalog" && t("header.emulators")}
-                    {page === "library" && t("header.library")}
+                    {page === "library" && (consoleFilter ?? categoryFilter ?? t("header.library"))}
                     {page === "installed" && t("header.installedEmulators")}
                     {page === "store" && (storeMode === "vimm" ? "Vimm's Lair" : "RetroGameSets")}
                     {page === "settings" && t("header.settings")}
@@ -5837,7 +5902,12 @@ export default function App() {
                     {page === "store" && storeMode === "rgs" && (selectedRgsConsoleName ? t(rgsLiens.length === 1 ? "store.subPacksOne" : "store.subPacksMany", { count: rgsLiens.length, console: selectedRgsConsoleName }) : selectedConstructeurName ? t(rgsConsoles.length === 1 ? "library.consoleCountOne" : "library.consoleCountMany", { count: rgsConsoles.length }) : t("store.subBrowse"))}
                     {page === "library" && (
                       consoleFilter
-                        ? t(filteredGames.length === 1 ? "library.gamesOnOne" : "library.gamesOnMany", { count: filteredGames.length, console: consoleFilter })
+                        ? <span className="library-pills">
+                            <span className="v3-pill library-pills__count" style={consoleHue(consoleFilter) !== null ? ({ "--console-hue": consoleHue(consoleFilter) } as React.CSSProperties) : undefined}>
+                              {t(filteredGames.length === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: filteredGames.length })}
+                            </span>
+                            <span className="v3-pill">{t("library.playedTotal", { time: formatHomePlaytime(roms.filter(r => r.console === consoleFilter).reduce((sum, r) => sum + (playtime.games[`${r.console}::${r.name}`]?.seconds ?? 0), 0)) })}</span>
+                          </span>
                         : categoryFilter
                           ? t("library.pickConsoleIn", { manufacturer: categoryFilter })
                           : t(roms.length === 1 ? "library.gamesPickOne" : "library.gamesPickMany", { count: roms.length })
@@ -5859,55 +5929,6 @@ export default function App() {
                       <CheckCircle size={14} /> {t("store.finalizeDownload", { console: pendingImportConsole })}
                     </button>
                   )}
-                  {page === "library" && (
-                    <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                      <button className={`btn btn--ghost btn--sm ${viewMode === "grid" ? "btn--active" : ""}`} onClick={() => setViewMode("grid")} title={t("toolbar.gridView")}>
-                        <LayoutGrid size={14} />
-                      </button>
-                      <button className={`btn btn--ghost btn--sm ${viewMode === "list" ? "btn--active" : ""}`} onClick={() => setViewMode("list")} title={t("toolbar.listView")}>
-                        <List size={14} />
-                      </button>
-                      <select className="library-sort-select gamepad-nav-item" value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)}>
-                        <option value="name">A-Z</option>
-                        <option value="playtime">{t("library.sortPlaytime")}</option>
-                        <option value="rating">{t("library.sortRating")}</option>
-                        <option value="last_played">{t("library.sortLastPlayed")}</option>
-                        <option value="launches">{t("library.sortLaunches")}</option>
-                      </select>
-                      <select className="library-sort-select gamepad-nav-item" value={filterMode} onChange={(e) => setFilterMode(e.target.value as typeof filterMode)}>
-                        <option value="all">{t("library.filterAll")}</option>
-                        <option value="favorites">{t("library.filterFavorites")}</option>
-                        <option value="unplayed">{t("library.filterUnplayed")}</option>
-                        <option value="rated">{t("library.filterRated")}</option>
-                        <optgroup label={t("library.smartPlaylists")}>
-                          {SMART_PLAYLISTS.map(p => (
-                            <option key={p} value={p}>
-                              {t(`library.smart.${p}`)} ({roms.filter(r => matchesSmartPlaylist(p, playtime.games[`${r.console}::${r.name}`])).length})
-                            </option>
-                          ))}
-                        </optgroup>
-                      </select>
-                      <select className="library-sort-select gamepad-nav-item" value={collectionFilter ?? ""} onChange={(e) => setCollectionFilter(e.target.value || null)}>
-                        <option value="">{t("toolbar.collections")}</option>
-                        {playtime.collections.map(c => (
-                          <option key={c.name} value={c.name}>{c.name} ({c.games.length})</option>
-                        ))}
-                      </select>
-                      <button className="btn btn--ghost btn--sm" onClick={() => setShowCollectionModal(true)} title={t("toolbar.manageCollections")}>
-                        <Package size={14} />
-                      </button>
-                      <button className="btn btn--ghost btn--sm" onClick={async () => {
-                        const all = await invoke<{ game_name: string; console: string; screenshots: { path: string; data_url: string }[] }[]>("get_all_screenshots");
-                        setAllScreenshots(all);
-                        setShowAllScreenshots(true);
-                      }} title={t("toolbar.screenshots")}>
-                        <Camera size={14} />
-                      </button>
-                      <button className="btn btn--secondary gamepad-nav-item" onClick={() => handleImportRom("Mixed")}>
-                        <Download size={14} /> {t("library.importRom")}
-                      </button>
-                    </div>
-                  )}
                   {(page === "catalog" || page === "library" || page === "store") && (
                     <>
                       <div className="search-bar">
@@ -5927,11 +5948,6 @@ export default function App() {
                         />
                       </div>
                     </>
-                  )}
-                  {page === "library" && (
-                    <button className="btn btn--ghost" onClick={() => loadData()}>
-                      <RefreshCw size={14} /> {t("toolbar.refresh")}
-                    </button>
                   )}
                 </div>
               </div>
@@ -6752,6 +6768,8 @@ export default function App() {
                       )}
                     </div>
 
+                    {roms.length > 0 && libraryToolbar}
+
                     {roms.length === 0 ? (
                       <div className="empty-state">
                         <div className="empty-state__icon">📂</div>
@@ -6762,6 +6780,7 @@ export default function App() {
                       /* ---- Search/sort/filter bypasses the drill-down ---- */
                       <>
                         {viewMode === "grid" ? (
+                          <div className="v3-frame library-frame">
                           <div className="game-grid">
                             {filteredGames.map(rom => (
                               <GameCard
@@ -6778,6 +6797,7 @@ export default function App() {
                                 onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             ))}
+                          </div>
                           </div>
                         ) : (
                           <div className="game-list">
@@ -6815,25 +6835,13 @@ export default function App() {
                       /* ---- Manufacturer grid ---- */
                       <div className="rgs-console-grid">
                         {manufacturersWithRoms.map(({ category, consoles, romCount }) => (
-                          <motion.div
-                            key={category}
-                            className="rgs-console-card"
-                            whileHover={{ scale: 1.03, y: -4 }}
-                            whileTap={{ scale: 0.97 }}
-                            onClick={() => setCategoryFilter(category)}
-                          >
-                            <div className="rgs-console-card__img">
-                              <div className="vimm-console-card__fallback">
-                                <BrandLogo brand={category} size={56} />
-                              </div>
-                            </div>
-                            <div className="rgs-console-card__info">
-                              <div className="rgs-console-card__name">{category}</div>
-                              <div className="rgs-console-card__meta">
-                                {t(consoles.length === 1 ? "library.consoleCountOne" : "library.consoleCountMany", { count: consoles.length })} • {t(romCount === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: romCount })}
-                              </div>
-                            </div>
-                          </motion.div>
+                          <button key={category} className="v3-tile v3-ring library-tile gamepad-nav-item" onClick={() => setCategoryFilter(category)}>
+                            <span className="library-tile__logo"><BrandLogo brand={category} size={40} /></span>
+                            <span className="v3-tile__name library-tile__name">{category}</span>
+                            <span className="v3-pill library-tile__count">
+                              {t(consoles.length === 1 ? "library.consoleCountOne" : "library.consoleCountMany", { count: consoles.length })} · {t(romCount === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: romCount })}
+                            </span>
+                          </button>
                         ))}
                       </div>
                     ) : !consoleFilter ? (
@@ -6844,26 +6852,18 @@ export default function App() {
                           .sort()
                           .map((con) => {
                             const count = roms.filter((r) => r.console === con).length;
+                            const hue = consoleHue(con);
                             return (
-                              <motion.div
+                              <button
                                 key={con}
-                                className="rgs-console-card"
-                                whileHover={{ scale: 1.03, y: -4 }}
-                                whileTap={{ scale: 0.97 }}
+                                className="v3-tile v3-ring library-tile gamepad-nav-item"
+                                style={hue !== null ? ({ "--console-hue": hue } as React.CSSProperties) : undefined}
                                 onClick={() => setConsoleFilter(con)}
                               >
-                                <div className="rgs-console-card__img">
-                                  <div className="vimm-console-card__fallback">
-                                    <ConsoleLogo name={con} />
-                                  </div>
-                                </div>
-                                <div className="rgs-console-card__info">
-                                  <div className="rgs-console-card__name">{con}</div>
-                                  <div className="rgs-console-card__meta">
-                                    {t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}
-                                  </div>
-                                </div>
-                              </motion.div>
+                                <span className="library-tile__logo"><ConsoleLogo name={con} size={40} /></span>
+                                <span className="v3-tile__name library-tile__name">{con}</span>
+                                <span className="v3-pill library-tile__count">{t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}</span>
+                              </button>
                             );
                           })}
                       </div>
@@ -6871,6 +6871,7 @@ export default function App() {
                       /* ---- Game grid/list for the selected console ---- */
                       <>
                         {viewMode === "grid" ? (
+                          <div className="v3-frame library-frame">
                           <div className="game-grid" data-tour="play">
                             {filteredGames.map(rom => (
                               <GameCard
@@ -6887,6 +6888,7 @@ export default function App() {
                                 onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
                               />
                             ))}
+                          </div>
                           </div>
                         ) : (
                           <div className="game-list">
@@ -6917,10 +6919,19 @@ export default function App() {
                           <div className="empty-state">
                             <div className="empty-state__icon">🔍</div>
                             <div className="empty-state__title">{t("storeUi.noMatches")}</div>
-                            <p className="empty-state__text">No ROMs match the current search on {consoleFilter}.</p>
+                            <p className="empty-state__text">{t("library.noMatchOn", { console: consoleFilter })}</p>
                           </div>
                         )}
                       </>
+                    )}
+                    {/* Gamepad buttons under any game grid (a console, or a search / filter / sort) */}
+                    {gamepadActive && viewMode === "grid" && filteredGames.length > 0 && (consoleFilter || search.trim().length >= 2 || sortBy !== "name" || filterMode !== "all" || collectionFilter) && (
+                      <div className="library-hints" aria-hidden="true">
+                        <span><span className="v3-key">A</span>{t("library.hintOptions")}</span>
+                        <span><span className="v3-key">Y</span>{t("library.hintFavorite")}</span>
+                        <span><span className="v3-key">B</span>{t("library.hintBack")}</span>
+                        <span><span className="v3-key v3-key--wide">LB RB</span>{t("library.hintPages")}</span>
+                      </div>
                     )}
                   </div>
                 );

@@ -237,7 +237,7 @@ describe("smart playlists", () => {
   async function openLibraryFilter() {
     const r = await renderApp();
     navTo(r.container, "Roms");
-    const filter = (await screen.findByDisplayValue("Tous")) as HTMLSelectElement;
+    const filter = (await screen.findByRole("combobox", { name: "Playlists intelligentes" })) as HTMLSelectElement;
     return { ...r, filter };
   }
 
@@ -342,8 +342,8 @@ describe("console colours", () => {
   async function openNesInLibrary() {
     const r = await renderApp();
     navTo(r.container, "Roms");
-    fireEvent.click(await screen.findByText("Nintendo", { selector: ".rgs-console-card__name" }));
-    fireEvent.click(await screen.findByText("NES", { selector: ".rgs-console-card__name" }));
+    fireEvent.click(await screen.findByText("Nintendo", { selector: ".library-tile__name" }));
+    fireEvent.click(await screen.findByText("NES", { selector: ".library-tile__name" }));
     return r;
   }
 
@@ -376,7 +376,7 @@ describe("save states manager", () => {
   async function openSaveStates(overrides: Record<string, Handler> = {}) {
     const r = await renderApp({ list_save_states: () => states, ...overrides });
     navTo(r.container, "Roms");
-    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
     fireEvent.click(await screen.findByRole("button", { name: /Save states/ }));
@@ -430,11 +430,51 @@ describe("save states manager", () => {
   it("explains how to make one when the game has none", async () => {
     const r = await renderApp({ list_save_states: () => [] });
     navTo(r.container, "Roms");
-    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
     const card = r.container.querySelector(".game-grid .game-card")!;
     fireEvent.contextMenu(card);
     fireEvent.click(await screen.findByRole("button", { name: /Save states/ }));
     expect(await screen.findByText(/F2 sauvegarde dans le slot actuel/)).toBeTruthy();
+  });
+});
+
+describe("library (v3)", () => {
+  it("filters with pill tabs: Favoris keeps only the favorite games", async () => {
+    const r = await renderApp();
+    navTo(r.container, "Roms");
+    const favorites = await screen.findByRole("tab", { name: "Favoris" });
+    await act(async () => {
+      fireEvent.click(favorites);
+    });
+    expect(favorites.getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(r.container.querySelector(".library-frame .game-grid")).not.toBeNull());
+    // samplePlaytime: only Super Mario Bros. 3 is a favorite.
+    expect([...r.container.querySelectorAll(".game-grid .game-card__name")].map((n) => n.textContent)).toEqual(["Super Mario Bros. 3 (Europe)"]);
+  });
+
+  it("titles an open console with its game count and play time, tiles in the console color", async () => {
+    const r = await renderApp();
+    navTo(r.container, "Roms");
+    const nintendo = await screen.findByText("Nintendo", { selector: ".library-tile__name" });
+    fireEvent.click(nintendo);
+    const nesTile = (await screen.findByText("NES", { selector: ".library-tile__name" })).closest("button")!;
+    expect(nesTile.getAttribute("style")).toContain("--console-hue");
+    fireEvent.click(nesTile);
+    await waitFor(() => expect(r.container.querySelector(".main-content__title")?.textContent).toBe("NES"));
+    const pills = r.container.querySelector(".library-pills")!.textContent;
+    expect(pills).toContain("1 jeu");
+    expect(pills).toContain("10 h 00 de jeu");
+  });
+
+  it("shows the gamepad buttons under the grid once a pad is connected", async () => {
+    const r = await renderApp();
+    navTo(r.container, "Roms");
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
+    expect(r.container.querySelector(".library-hints")).toBeNull();
+    await act(async () => {
+      await emit("gamepad-state", { connected: true, name: "Pad", buttons: Array(16).fill(false), axes: [0, 0, 0, 0] });
+    });
+    await waitFor(() => expect(r.container.querySelector(".library-hints")?.textContent).toContain("Favori"));
   });
 });
 
@@ -465,7 +505,7 @@ describe("game menu", () => {
     localStorage.setItem("emuworld-locale", "en");
     const r = await renderApp();
     navTo(r.container, "Roms");
-    fireEvent.change(await screen.findByDisplayValue("All"), { target: { value: "long" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Smart playlists" }), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
     const menu = (await screen.findByRole("button", { name: /Similar games/ })).closest(".rom-context-menu")!;
@@ -487,7 +527,7 @@ describe("cover picker in the library", () => {
       ] }],
     });
     navTo(r.container, "Roms");
-    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
     fireEvent.contextMenu(card);
@@ -592,7 +632,7 @@ describe("gamepad in the library", () => {
   it("Y toggles the favorite of the focused game", async () => {
     const r = await renderApp();
     navTo(r.container, "Roms");
-    fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
     card.classList.add("gamepad-focused");

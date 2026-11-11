@@ -689,6 +689,15 @@ const fr = {
     noGames: "Aucun jeu dans la bibliothèque",
     noGamesDesc: "Ajoute des ROMs depuis le Store ou scanne un dossier pour commencer !",
     noScreenshots: "Pas de screenshots. Appuie sur Ctrl+F12 en jeu pour capturer.",
+    filters: "Filtres",
+    sortBy: "Trier par",
+    sortName: "A-Z",
+    playedTotal: "{time} de jeu",
+    noMatchOn: "Aucune ROM ne correspond à la recherche sur {console}.",
+    hintOptions: "Options",
+    hintFavorite: "Favori",
+    hintBack: "Retour",
+    hintPages: "Pages",
   },
 
   // Wrap
