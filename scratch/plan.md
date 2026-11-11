@@ -10,11 +10,12 @@ Style : fond pointillé clair (variante sombre), icônes et jaquettes à double 
 
 Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des variables, pièges), `tokens.css`, `components.css`, `SectionIcon.tsx`, `preview.html`.
 
-- [ ] **Jetons de couleur** — nouveau thème clair + sombre dans `App.css`, renommer les variables `--neon-*`, corriger les textes clairs codés en dur
+- [ ] **Jetons de couleur** — thème clair par défaut + sombre dans `App.css`, les 5 thèmes actuels deviennent des variantes du sombre proposées par le marketplace, renommer les variables `--neon-*`, corriger les textes clairs codés en dur
 - [ ] **Composants de base** — boutons, cartes, pastilles, champs, cartes de jeu (CSS seul)
 - [ ] **Navigation** — barre d'icônes en pilule : Accueil, Jeux, Store, Social, Succès, Réglages à la place des 15 entrées de la barre latérale (tutoriel `data-tour`, navigation manette et tests à adapter)
 - [ ] **Page Accueil** — reprendre la partie, consoles, joués récemment, amis en ligne, défi de la semaine
 - [ ] **Pages une par une** — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
+- [ ] **Mode Big Picture** — refait dans le même style (tailles télé, focus manette)
 - [ ] **Icône de l'app** — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
 
 ### 🕹️ Multijoueur

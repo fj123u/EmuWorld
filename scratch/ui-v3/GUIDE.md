@@ -11,7 +11,7 @@ Rien de ce dossier n'est branché dans l'app. C'est le point de départ à repre
 | `components.css` | Les briques de base : boutons, cartes, pastilles, champs, jaquettes, tuiles, avatars, barre de navigation, onglets. Classes préfixées `v3-`. | 2 |
 | `SectionIcon.tsx` | Les 6 icônes à double contour, la barre de navigation `Dock`, et la table qui range les 16 pages dans 6 sections. | 3 |
 | `preview.html` | Page de démonstration du kit, avec un bouton clair / sombre. | — |
-| `../icon-v3.svg` | L'icône de l'app retenue. | 6 |
+| `../icon-v3.svg` | L'icône de l'app retenue. | 7 |
 
 Pour voir l'aperçu : lancer `npm run dev`, puis ouvrir http://localhost:1420/scratch/ui-v3/preview.html
 (ouvert directement comme fichier, il ne charge pas les CSS).
@@ -86,6 +86,7 @@ Chaque étape est un commit (ou une PR) qui laisse l'app utilisable et `npm run 
 
 - Remplacer le bloc `:root` de `App.css` (lignes 9 à 75) par le contenu de `tokens.css`. Remplacer aussi le fond pointillé `body::before` (ligne 219) : il est dans `tokens.css`.
 - Thème sombre : `[data-theme="dark"]`. Le thème par défaut devient le clair.
+- Anciens thèmes : réécrire `[data-theme="midnight"]`, `oled`, `retro`, `sakura`, `sunset` pour qu'ils partent des valeurs du sombre (sélecteur commun avec `[data-theme="dark"]`, puis leurs fonds et leur accent en nouveaux jetons). Les retirer de la liste des réglages et les exposer comme thèmes du marketplace.
 - Chasser les couleurs en dur, dans cet ordre : `color: white` / `#fff` (54 au total), puis `rgba(255, 255, 255, …)` utilisés comme bordure ou fond (→ `--line`, `--soft`), puis le reste au fil des pages. Un texte blanc n'est légitime que sur une image ou sur `--danger`.
 - Fait quand : chaque page est lisible en clair **et** en sombre, sans rien redessiner d'autre.
 - Test : un test Vitest qui lit `App.css` et échoue si une variable `var(--x)` utilisée n'est définie nulle part (il aurait attrapé les 5 variables fantômes).
@@ -116,16 +117,25 @@ Chaque étape est un commit (ou une PR) qui laisse l'app utilisable et `npm run 
 
 Ordre conseillé : Bibliothèque, Social et lobby, Store, Stats, Réglages. Une page par commit, en supprimant au passage les couleurs en dur et les anciens noms de variables de la page.
 
-### 6. Icône de l'app
+### 6. Mode Big Picture
+
+- Refaire `.big-picture` avec les jetons et les composants du kit : mêmes jaquettes à double contour, même cadre en dégradé pour le jeu sélectionné, même barre à 6 sections en plus gros.
+- Tailles adaptées à la télé : texte ≥ 20 px, cibles ≥ 64 px, anneau de focus manette bien visible (`outline` de 4 px).
+- Garder les comportements existants (Y crée un lobby, Start ouvre le panneau) et leurs tests.
+
+### 7. Icône de l'app
 
 `npx tauri icon scratch/icon-v3.svg`, puis logo du web panel et asset Discord `emuworld_logo`.
 
-## Points à trancher avant de commencer
+## Décisions (prises le 11/11/2026)
 
-1. **Les 5 thèmes actuels.** Ce sont tous des thèmes sombres bâtis sur l'ancienne palette. Le plus simple : les garder comme variantes du thème sombre (ils ne redéfinissent que fonds et accent), et ajouter « Clair » et « Sombre » en tête de liste. Les supprimer casserait les thèmes du marketplace, dont `base_theme` est enregistré dans Supabase.
-2. **Thème par défaut.** Clair pour tout le monde, ou clair seulement pour les nouvelles installations en laissant leur thème aux utilisateurs actuels ?
-3. **Mode Big Picture.** Il a son propre CSS et sa propre navigation manette. Le refaire dans le même style fait partie de la v3, ou vient après ?
-4. **Couleur d'accent perso.** `tokens.css` la garde (teinte adoucie). À vérifier en clair : certaines teintes (jaune) deviennent peu lisibles comme couleur de lien.
+1. **Le clair est le thème par défaut.** `default` désigne le thème clair ; « Sombre » (`data-theme="dark"`) est le second thème de base. Un utilisateur resté sur `default` passe donc au clair à la mise à jour.
+2. **Les 5 thèmes actuels deviennent des variantes du thème sombre, proposées par le marketplace.** `midnight`, `oled`, `retro`, `sakura` et `sunset` sortent de la liste des réglages (ligne 7231) : on n'y garde que Clair et Sombre. Leurs blocs CSS restent, appliqués par-dessus le sombre, pour que les `base_theme` déjà enregistrés dans Supabase continuent de marcher. Un utilisateur qui en avait choisi un le garde.
+3. **Le mode Big Picture est refait dans la v3**, dans le même style. Il a son propre CSS et sa propre navigation manette (ligne 3229) : c'est une étape à part entière, après les pages.
+
+## Reste à trancher
+
+- **Couleur d'accent perso.** `tokens.css` la garde (teinte adoucie). À vérifier en clair : certaines teintes (jaune) deviennent peu lisibles comme couleur de lien.
 
 ## Pièges
 
