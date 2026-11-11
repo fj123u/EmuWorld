@@ -14,7 +14,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 - [x] **Composants de base** *(fait le 11/11, 44eb002)* — boutons, cartes, pastilles, champs, cartes de jeu (CSS seul)
 - [x] **Navigation** *(fait le 11/11)* — barre d'icônes en pilule : Accueil, Jeux, Store, Social, Succès, Réglages à la place des 15 entrées de la barre latérale (tutoriel `data-tour`, navigation manette et tests à adapter)
 - [x] **Page Accueil** *(fait le 11/11 : src/HomePage.tsx + src/home.ts)* — reprendre la partie, consoles, joués récemment, amis en ligne, défi de la semaine
-- [ ] **Pages une par une** — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
+- [x] **Pages une par une** *(fait le 11/11 : Bibliothèque, Social + page Lobbies, Store, Stats, Réglages)* — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
 - [ ] **Mode Big Picture** — refait dans le même style (tailles télé, focus manette)
 - [ ] **Icône de l'app** — console claire à boutons colorés (choisie le 11/11/2026), source dans `scratch/icon-v3.svg` ; régénérer `src-tauri/icons/` avec `npx tauri icon`, puis mettre à jour le logo du web panel et l'asset Discord `emuworld_logo`
 

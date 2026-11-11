@@ -7266,3 +7266,57 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 .rgs-folder-view { background: transparent; border: none; box-shadow: none; padding: 0; overflow: visible; }
 .rgs-folder-header { background: transparent; border: none; padding: 0 4px 10px; }
 .rgs-folder-count { font-size: 14px; }
+
+/* ─── v3 Achievements section (Stats, Wrap) and Settings section ─── */
+.main-content[data-page="stats"], .main-content[data-page="wrap"] { --k: var(--sec-trophy); }
+.main-content[data-page="settings"], .main-content[data-page="controller"],
+.main-content[data-page="backup"], .main-content[data-page="changelogs"] { --k: var(--sec-settings); }
+
+/* Settings groups (also on Friends, Backup, Controller): v3 cards */
+.settings { max-width: 780px; }
+.settings__group { background: var(--panel); border-radius: var(--radius-lg); padding: 20px 22px; box-shadow: var(--shadow-soft); margin-bottom: 18px; }
+.settings__group-title {
+  font-family: var(--font-title); font-size: 18px; font-weight: 700;
+  text-transform: none; letter-spacing: 0; color: var(--ink);
+}
+.settings__group-title svg { color: var(--accent); }
+.settings__field-label { color: var(--ink); font-weight: 800; }
+.settings__field-desc { color: var(--mut); }
+.settings__logs { background: var(--soft); border: none; border-radius: var(--radius-md); }
+
+/* Theme picker: pills, the chosen one outlined */
+.theme-picker__item { min-height: 44px; border: none; border-radius: var(--radius-pill); background: var(--soft); padding: 0 16px 0 8px; }
+.theme-picker__item:hover { background: var(--soft-hover); }
+.theme-picker__item--active, .theme-picker__item--active:hover { background: var(--panel); box-shadow: 0 0 0 3px var(--accent); }
+.theme-picker__swatch { width: 28px; height: 28px; border-radius: 50%; }
+
+/* Stats */
+.stats-card { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+.stats-card__value { font-family: var(--font-title); font-weight: 700; color: var(--ink); }
+.stats-card__label { color: var(--mut); font-weight: 800; }
+.stats-section { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+.stats-section__title { font-family: var(--font-title); color: var(--ink); }
+.stats-bar-row__bar { height: 12px; border-radius: var(--radius-pill); background: var(--soft); }
+.stats-bar-row__fill, .stats-bar-row__fill--console { border-radius: var(--radius-pill); background: var(--grad); }
+
+/* Monthly wrap: the hero card is the gradient frame of the page */
+.wrap-card { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+.wrap-card__value { font-family: var(--font-title); font-weight: 700; color: var(--ink); }
+.wrap-card__label { color: var(--mut); font-weight: 700; }
+.wrap-card--hero {
+  background: linear-gradient(var(--panel), var(--panel)) padding-box, var(--grad) border-box;
+  border: 4px solid transparent;
+}
+.wrap-card--highlight { background: color-mix(in srgb, var(--sec-trophy) 12%, var(--panel)); }
+.wrap-top-item { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+.wrap-top-item__bar-fill, .wrap-top-item__bar-fill--alt { background: var(--grad-soft); opacity: 0.35; }
+
+/* Controller */
+.controller-select__item, .controller-mapping__row { background: var(--panel); border: none; border-radius: var(--radius-md); box-shadow: var(--shadow-soft); }
+.controller-select__item--active { background: var(--panel); box-shadow: 0 0 0 3px var(--accent), var(--shadow-soft); }
+.controller-mapping__btn { border-radius: var(--radius-pill); }
+
+/* Changelogs */
+.changelog-card__version { font-family: var(--font-title); font-size: 18px; font-weight: 700; color: var(--ink); }
+.stats-section__title, .stats-card__label { text-transform: none; letter-spacing: 0; }
+.stats-section__title { font-size: 18px; }
