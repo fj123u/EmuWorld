@@ -35,7 +35,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 
 ### 👥 Social & profil
 
-- [ ] **Refonte complète des défis** *(moyen, demandé le 12/11/2026 : « ils sont vraiment nuls »)* — tout repenser : défis tirés de la vraie bibliothèque du joueur (pas « joue à un Resident Evil » quand il n'en a aucun), variés (finir un jeu, découvrir une console jamais lancée, série de jours, défi entre amis), progression visible, récompenses qui comptent (badges, XP, thème), carte « Défi de la semaine » de l'Accueil revue en même temps
+- [ ] **Refonte complète des défis** *(moyen, demandé le 12/11/2026 : « ils sont vraiment nuls »)* — tout repenser : défis tirés de la vraie bibliothèque du joueur (pas « joue à un Resident Evil » quand il n'en a aucun), variés (finir un jeu, découvrir une console jamais lancée, série de jours, défi entre amis), progression visible, récompenses qui comptent (badges, XP, thème), carte « Défi de la semaine » de l'Accueil revue en même temps. Plan détaillé : `scratch/defis-refonte.md` (journal de sessions, moteur de défis, récompenses, versus, étapes)
 - [ ] **Profil personnalisable** *(quick win)* — bannière, bio, jeu favori épinglé, badges mis en avant sur le profil public
 - [ ] **Système de parrainage** *(quick win)* — code d'invitation, badges quand un ami s'inscrit
 - [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage Discord/amis, comparaison, slideshow
