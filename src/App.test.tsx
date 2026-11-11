@@ -438,6 +438,28 @@ describe("save states manager", () => {
   });
 });
 
+describe("home page", () => {
+  it("offers the last game played and opens a console of the library from its tile", async () => {
+    const r = await renderApp();
+    const frame = await waitFor(() => {
+      const el = r.container.querySelector<HTMLElement>(".home-resume");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    // samplePlaytime: Super Mario Bros. 3 was played today.
+    expect(frame.textContent).toContain("Reprendre la partie");
+    expect(frame.textContent).toContain("Super Mario Bros. 3 (Europe)");
+    const tiles = [...r.container.querySelectorAll<HTMLElement>(".home-tile")];
+    expect(tiles.map((b) => b.querySelector(".v3-tile__name")?.textContent)).toEqual(["Game Boy Advance", "NES", "Xbox"]);
+    await act(async () => {
+      fireEvent.click(tiles[1]);
+    });
+    await waitFor(() => expect(r.container.querySelector<HTMLElement>("main.main-content")!.dataset.page).toBe("library"));
+    await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
+    expect([...r.container.querySelectorAll(".game-grid .game-card__name")].map((n) => n.textContent)).toEqual(["Super Mario Bros. 3 (Europe)"]);
+  });
+});
+
 describe("game menu", () => {
   it("speaks the app's language", async () => {
     localStorage.setItem("emuworld-locale", "en");

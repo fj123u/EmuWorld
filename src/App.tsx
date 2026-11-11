@@ -16,6 +16,8 @@ import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMAT
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
 import { Dock, SectionTabs, type Page } from "./navigation";
+import { HomePage } from "./HomePage";
+import { consoleTiles, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { spatialNext, type Direction } from "./gamepadSpatial";
@@ -1234,7 +1236,7 @@ function OverlayWindow() {
           const profileMap = new Map((profiles || []).map((p: any) => [p.id, p]));
           const enriched = data.map((f: any) => {
             const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
-            return { ...f, profile: profileMap.get(otherId) || { username: "Anonyme", avatar_url: null }, otherId };
+            return { ...f, profile: profileMap.get(otherId) || { username: tr("overlay.anonymous"), avatar_url: null }, otherId };
           });
           setFriends(enriched);
           const { data: pres } = await supabase.from("presence").select("*").in("user_id", friendIds);
@@ -1345,7 +1347,7 @@ function OverlayWindow() {
                         <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", background: isPlaying ? "#a78bfa" : isOnline ? "#4ade80" : "#6b7280", border: "2px solid rgba(20,20,30,0.97)" }} />
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, fontSize: 14 }}>{f.profile?.username || "Anonyme"}</div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{f.profile?.username || tr("overlay.anonymous")}</div>
                         <div style={{ fontSize: 12, opacity: 0.5 }}>{isPlaying ? tr("overlay.playing", { game: presence.current_game }) : isOnline ? tr("overlay.online") : tr("overlay.offline")}</div>
                       </div>
                       <button onClick={() => { setChatTarget({ id: f.otherId, username: f.profile?.username || tr("overlay.anonymous") }); setTab("chat"); }} style={{ padding: "5px 12px", borderRadius: 6, border: "none", background: "rgba(99,102,241,0.3)", color: "#fff", cursor: "pointer", fontSize: 12 }}>{tr("overlay.chat")}</button>
@@ -1361,8 +1363,8 @@ function OverlayWindow() {
                 <div>
                   <div style={{ opacity: 0.5, marginBottom: 12, fontSize: 13 }}>{tr("overlay.pickFriend")}</div>
                   {friends.map((f: any) => (
-                    <button key={f.id} onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || "Anonyme" })} style={{ display: "block", width: "100%", padding: "10px 14px", marginBottom: 6, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", fontSize: 13, textAlign: "left" }}>
-                      {f.profile?.username || "Anonyme"}
+                    <button key={f.id} onClick={() => setChatTarget({ id: f.otherId, username: f.profile?.username || tr("overlay.anonymous") })} style={{ display: "block", width: "100%", padding: "10px 14px", marginBottom: 6, borderRadius: 8, border: "none", background: "rgba(255,255,255,0.05)", color: "#fff", cursor: "pointer", fontSize: 13, textAlign: "left" }}>
+                      {f.profile?.username || tr("overlay.anonymous")}
                     </button>
                   ))}
                   {friends.length === 0 && <div style={{ opacity: 0.4, textAlign: "center", paddingTop: 40, fontSize: 14 }}>{tr("overlay.noFriends")}</div>}
@@ -2481,7 +2483,7 @@ export default function App() {
     const userIds = [...new Set(data.map(a => a.user_id))];
     const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
-    setActivityFeed(data.map(a => ({ ...a, username: profileMap.get(a.user_id)?.username || "Anonyme", avatar_url: profileMap.get(a.user_id)?.avatar_url })));
+    setActivityFeed(data.map(a => ({ ...a, username: profileMap.get(a.user_id)?.username || t("friendsUi.anonymous"), avatar_url: profileMap.get(a.user_id)?.avatar_url })));
   }, [user, friends]);
 
   const searchFriends = useCallback(async (query: string) => {
@@ -3967,6 +3969,9 @@ export default function App() {
     showToast(tl("challenges.joined"), "success");
     loadChallenges();
   }, [user, showToast, loadChallenges]);
+
+  // Home page: the challenge of the week shows my progress.
+  useEffect(() => { if (page === "discover" && user) loadChallenges(); }, [page, user, loadChallenges]);
 
   // --- Guides ---
   const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean; scraped?: { summary?: string; achievements?: { title: string; description: string; points: number; badge_url: string }[] } } | null>(null);
@@ -5502,6 +5507,44 @@ export default function App() {
   const bpRoms = bpConsoleFilter ? roms.filter(r => r.console === bpConsoleFilter) : roms;
   const bpConsoles = [...new Set(roms.map(r => r.console))].sort();
 
+  // ─── v3 home (HomePage.tsx): data computed from what is already loaded ───
+  const homeRecent = recentGames(roms, playtime.games, 7);
+  const homeDayIndex = Math.abs(new Date().toISOString().slice(0, 10).split("").reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0));
+  const homeGameOfTheDay = roms.length > 0 ? roms[homeDayIndex % roms.length] : null;
+  const homeResume = homeRecent[0]
+    ? { rom: homeRecent[0].rom, seconds: homeRecent[0].seconds, lastPlayed: homeRecent[0].lastPlayed, kind: "resume" as const }
+    : homeGameOfTheDay
+      ? { rom: homeGameOfTheDay, seconds: playtime.games[`${homeGameOfTheDay.console}::${homeGameOfTheDay.name}`]?.seconds ?? 0, lastPlayed: null, kind: "gameOfTheDay" as const }
+      : null;
+  const homeFriends = user
+    ? friendsOnline(
+        friends.map(f => {
+          const otherId = f.requester_id === user.id ? f.addressee_id : f.requester_id;
+          return { id: otherId, name: f.profile?.username || t("friendsUi.anonymous"), avatarUrl: f.profile?.avatar_url ?? null };
+        }),
+        friendPresences,
+        Date.now(),
+      ).map(({ friend, playing }) => ({ ...friend, playing }))
+    : null;
+  const homeChallengeDef = getActiveWeeklyChallenges()[0];
+  const homeChallengeMine = homeChallengeDef && challengeParticipants.find((c: any) => c.challenge_id === homeChallengeDef.challenge_id && c.user_id === user?.id);
+  const homeChallenge = homeChallengeDef
+    ? {
+        title: tOr(`challengePool.${homeChallengeDef.id}`, homeChallengeDef.title),
+        description: tOr(`challengePool.${homeChallengeDef.id}Desc`, homeChallengeDef.description),
+        progress: homeChallengeMine ? Number(homeChallengeMine.progress) || 0 : null,
+        goal: homeChallengeDef.goal_value,
+        goalType: homeChallengeDef.goal_type,
+      }
+    : null;
+  /** Opens one console of the library (its manufacturer, then the console). */
+  const openLibraryConsole = (name: string) => {
+    const category = Object.entries(consolesByCategory).find(([, cons]) => cons.includes(name))?.[0] ?? null;
+    setPage("library");
+    setCategoryFilter(category);
+    setConsoleFilter(name);
+  };
+
   // ─── v3 navigation: section bar + tabs (src/navigation.tsx) ───
   // Same side effects as the old sidebar buttons (reset filters, load data).
   const navigateTo = (p: Page) => {
@@ -5524,6 +5567,9 @@ export default function App() {
       <div className="v3-topbar__row">
         <Dock page={page} navigate={navigateTo} t={t} badges={{ social: incomingRequests }} />
         <div className="v3-topbar__user">
+          <button className="v3-topbar__bp gamepad-nav-item" onClick={enterBigPicture} title={t("toolbar.bigPicture")} aria-label={t("toolbar.bigPicture")}>
+            <Maximize2 size={18} />
+          </button>
           {user ? (
             <button
               className="v3-user gamepad-nav-item"
@@ -5887,13 +5933,6 @@ export default function App() {
                       <RefreshCw size={14} /> {t("toolbar.refresh")}
                     </button>
                   )}
-                  <button
-                    className="btn btn--ghost"
-                    onClick={enterBigPicture}
-                    title={t("toolbar.bigPicture")}
-                  >
-                    <Maximize2 size={14} />
-                  </button>
                 </div>
               </div>
 
@@ -7521,7 +7560,7 @@ export default function App() {
                                   </div>
                                 )}
                               </div>
-                              <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
+                              <span className="friend-card__name">{req.profile?.username || t("friendsUi.anonymous")}</span>
                               <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
                                 <button className="btn btn--primary btn--sm" onClick={() => acceptFriendRequest(req.id)}>
                                   <UserCheck size={12} /> {t("friendsUi.accept")}
@@ -7550,7 +7589,7 @@ export default function App() {
                                   </div>
                                 )}
                               </div>
-                              <span className="friend-card__name">{req.profile?.username || "Anonyme"}</span>
+                              <span className="friend-card__name">{req.profile?.username || t("friendsUi.anonymous")}</span>
                               <span className="friend-card__badge friend-card__badge--pending">{t("friendsUi.pendingDots")}</span>
                               <button className="btn btn--ghost btn--sm" onClick={() => declineFriendRequest(req.id)} style={{ marginLeft: "auto" }}>
                                 <X size={12} /> {t("friendsUi.cancel")}
@@ -7578,7 +7617,7 @@ export default function App() {
                             (Date.now() - new Date(presence.updated_at).getTime()) < 120000;
                           const isPlaying = presence?.status === "playing";
                           return (
-                            <div key={f.id} className="friend-card friend-card--clickable" onClick={() => viewFriendProfile(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null)}>
+                            <div key={f.id} className="friend-card friend-card--clickable" onClick={() => viewFriendProfile(otherId, f.profile?.username || t("friendsUi.anonymous"), f.profile?.avatar_url || null)}>
                               <div className="friend-card__avatar">
                                 {f.profile?.avatar_url ? (
                                   <img src={f.profile.avatar_url} alt="" />
@@ -7590,7 +7629,7 @@ export default function App() {
                                 <span className={`friend-card__status ${isOnline ? (isPlaying ? "friend-card__status--playing" : "friend-card__status--online") : "friend-card__status--offline"}`} />
                               </div>
                               <div className="friend-card__info">
-                                <span className="friend-card__name">{f.profile?.username || "Anonyme"}</span>
+                                <span className="friend-card__name">{f.profile?.username || t("friendsUi.anonymous")}</span>
                                 <span className="friend-card__activity">
                                   {isPlaying ? t("overlay.playing", { game: presence.current_game ?? "" }) : isOnline ? t("overlay.online") : t("overlay.offline")}
                                 </span>
@@ -7605,7 +7644,7 @@ export default function App() {
                                 <button className="btn btn--ghost btn--sm" title={t("friendsUi.compare")} onClick={(e) => { e.stopPropagation(); compareWithFriend(otherId, f.profile?.username || t("friendsUi.anonymous"), f.profile?.avatar_url || null); }}>
                                   <BarChart2 size={12} />
                                 </button>
-                                <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); openChat(otherId, f.profile?.username || "Anonyme", f.profile?.avatar_url || null); }}>
+                                <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); openChat(otherId, f.profile?.username || t("friendsUi.anonymous"), f.profile?.avatar_url || null); }}>
                                   <MessageCircle size={12} />
                                 </button>
                                 <button className="btn btn--ghost btn--sm" onClick={(e) => { e.stopPropagation(); removeFriend(f.id); }}>
@@ -7643,7 +7682,7 @@ export default function App() {
                                     </div>
                                     <span className="versus-card__vs">{t("friendsUi.vs")}</span>
                                     <div className="versus-card__player">
-                                      <span>{opponent?.username || "Adversaire"}</span>
+                                      <span>{opponent?.username || t("versusUi.opponent")}</span>
                                       <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong>
                                     </div>
                                   </div>
@@ -7653,7 +7692,7 @@ export default function App() {
                                       <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>{t("versus.decline")}</button>
                                     </div>
                                   )}
-                                  {v.ends_at && <div className="versus-card__timer">Fin : {new Date(v.ends_at).toLocaleDateString(dateLocale)}</div>}
+                                  {v.ends_at && <div className="versus-card__timer">{t("versusUi.endsOn", { date: new Date(v.ends_at).toLocaleDateString(dateLocale) })}</div>}
                                 </div>
                               );
                             })}
@@ -8489,10 +8528,6 @@ export default function App() {
                 const suggestion = classicGames[Math.abs(hashCode) % classicGames.length];
                 const suggestionInLibrary = roms.find(r => r.name.toLowerCase().includes(suggestion.name.toLowerCase().slice(0, 10)));
                 const gameOfTheDay = roms.length > 0 ? roms[Math.abs(hashCode) % roms.length] : null;
-                const recentGames = gameEntries
-                  .filter(g => g.last_played)
-                  .sort((a, b) => new Date(b.last_played!).getTime() - new Date(a.last_played!).getTime())
-                  .slice(0, 8);
                 const topGames = gameEntries
                   .filter(g => g.seconds > 0)
                   .sort((a, b) => b.seconds - a.seconds)
@@ -8501,6 +8536,25 @@ export default function App() {
                 const formatTime = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${Math.floor((s % 3600) / 60).toString().padStart(2, "0")}` : `${Math.floor(s / 60)}min`;
 
                 return (
+                  <HomePage
+                    t={t}
+                    dateLocale={dateLocale}
+                    resume={homeResume}
+                    consoles={consoleTiles(roms)}
+                    recent={homeRecent.slice(1)}
+                    friends={homeFriends}
+                    challenge={homeChallenge}
+                    month={monthSummary(playtime.games, achievements, new Date())}
+                    canLobby={(rom) => !!user && lobbyEmulatorFor(rom.console) !== null}
+                    onPlay={handleLaunch}
+                    onLobby={handleCreateLobby}
+                    onOpenConsole={openLibraryConsole}
+                    onSeeAllGames={() => navigateTo("library")}
+                    onOpenStore={() => navigateTo("store")}
+                    onOpenFriend={(f) => viewFriendProfile(f.id, f.name, f.avatarUrl)}
+                    onOpenChallenges={() => navigateTo("challenges")}
+                    onSignIn={() => setShowLoginModal(true)}
+                  >
                   <div className="discover-page">
                     {versusChallenges.filter(v => v.status === "active").length > 0 && (
                       <div className="discover-versus">
@@ -8520,9 +8574,9 @@ export default function App() {
                                 </div>
                                 <div className="discover-versus__scores">
                                   <span className="discover-versus__me">{t("friendsUi.youColon")} <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong></span>
-                                  <span className="discover-versus__them">{opponent?.username || "Adversaire"}: <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong></span>
+                                  <span className="discover-versus__them">{opponent?.username || t("versusUi.opponent")}: <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong></span>
                                 </div>
-                                {v.ends_at && <div className="discover-versus__timer">Fin : {new Date(v.ends_at).toLocaleDateString(dateLocale)}</div>}
+                                {v.ends_at && <div className="discover-versus__timer">{t("versusUi.endsOn", { date: new Date(v.ends_at).toLocaleDateString(dateLocale) })}</div>}
                               </div>
                             );
                           })}
@@ -8530,7 +8584,7 @@ export default function App() {
                       </div>
                     )}
 
-                    {gameOfTheDay && (
+                    {gameOfTheDay && homeResume?.kind !== "gameOfTheDay" && (
                       <div className="discover-hero gamepad-nav-item" onClick={() => handleLaunch(gameOfTheDay)}>
                         <div className="discover-hero__bg" />
                         <div className="discover-hero__content">
@@ -8539,7 +8593,7 @@ export default function App() {
                           <p className="discover-hero__console">{gameOfTheDay.console}</p>
                           {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`] && (
                             <p className="discover-hero__stats">
-                              {formatTime(playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].seconds)} joué · {playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches} lancement{playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches > 1 ? "s" : ""}
+                              {t("home.played", { time: formatTime(playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].seconds) })} · {t("card.launchesTitle", { count: playtime.games[`${gameOfTheDay.console}::${gameOfTheDay.name}`].launches })}
                             </p>
                           )}
                           <button className="btn btn--primary btn--sm discover-hero__play"><Play size={14} /> {t("discover.play")}</button>
@@ -8563,27 +8617,6 @@ export default function App() {
                       </div>
                     </section>
 
-                    {recentGames.length > 0 && (
-                      <section className="discover-section">
-                        <h3 className="discover-section__title"><ClockIcon size={16} /> {t("discover.recentlyPlayed")}</h3>
-                        <div className="discover-grid">
-                          {recentGames.map(g => {
-                            const rom = roms.find(r => r.name === g.name && r.console === g.console);
-                            if (!rom) return null;
-                            return (
-                              <div key={g.name} className="discover-card gamepad-nav-item" onClick={() => handleLaunch(rom)}>
-                                <DiscoverCover rom={rom} />
-                                <div className="discover-card__info">
-                                  <span className="discover-card__name">{g.name}</span>
-                                  <span className="discover-card__meta">{g.console} · {formatTime(g.seconds)}</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </section>
-                    )}
-
                     {topGames.length > 0 && (
                       <section className="discover-section">
                         <h3 className="discover-section__title"><Trophy size={16} /> {t("discover.topGames")}</h3>
@@ -8595,7 +8628,7 @@ export default function App() {
                                 <span className="discover-top-item__rank">#{i + 1}</span>
                                 <div className="discover-top-item__info">
                                   <span className="discover-top-item__name">{g.name}</span>
-                                  <span className="discover-top-item__meta">{g.console} · {formatTime(g.seconds)} · {g.launches} lancement{g.launches > 1 ? "s" : ""}</span>
+                                  <span className="discover-top-item__meta">{g.console} · {formatTime(g.seconds)} · {t("card.launchesTitle", { count: g.launches })}</span>
                                 </div>
                               </div>
                             );
@@ -8621,15 +8654,8 @@ export default function App() {
                       </section>
                     )}
 
-                    {roms.length === 0 && (
-                      <div className="discover-empty">
-                        <Compass size={48} />
-                        <h3>{t("library.noGames")}</h3>
-                        <p>{t("library.noGamesDesc")}</p>
-                        <button className="btn btn--primary" onClick={() => setPage("store")}>{t("discover.openStore")}</button>
-                      </div>
-                    )}
                   </div>
+                  </HomePage>
                 );
               })()}
 
@@ -9416,7 +9442,7 @@ export default function App() {
                     <div key={r.id} className="reviews-modal__review">
                       <div className="reviews-modal__review-header">
                         {r.profiles?.avatar_url && <img src={r.profiles.avatar_url} className="reviews-modal__avatar" alt="" />}
-                        <span className="reviews-modal__username">{r.profiles?.username || "Anonyme"}</span>
+                        <span className="reviews-modal__username">{r.profiles?.username || t("friendsUi.anonymous")}</span>
                         <span className="reviews-modal__review-stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</span>
                         <span className="reviews-modal__date">{new Date(r.created_at).toLocaleDateString(dateLocale)}</span>
                       </div>
@@ -9503,7 +9529,7 @@ export default function App() {
                             <div key={g.id} className="guide-modal__entry">
                               <div className="guide-modal__entry-header">
                                 {g.profile?.avatar_url && <img src={g.profile.avatar_url} className="guide-modal__avatar" alt="" />}
-                                <span className="guide-modal__author">{g.profile?.username || "Anonyme"}</span>
+                                <span className="guide-modal__author">{g.profile?.username || t("friendsUi.anonymous")}</span>
                                 <span className="guide-modal__date">{new Date(g.created_at).toLocaleDateString(dateLocale)}</span>
                                 <button
                                   className={`guide-modal__vote-btn gamepad-nav-item ${guideVotes.includes(g.id) ? "guide-modal__vote-btn--active" : ""}`}
