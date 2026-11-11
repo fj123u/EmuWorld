@@ -14,6 +14,7 @@ import { useTranslation, type Locale } from "./i18n";
 import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
+import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { spatialNext, type Direction } from "./gamepadSpatial";
@@ -878,7 +879,7 @@ const SuggestionCover = ({ gameName, console: consoleName }: { gameName: string;
       .catch(() => {});
   }, [gameName, consoleName]);
   return (
-    <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", background: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+    <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", background: "var(--soft)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       {cover ? <img src={cover} alt={gameName} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Gamepad2 size={22} style={{ opacity: 0.4 }} />}
     </div>
   );
@@ -5770,7 +5771,7 @@ export default function App() {
               <span className="sidebar__item-icon"><Users size={16} /></span>
               {t("nav.friends")}
               {pendingRequests.filter(f => f.addressee_id === user?.id).length > 0 && (
-                <span className="sidebar__item-count" style={{ background: "var(--neon-red)", color: "white" }}>
+                <span className="sidebar__item-count" style={{ background: "var(--danger)", color: "var(--on-solid)" }}>
                   {pendingRequests.filter(f => f.addressee_id === user?.id).length}
                 </span>
               )}
@@ -6034,7 +6035,7 @@ export default function App() {
               <div className="main-content__header">
                 <div>
                   <h1 className="main-content__title">
-                    {page === "discover" && "Discover"}
+                    {page === "discover" && t("nav.discover")}
                     {page === "catalog" && t("header.emulators")}
                     {page === "library" && t("header.library")}
                     {page === "installed" && t("header.installedEmulators")}
@@ -6043,7 +6044,7 @@ export default function App() {
                     {page === "leaderboard" && t("header.leaderboard")}
                     {page === "friends" && t("header.friends")}
                     {page === "stats" && t("header.stats")}
-                    {page === "challenges" && "Challenges"}
+                    {page === "challenges" && t("nav.challenges")}
                     {page === "wrap" && t("sidebar.monthlyWrap")}
                     {page === "backup" && t("header.backup")}
                     {page === "controller" && t("header.controller")}
@@ -6392,7 +6393,7 @@ export default function App() {
                   </button>
                 </div>
                 {storeMode === "vimm" && (
-                  <div style={{ padding: "8px 16px", background: "rgba(88,101,242,0.1)", borderRadius: 10, margin: "8px 0", fontSize: 13, color: "var(--text-secondary)" }}>
+                  <div style={{ padding: "8px 16px", background: "var(--accent-soft)", borderRadius: 10, margin: "8px 0", fontSize: 13, color: "var(--text-secondary)" }}>
                     💡 {t("store.rgsHint")}
                   </div>
                 )}
@@ -6488,7 +6489,7 @@ export default function App() {
                               {downloading.includes(game.id) && downloadProgress[game.id]?.status !== "done" && (
                                 <button
                                   className="btn btn--ghost btn--sm gamepad-nav-item"
-                                  style={{ color: "#ef4444", padding: "4px 8px" }}
+                                  style={{ color: "var(--danger)", padding: "4px 8px" }}
                                   onClick={() => invoke("cancel_download", { downloadId: game.id })}
                                   title={t("common.cancel")}
                                 >
@@ -6685,7 +6686,7 @@ export default function App() {
                           <button
                             className="btn btn--ghost btn--sm gamepad-nav-item"
                             onClick={() => deleteCollection(activeCollection!)}
-                            style={{ color: "#ef4444" }}
+                            style={{ color: "var(--danger)" }}
                           >
                             <Trash2 size={12} />
                           </button>
@@ -7226,24 +7227,24 @@ export default function App() {
                   <div className="settings__group">
                     <div className="settings__group-title"><Palette size={16} /> {t("settings.theme")}</div>
                     <div className="theme-picker">
-                      {[
-                        { id: "default", name: "Discord Dark", color: "#5865F2" },
-                        { id: "midnight", name: "Midnight Blue", color: "#3b82f6" },
-                        { id: "oled", name: "OLED Black", color: "#ffffff" },
-                        { id: "retro", name: "Retro Green", color: "#22c55e" },
-                        { id: "sakura", name: "Sakura", color: "#ec4899" },
-                        { id: "sunset", name: "Sunset", color: "#f59e0b" },
-                      ].map(th => (
-                        <button
-                          key={th.id}
-                          className={`theme-picker__item ${theme === th.id ? "theme-picker__item--active" : ""}`}
-                          onClick={() => { setTheme(th.id); setAccentHue(null); }}
-                        >
-                          <span className="theme-picker__swatch" style={{ background: th.color }} />
-                          <span className="theme-picker__name">{th.name}</span>
-                        </button>
-                      ))}
+                      {BASE_THEMES.map(id => {
+                        // A dark variant from the marketplace counts as "Dark" here.
+                        const active = id === "default" ? theme === "default" : theme !== "default";
+                        return (
+                          <button
+                            key={id}
+                            className={`theme-picker__item gamepad-nav-item ${active ? "theme-picker__item--active" : ""}`}
+                            onClick={() => { setTheme(id); setAccentHue(null); }}
+                          >
+                            <span className={`theme-picker__swatch theme-picker__swatch--${id}`} />
+                            <span className="theme-picker__name">{t(themeNameKey(id))}</span>
+                          </button>
+                        );
+                      })}
                     </div>
+                    {theme !== "default" && theme !== "dark" && (
+                      <p className="settings__field-desc">{t("settings.themeVariant", { name: t(themeNameKey(theme)) })}</p>
+                    )}
                     <div className="settings__field" style={{ marginTop: 12 }}>
                       <label className="settings__field-label">{t("settings.customAccent")}</label>
                       <input
@@ -7544,7 +7545,7 @@ export default function App() {
                         className="btn btn--primary btn--sm"
                         onClick={handleRaLogin}
                         disabled={!raUsername || !raPassword || raLoginLoading}
-                        style={{ background: "linear-gradient(180deg, #f59e0b 0%, #d97706 100%)" }}
+                        style={{ background: "var(--sec-trophy)", color: "var(--on-accent)" }}
                       >
                         {raLoginLoading ? <RefreshCw size={14} className="animate-spin" /> : <Lock size={14} />}
                         {raLoginLoading ? ` ${t("settings.raConnecting")}` : ` ${t("settings.raLogin")}`}
@@ -7567,7 +7568,7 @@ export default function App() {
                           <button
                             className="btn btn--primary btn--sm"
                             onClick={handleConfigureRaEmulators}
-                            style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}
+                            style={{ background: "var(--ok)" }}
                           >
                             <Gamepad2 size={14} /> {t("settings.raConfigureEmulators")}
                           </button>
@@ -7575,7 +7576,7 @@ export default function App() {
                             className="btn btn--primary btn--sm"
                             onClick={handleDownloadRaCores}
                             disabled={raDownloadingCores}
-                            style={{ background: "linear-gradient(180deg, #6366f1 0%, #4f46e5 100%)" }}
+                            style={{ background: "var(--accent)" }}
                           >
                             {raDownloadingCores ? <RefreshCw size={14} className="animate-spin" /> : <Download size={14} />}
                             {raDownloadingCores ? ` ${t("settings.raDownloading")}` : ` ${t("settings.raInstallCores")}`}
@@ -8001,7 +8002,7 @@ export default function App() {
                               {msg.content.startsWith("[img]") && msg.content.slice(5).startsWith("https://yizxrntlerzfniqkdvfg.supabase.co/storage/") ? (
                                 <img className="chat-bubble__image" src={msg.content.slice(5)} alt="" onClick={() => window.open(msg.content.slice(5), "_blank")} />
                               ) : msg.content.startsWith("[img]") ? (
-                                <p className="chat-bubble__text" style={{ color: "#aaa", fontStyle: "italic" }}>{t("friendsUi.image")}</p>
+                                <p className="chat-bubble__text" style={{ color: "var(--mut)", fontStyle: "italic" }}>{t("friendsUi.image")}</p>
                               ) : (
                                 <p className="chat-bubble__text">{msg.content}</p>
                               )}
@@ -8148,7 +8149,7 @@ export default function App() {
                           return (
                             <div style={{ marginBottom: 20 }}>
                               {rows.map(r => (
-                                <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.05)", alignItems: "center" }}>
+                                <div key={r.label} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, padding: "8px 0", borderBottom: "1px solid var(--line)", alignItems: "center" }}>
                                   <span style={{ textAlign: "right", fontWeight: r.myWins ? 700 : 400, color: r.myWins ? "#4ade80" : "inherit" }}>{r.myVal}</span>
                                   <span style={{ fontSize: 11, opacity: 0.5, textAlign: "center", minWidth: 80 }}>{r.label}</span>
                                   <span style={{ textAlign: "left", fontWeight: !r.myWins && r.myVal !== r.friendVal ? 700 : 400, color: !r.myWins && r.myVal !== r.friendVal ? "#4ade80" : "inherit" }}>{r.friendVal}</span>
@@ -8164,7 +8165,7 @@ export default function App() {
                             {compareData.commonGames.map(g => {
                               const fmtT = (s: number) => s >= 3600 ? `${Math.floor(s / 3600)}h${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}` : s >= 60 ? `${Math.floor(s / 60)} min` : `${s}s`;
                               return (
-                                <div key={`${g.console}::${g.name}`} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.03)", alignItems: "center", fontSize: 13 }}>
+                                <div key={`${g.console}::${g.name}`} style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 8, padding: "6px 0", borderBottom: "1px solid var(--line)", alignItems: "center", fontSize: 13 }}>
                                   <span style={{ textAlign: "right", color: g.mySeconds >= g.friendSeconds ? "#4ade80" : "inherit" }}>{fmtT(g.mySeconds)}</span>
                                   <span style={{ textAlign: "center", opacity: 0.7, fontSize: 12 }}>{g.name}</span>
                                   <span style={{ textAlign: "left", color: g.friendSeconds > g.mySeconds ? "#4ade80" : "inherit" }}>{fmtT(g.friendSeconds)}</span>
@@ -8566,7 +8567,7 @@ export default function App() {
                         );
                       })()}
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "linear-gradient(180deg, #22c55e 0%, #16a34a 100%)" }}>
+                        <button className="btn btn--primary btn--sm" onClick={handleBackupToCloud} disabled={backupLoading} style={{ background: "var(--ok)" }}>
                           {backupLoading ? <RefreshCw size={14} className="animate-spin" /> : <Upload size={14} />}
                           {" "}{backupLoading ? t("backupUi.backingUp") : t("backupUi.backupToCloud")}
                         </button>
@@ -8817,7 +8818,7 @@ export default function App() {
 
                     <section className="discover-section">
                       <h3 className="discover-section__title"><Compass size={16} /> {t("discover.suggestion")}</h3>
-                      <div style={{ background: "rgba(99,102,241,0.08)", borderRadius: 12, padding: "16px 20px", border: "1px solid rgba(99,102,241,0.15)", display: "flex", alignItems: "center", gap: 16 }}>
+                      <div style={{ background: "var(--accent-soft)", borderRadius: 12, padding: "16px 20px", border: "1px solid color-mix(in srgb, var(--accent) 15%, transparent)", display: "flex", alignItems: "center", gap: 16 }}>
                         <SuggestionCover gameName={suggestion.name} console={suggestion.console} />
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700, fontSize: 16 }}>{suggestion.name}</div>
@@ -8929,7 +8930,7 @@ export default function App() {
                         onChange={(e) => setNewThemeDesc(e.target.value)}
                       />
                       <div className="marketplace__publish-info">
-                        Thème actuel : <strong>{theme === "default" ? "Discord Dark" : theme}</strong>
+                        {t("marketplace.currentTheme", { name: t(themeNameKey(theme)) })}
                         {accentHue !== null && <> {t("marketplace.plusAccent")} <span className="marketplace__hue-badge" style={{ background: `hsl(${accentHue}, 80%, 65%)` }} /></>}
                       </div>
                       <div className="marketplace__publish-actions">
@@ -8939,6 +8940,33 @@ export default function App() {
                     </motion.div>
                   )}
 
+                  <section className="marketplace__variants">
+                    <h2 className="marketplace__section-title">{t("marketplace.variantsTitle")}</h2>
+                    <p className="page-subtitle">{t("marketplace.variantsDesc")}</p>
+                    <div className="marketplace__grid">
+                      {DARK_VARIANTS.map((v) => (
+                        <div key={v.id} className="marketplace__card">
+                          <div className="marketplace__card-preview" data-theme={v.id}>
+                            <div className="marketplace__card-colors">
+                              <span className="marketplace__swatch" style={{ background: v.accent }} />
+                              <span className="marketplace__swatch" style={{ background: v.panel }} />
+                            </div>
+                          </div>
+                          <div className="marketplace__card-info">
+                            <h3 className="marketplace__card-name">{t(themeNameKey(v.id))}</h3>
+                          </div>
+                          <div className="marketplace__card-actions">
+                            {theme === v.id ? (
+                              <span className="marketplace__active">{t("marketplace.active")}</span>
+                            ) : (
+                              <button className="btn btn--primary btn--sm gamepad-nav-item" onClick={() => { setTheme(v.id); setAccentHue(null); }}>{t("marketplace.apply")}</button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+
                   {marketplaceLoading ? (
                     <div className="loading-spinner" style={{ margin: "3rem auto" }}><span className="spinner" /></div>
                   ) : (
@@ -8947,7 +8975,7 @@ export default function App() {
                         <motion.div key={theme.id} className="marketplace__card gamepad-nav-item" whileHover={{ scale: 1.02 }}>
                           <div className="marketplace__card-preview" data-theme={theme.base_theme !== "default" ? theme.base_theme : undefined}>
                             <div className="marketplace__card-colors">
-                              <span className="marketplace__swatch" style={{ background: theme.accent_hue !== null ? `hsl(${theme.accent_hue}, 80%, 65%)` : theme.base_theme === "midnight" ? "#3b82f6" : theme.base_theme === "retro" ? "#22c55e" : theme.base_theme === "sakura" ? "#ec4899" : theme.base_theme === "sunset" ? "#f59e0b" : theme.base_theme === "oled" ? "#ffffff" : "#5865F2" }} />
+                              <span className="marketplace__swatch" style={{ background: theme.accent_hue !== null ? `hsl(${theme.accent_hue}, 68%, 64%)` : themeSwatch(theme.base_theme) }} />
                               <span className="marketplace__swatch marketplace__swatch--dark" />
                             </div>
                           </div>
@@ -9505,7 +9533,7 @@ export default function App() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 250, overflowY: "auto" }}>
                   {playtime.collections.map(col => (
-                    <div key={col.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: "1px solid var(--border)" }}>
+                    <div key={col.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 6, background: "color-mix(in srgb, var(--ink) 3%, transparent)", border: "1px solid var(--border)" }}>
                       <div>
                         <div style={{ fontWeight: 600, fontSize: "0.85rem" }}>{col.name}</div>
                         <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>{col.games.length} jeu{col.games.length > 1 ? "x" : ""}</div>
@@ -10540,7 +10568,7 @@ export default function App() {
                       {(item.status === 'downloading' || item.status === 'pending' || item.status === 'resolving') && (
                         <button
                           className="btn btn--ghost btn--sm gamepad-nav-item"
-                          style={{ padding: "2px 6px", fontSize: 10, color: "#ef4444" }}
+                          style={{ padding: "2px 6px", fontSize: 10, color: "var(--danger)" }}
                           onClick={() => invoke("cancel_download", { downloadId: item.id })}
                           title={t("common.cancel")}
                         >
@@ -10576,7 +10604,7 @@ export default function App() {
           <button
             className="download-badge"
             onClick={() => setShowDownloadPanel(true)}
-            style={{ position: "fixed", bottom: 16, right: 16, background: "var(--accent)", color: "white", border: "none", borderRadius: 50, width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}
+            style={{ position: "fixed", bottom: 16, right: 16, background: "var(--accent)", color: "var(--on-solid)", border: "none", borderRadius: 50, width: 48, height: 48, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", zIndex: 9999, boxShadow: "0 4px 16px rgba(0,0,0,0.3)" }}
           >
             <Download size={20} />
           </button>

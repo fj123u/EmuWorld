@@ -34,6 +34,8 @@ export function hardcodedTexts(source: string): string[] {
     // Text after a tag at the end of the line: <span>Text
     const tail = line.match(/(?<![=-])>([^<>{}]+)$/);
     if (tail && !/[;()=,&|]/.test(tail[1]) && !/^\s*(void|string|number|boolean|null)\b/.test(tail[1])) report(tail[1]);
+    // {cond && "Text"} in JSX.
+    for (const m of line.matchAll(/&& "([A-ZÀ-Ý][^"]*)"\}/g)) report(m[1]);
     // Attributes shown to the user.
     for (const m of line.matchAll(/\b(?:placeholder|title|aria-label|alt)="([^"]*)"/g)) report(m[1]);
     // A line of plain text inside JSX (multi-line text), after a line ending with ">".
@@ -57,12 +59,14 @@ describe("no hardcoded UI text", () => {
       '<span>{t("ok.key")}</span>',
       "<b>EmuWorld</b>",
       "onLaunch: (rom: RomFile) => void,",
+      '{page === "discover" && "Discover"}',
     ].join("\n");
     expect(hardcodedTexts(sample)).toEqual([
       "1: Supprimer",
       "2: Jouer",
       "3: Search...",
       "5: Où sont tes ROMs ? EmuWorld va les scanner.",
+      "10: Discover",
     ]);
   });
 

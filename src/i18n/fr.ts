@@ -112,6 +112,7 @@ const fr = {
     achievementAnimationDesc: "Animation plein écran avec confettis quand tu débloques un succès. Sinon, une simple notification.",
     consoleColors: "Couleurs par console",
     consoleColorsDesc: "Quand tu parcours une console dans la bibliothèque, l'accent de l'app prend sa couleur (rouge Switch, bleu PlayStation, vert Xbox…).",
+    themeVariant: "Variante sombre active : {name} (Marketplace)",
   },
 
   // Game card
@@ -546,6 +547,10 @@ const fr = {
     publishBtn: "Publier",
     anonymous: "Anonyme",
     apply: "Appliquer",
+    variantsTitle: "Variantes du thème sombre",
+    variantsDesc: "Les thèmes d'avant la v3, en version sombre. Clair et Sombre se choisissent dans les Réglages.",
+    currentTheme: "Thème actuel : {name}",
+    active: "Actif",
   },
 
   // Health check
@@ -1201,6 +1206,15 @@ const fr = {
     signInButton: "Se connecter",
     haveAccount: "Déjà un compte ? Se connecter",
     noAccount: "Pas encore de compte ? S'inscrire",
+  },
+  themes: {
+    light: "Clair",
+    dark: "Sombre",
+    midnight: "Midnight",
+    oled: "OLED",
+    retro: "Rétro",
+    sakura: "Sakura",
+    sunset: "Sunset",
   },
 };
 

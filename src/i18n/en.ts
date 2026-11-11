@@ -114,6 +114,7 @@ const en: Translations = {
     achievementAnimationDesc: "Full-screen animation with confetti when you unlock an achievement. Otherwise, a simple notification.",
     consoleColors: "Console colours",
     consoleColorsDesc: "While you browse one console in the library, the app's accent takes its colour (Switch red, PlayStation blue, Xbox green…).",
+    themeVariant: "Dark variant in use: {name} (Marketplace)",
   },
 
   // Game card
@@ -548,6 +549,10 @@ const en: Translations = {
     publishBtn: "Publish",
     anonymous: "Anonymous",
     apply: "Apply",
+    variantsTitle: "Dark theme variants",
+    variantsDesc: "The themes from before v3, as dark variants. Light and Dark are picked in Settings.",
+    currentTheme: "Current theme: {name}",
+    active: "Active",
   },
 
   // Health check
@@ -1203,6 +1208,15 @@ const en: Translations = {
     signInButton: "Sign in",
     haveAccount: "Already have an account? Sign in",
     noAccount: "Don't have an account? Sign up",
+  },
+  themes: {
+    light: "Light",
+    dark: "Dark",
+    midnight: "Midnight",
+    oled: "OLED",
+    retro: "Retro",
+    sakura: "Sakura",
+    sunset: "Sunset",
   },
 };
 
