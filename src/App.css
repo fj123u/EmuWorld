@@ -7320,3 +7320,90 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 .changelog-card__version { font-family: var(--font-title); font-size: 18px; font-weight: 700; color: var(--ink); }
 .stats-section__title, .stats-card__label { text-transform: none; letter-spacing: 0; }
 .stats-section__title { font-size: 18px; }
+
+/* ─── v3 Big Picture (step 6): same look as the app, TV sizes ───
+   Text ≥ 20 px, targets ≥ 64 px, a 4 px focus ring; the focused game
+   gets the gradient frame. */
+.big-picture {
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--dot) 1.4px, transparent 1.6px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  font-size: 20px;
+}
+.big-picture__header { padding: 28px 48px; }
+.big-picture__logo {
+  font-family: var(--font-title); font-size: 30px; font-weight: 700;
+  padding: 10px 24px; border-radius: var(--radius-pill); background: var(--panel); box-shadow: var(--shadow-soft);
+}
+.big-picture__exit, .big-picture__back {
+  min-height: 64px; padding: 0 26px; border: none; border-radius: var(--radius-pill);
+  background: var(--panel); color: var(--ink); font-size: 20px; font-weight: 800; box-shadow: var(--shadow-soft);
+}
+.big-picture__exit:hover, .big-picture__back:hover { background: var(--soft); color: var(--ink); }
+.big-picture__section-title { font-family: var(--font-title); font-size: 36px; font-weight: 700; color: var(--ink); }
+.big-picture__consoles, .big-picture__games { padding: 0 48px 48px; }
+
+/* Console tiles */
+.big-picture__console-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 26px; }
+.big-picture__console-card {
+  min-height: 190px; padding: 26px 22px; border-radius: 24px; gap: 14px;
+  background: color-mix(in srgb, var(--k) 14%, var(--panel));
+  border: 4px solid var(--panel);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--k) 70%, transparent);
+}
+.big-picture__console-card:hover, .big-picture__console-card--focused, .big-picture__console-card.gamepad-focused {
+  background: color-mix(in srgb, var(--k) 22%, var(--panel));
+  border-color: var(--panel);
+  box-shadow: 0 0 0 4px var(--k), 0 0 0 10px color-mix(in srgb, var(--k) 30%, transparent), var(--shadow-lg);
+  transform: scale(1.04);
+}
+.big-picture__console-name { font-family: var(--font-title); font-size: 26px; font-weight: 700; color: var(--ink); }
+.big-picture__console-count { font-size: 18px; background: var(--panel); color: var(--ink); }
+
+/* Games */
+.big-picture__breadcrumb { gap: 20px; margin-bottom: 28px; }
+.big-picture__current-console { font-family: var(--font-title); font-size: 34px; font-weight: 700; color: var(--ink); gap: 12px; }
+.big-picture__game-count { font-size: 20px; color: var(--mut); font-weight: 800; }
+.big-picture__game-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 32px 28px; }
+.bp-card { background: transparent; border: none; border-radius: 20px; overflow: visible; box-shadow: none; }
+.bp-card:hover, .bp-card--focused, .bp-card.gamepad-focused { background: transparent; box-shadow: none; transform: none; }
+.bp-card__cover {
+  border-radius: 20px; overflow: hidden;
+  border: 4px solid var(--panel);
+  box-shadow: 0 0 0 4px var(--k);
+  background: color-mix(in srgb, var(--k) 28%, var(--panel));
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+/* The selected game: the gradient frame, bigger, with a soft halo */
+.bp-card--focused .bp-card__cover, .bp-card.gamepad-focused .bp-card__cover {
+  border: 6px solid transparent;
+  background: linear-gradient(color-mix(in srgb, var(--k) 28%, var(--panel)), color-mix(in srgb, var(--k) 28%, var(--panel))) padding-box, var(--grad) border-box;
+  box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 30%, transparent), var(--shadow-lg);
+  transform: scale(1.06);
+}
+.bp-card.gamepad-focused { outline: none; }
+.bp-card__placeholder { background: transparent; align-items: flex-end; justify-content: flex-start; padding: 14px; }
+.bp-card__placeholder-name { font-family: var(--font-title); font-size: 20px; line-height: 1.15; color: var(--ink); overflow-wrap: anywhere; }
+.bp-card__info { padding: 14px 4px 0; }
+.bp-card__name { font-size: 21px; font-weight: 900; color: var(--ink); }
+.bp-card__playtime { font-size: 18px; color: var(--mut); font-weight: 700; }
+
+/* Focus ring for the other Big Picture buttons (pad and keyboard) */
+.big-picture .gamepad-focused:not(.bp-card):not(.big-picture__console-card),
+.big-picture button:focus-visible { outline: 4px solid var(--accent); outline-offset: 4px; }
+
+/* Button hints */
+.big-picture__footer { padding: 18px 48px 26px; background: transparent; border: none; }
+.big-picture__hints { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; }
+.bp-hint {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 0 20px 0 10px; border-radius: var(--radius-pill);
+  background: var(--panel); box-shadow: var(--shadow-soft);
+  font-size: 20px; font-weight: 800; color: var(--ink);
+}
+.bp-hint .v3-key { width: 34px; height: 34px; font-size: 16px; }
+.bp-hint .v3-key--wide { width: auto; padding: 0 10px; }
+/* Big Picture clock: readable from the couch */
+.big-picture__header .titlebar__clock { position: static; transform: none; font-size: 22px; padding: 12px 24px; background: var(--panel); box-shadow: var(--shadow-soft); border: none; }
+.big-picture__header .titlebar__clock * { font-size: inherit; }

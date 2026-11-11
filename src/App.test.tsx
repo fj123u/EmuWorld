@@ -555,6 +555,11 @@ describe("cover picker in the library", () => {
   });
 });
 
+/** Big Picture's button hints: "A" + label, one per pill. */
+function bpHints(container: HTMLElement) {
+  return [...container.querySelectorAll(".big-picture .bp-hint")].map((h) => h.textContent);
+}
+
 describe("cover picker in Big Picture", () => {
   // One gamepad frame from the Rust side (gilrs); buttons are edge-triggered.
   async function pad(pressed: number | null) {
@@ -585,7 +590,10 @@ describe("cover picker in Big Picture", () => {
     const dialog = await screen.findByRole("dialog", { name: "Choisir la cover" });
     expect(dialog.closest(".big-picture"), "rendered above Big Picture").not.toBeNull();
     expect(r.backend.calls.find((c) => c.cmd === "iidb_cover_choices")?.args).toEqual({ gameName: "Super Mario Bros. 3 (Europe)", console: "NES" });
-    expect(screen.getByText(/X — Choisir la cover/)).toBeTruthy();
+    expect(bpHints(r.container)).toContain("XChoisir la cover");
+    // v3: game cards take their console color, buttons are shown as pills.
+    expect(r.container.querySelector(".big-picture .bp-card")?.getAttribute("style")).toContain("--console-hue");
+    expect(bpHints(r.container)).toContain("AConfirmer");
     await press(13); // down: first item of the dialog
     await press(0); // A
     await waitFor(() => expect(r.backend.count("plugin:dialog|open")).toBe(1));
@@ -596,7 +604,7 @@ describe("cover picker in Big Picture", () => {
 
   it("Y asks for a lobby for the focused game, and says why not when signed out", async () => {
     const r = await openBigPictureOnNes();
-    expect(screen.getByText(/Y — Créer un lobby/)).toBeTruthy();
+    expect(bpHints(r.container)).toContain("YCréer un lobby");
     await press(15); // right: from the back button to the first game
     await press(3); // Y
     const toast = await screen.findByText("Connecte-toi pour créer un lobby.");

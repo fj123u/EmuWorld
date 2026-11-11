@@ -19,6 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "👥 Nouvelle page Lobbies (Social) : ton lobby et tes invitations à gauche, le lobby ouvert à droite avec les joueurs en places, le chat et « Je suis prêt » ; crée un lobby en choisissant un de tes jeux jouables en ligne. Amis, Classement et Défis passent au nouveau style",
     "🛍️ Store v3 : choix de la source en pilules, consoles en tuiles à leur couleur (aussi sur la page Console), résultats en cartes avec console, région, version et taille en pastilles, packs et téléchargements au nouveau style. Les compteurs (résultats, fichiers, packs) sont traduits",
     "📊 Stats, Wrap mensuel, Réglages, Manette, Backup et Changelogs au style v3 : réglages en cartes, chiffres et titres en Outfit, barres en dégradé, le Wrap du mois dans un cadre, choix du thème en pilules",
+    "📺 Big Picture au nouveau style, en tailles télé : consoles en grandes tuiles à leur couleur, jaquettes à double contour, le jeu sélectionné dans un cadre en dégradé, anneau de focus bien visible, et les touches de la manette affichées en pastilles",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

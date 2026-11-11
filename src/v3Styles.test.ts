@@ -53,3 +53,18 @@ describe("v3 styles of the Achievements and Settings sections", () => {
     expect(css).toMatch(/\.main-content\[data-page="settings"\][^{]*\{\s*--k: var\(--sec-settings\)/);
   });
 });
+
+describe("v3 Big Picture (TV sizes)", () => {
+  it("frames the selected game with the gradient and keeps its console tint", () => {
+    const bg = finalValue(".bp-card--focused .bp-card__cover", "background") ?? "";
+    expect(bg).toContain("var(--grad) border-box");
+    expect(bg).toContain("var(--k)");
+  });
+
+  it("uses TV sizes: 20 px text, 64 px buttons, a 4 px focus ring", () => {
+    expect(finalValue(".big-picture", "font-size")).toBe("20px");
+    expect(finalValue(".big-picture__exit", "min-height")).toBe("64px");
+    expect(finalValue(".big-picture button:focus-visible", "outline")).toBe("4px solid var(--accent)");
+    expect(finalValue(".bp-hint", "font-size")).toBe("20px");
+  });
+});

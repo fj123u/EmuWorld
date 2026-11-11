@@ -1072,6 +1072,7 @@ const BigPictureCard = ({ rom, focused, entry, onLaunch, onChooseCover }: {
     <motion.div
       className={`bp-card gamepad-nav-item ${focused ? "bp-card--focused" : ""}`}
       data-rom-path={rom.path}
+      style={consoleHueStyle(rom.console)}
       onClick={onLaunch}
       onContextMenu={(e) => { e.preventDefault(); onChooseCover?.(); }}
       whileHover={{ scale: 1.04 }}
@@ -1082,7 +1083,7 @@ const BigPictureCard = ({ rom, focused, entry, onLaunch, onChooseCover }: {
           <img src={cover} alt={rom.name} />
         ) : (
           <div className="bp-card__placeholder">
-            <span>🎮</span>
+            <span className="bp-card__placeholder-name">{rom.name}</span>
           </div>
         )}
       </div>
@@ -5772,13 +5773,14 @@ export default function App() {
                   <motion.button
                     key={con}
                     className={`big-picture__console-card gamepad-nav-item ${bpSelectedIndex === i ? "big-picture__console-card--focused" : ""}`}
+                    style={consoleHueStyle(con)}
                     onClick={() => { setBpConsoleFilter(con); setBpSelectedIndex(0); }}
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                   >
                     <ConsoleLogo name={con} size={48} />
                     <span className="big-picture__console-name">{con}</span>
-                    <span className="big-picture__console-count">{t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}</span>
+                    <span className="big-picture__console-count v3-pill">{t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}</span>
                   </motion.button>
                 );
               })}
@@ -5811,7 +5813,20 @@ export default function App() {
         )}
 
         <div className="big-picture__footer">
-          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {bpLobbyFocus ? t("bigPicture.backToGames") : t("gamepad.back")}{bpConsoleFilter && !bpLobbyFocus && <> &nbsp; X — {t("coverPicker.menu")} &nbsp; Y — {t("bigPicture.createLobby")}</>}{(currentLobby || lobbyInvites.length > 0) && !bpLobbyFocus && <> &nbsp; Start — {t("bigPicture.lobby")}</>} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
+          <div className="big-picture__hints">
+            <span className="bp-hint"><span className="v3-key">A</span>{t("gamepad.confirm")}</span>
+            <span className="bp-hint"><span className="v3-key">B</span>{bpLobbyFocus ? t("bigPicture.backToGames") : t("gamepad.back")}</span>
+            {bpConsoleFilter && !bpLobbyFocus && (
+              <>
+                <span className="bp-hint"><span className="v3-key">X</span>{t("coverPicker.menu")}</span>
+                <span className="bp-hint"><span className="v3-key">Y</span>{t("bigPicture.createLobby")}</span>
+              </>
+            )}
+            {(currentLobby || lobbyInvites.length > 0) && !bpLobbyFocus && (
+              <span className="bp-hint"><span className="v3-key v3-key--wide">Start</span>{t("bigPicture.lobby")}</span>
+            )}
+            <span className="bp-hint"><span className="v3-key v3-key--wide">F11 / ESC</span>{t("bigPicture.exit")}</span>
+          </div>
         </div>
 
         {/* Inside .big-picture: its stacking context sits above the app's overlays. */}
