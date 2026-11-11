@@ -965,6 +965,10 @@ const fr = {
     noMatches: "Aucun résultat",
     typeToSearch: "Tape pour chercher sur {console}",
     typeToSearchDesc: "Les résultats s'affichent pendant la frappe. Efface la recherche pour choisir une autre console.",
+    resultsCount: "{count} résultat(s)",
+    filesCount: "{count} fichier(s)",
+    packFrom: "Pack : {host}",
+    packsCount: "{count} pack(s)",
   },
   settingsUi: {
     bandwidthTitle: "Limite de bande passante",

@@ -967,6 +967,10 @@ const en: Translations = {
     noMatches: "No matches",
     typeToSearch: "Type to search {console}",
     typeToSearchDesc: "Results appear as you type. Clear the search to pick another console.",
+    resultsCount: "{count} result(s)",
+    filesCount: "{count} file(s)",
+    packFrom: "Pack: {host}",
+    packsCount: "{count} pack(s)",
   },
   settingsUi: {
     bandwidthTitle: "Bandwidth limit",

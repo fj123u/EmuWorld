@@ -438,6 +438,19 @@ describe("save states manager", () => {
   });
 });
 
+describe("store (v3)", () => {
+  it("colors console cards, counts results in the app language and keeps the source toggle", async () => {
+    const r = await renderApp({ search_vimm: () => [{ id: "1", name: "Zelda Test", console_name: "NES", size: "1 MB", region: "Europe" }] });
+    navTo(r.container, "Store");
+    const nes = (await screen.findByText("NES", { selector: ".rgs-console-card__name" })).closest(".rgs-console-card")!;
+    expect(nes.getAttribute("style")).toContain("--console-hue");
+    expect(r.container.querySelector(".store-source-toggle__btn--active")?.textContent).toContain("Vimm");
+    expect(r.container.querySelector(".store-hint")).not.toBeNull();
+    fireEvent.change(await screen.findByPlaceholderText(/Vimm/i), { target: { value: "zelda" } });
+    expect(await screen.findByText("1 résultat(s)", {}, { timeout: 3000 })).toBeTruthy();
+  });
+});
+
 describe("library (v3)", () => {
   it("filters with pill tabs: Favoris keeps only the favorite games", async () => {
     const r = await renderApp();

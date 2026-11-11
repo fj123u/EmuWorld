@@ -863,6 +863,12 @@ export const CoverImage = ({ src, alt }: { src: string; alt: string }) => {
   );
 };
 
+/** style={{ "--console-hue" }} for a console's card: .v3-ring / tiles take its color. */
+function consoleHueStyle(consoleName: string): React.CSSProperties | undefined {
+  const hue = consoleHue(consoleName);
+  return hue === null ? undefined : ({ "--console-hue": hue } as React.CSSProperties);
+}
+
 const DiscoverCover = ({ rom }: { rom: RomFile }) => {
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
@@ -6128,6 +6134,7 @@ export default function App() {
                             <motion.div
                               key={con}
                               className="rgs-console-card"
+                              style={consoleHueStyle(con)}
                               whileHover={{ scale: 1.03, y: -4 }}
                               whileTap={{ scale: 0.97 }}
                               onClick={() => setConsoleFilter(con)}
@@ -6179,9 +6186,7 @@ export default function App() {
                   </button>
                 </div>
                 {storeMode === "vimm" && (
-                  <div style={{ padding: "8px 16px", background: "var(--accent-soft)", borderRadius: 10, margin: "8px 0", fontSize: 13, color: "var(--text-secondary)" }}>
-                    💡 {t("store.rgsHint")}
-                  </div>
+                  <div className="store-hint">💡 {t("store.rgsHint")}</div>
                 )}
               </>)}
 
@@ -6237,7 +6242,7 @@ export default function App() {
                     ) : vimmGames.length > 0 ? (
                       <div className="rgs-folder-view">
                         <div className="rgs-folder-header">
-                          <div className="rgs-folder-count">{vimmGames.length} results</div>
+                          <div className="rgs-folder-count">{t("storeUi.resultsCount", { count: vimmGames.length })}</div>
                         </div>
                         <div className="rgs-files-grid">
                           {vimmGames.map((game, idx) => (
@@ -6317,6 +6322,7 @@ export default function App() {
                         <motion.div
                           key={c.id}
                           className="rgs-console-card"
+                          style={consoleHueStyle(c.target_console)}
                           whileHover={{ scale: 1.03, y: -4 }}
                           whileTap={{ scale: 0.97 }}
                           onClick={() => handleSelectVimmConsole(c)}
@@ -6383,7 +6389,7 @@ export default function App() {
                       <>
                         <ChevronRight size={14} className="rgs-breadcrumb__sep" />
                         <span className="rgs-breadcrumb__item rgs-breadcrumb__item--active">
-                          Pack: {new URL(selectedRgsLien.url).hostname.replace('www.', '')}
+                          {t("storeUi.packFrom", { host: new URL(selectedRgsLien.url).hostname.replace('www.', '') })}
                         </span>
                       </>
                     )}
@@ -6597,7 +6603,7 @@ export default function App() {
                           <div className="rgs-console-card__info">
                             <div className="rgs-console-card__name">{c.nom}</div>
                             <div className="rgs-console-card__count">
-                              <Package size={12} /> {c.nb_liens} pack{c.nb_liens > 1 ? 's' : ''}
+                              <Package size={12} /> {t("storeUi.packsCount", { count: c.nb_liens })}
                             </div>
                           </div>
                         </motion.div>
@@ -6623,7 +6629,7 @@ export default function App() {
                             onChange={(e) => setRgsFolderSearch(e.target.value)}
                           />
                         </div>
-                        <div className="rgs-folder-count">{rgsFolderFiles.length} files</div>
+                        <div className="rgs-folder-count">{t("storeUi.filesCount", { count: rgsFolderFiles.length })}</div>
                       </div>
 
                       <div className="rgs-files-grid">

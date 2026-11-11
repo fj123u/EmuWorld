@@ -7212,3 +7212,57 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 .challenge-card__progress-bar { height: 12px; border-radius: var(--radius-pill); background: var(--soft); }
 .challenge-card__progress-fill { border-radius: var(--radius-pill); background: var(--grad); }
 .versus-card { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+
+/* ─── v3 Store (section color: --sec-store) ─── */
+.store-source-toggle { background: var(--panel); border: none; border-radius: var(--radius-pill); padding: 6px; box-shadow: var(--shadow-soft); gap: 6px; }
+.store-source-toggle__btn { min-height: 44px; padding: 0 18px; font-weight: 800; color: var(--mut); }
+.store-source-toggle__btn:hover { background: var(--soft); color: var(--ink); }
+.store-source-toggle__btn--active,
+.store-source-toggle__btn--active:hover { background: color-mix(in srgb, var(--sec-store) 18%, var(--panel)); color: var(--ink); box-shadow: 0 0 0 3px var(--sec-store); }
+.store-hint {
+  margin: 12px 0; padding: 12px 18px; border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--sec-store) 10%, var(--panel)); color: var(--ink);
+  font-size: 14px; font-weight: 700;
+}
+
+.rgs-breadcrumb { background: var(--panel); border: none; border-radius: var(--radius-pill); padding: 6px 10px; box-shadow: var(--shadow-soft); }
+.rgs-breadcrumb__item { min-height: 36px; padding: 0 12px; border-radius: var(--radius-pill); font-weight: 800; }
+.rgs-breadcrumb__item--active { background: var(--soft); color: var(--ink); }
+
+/* Console / manufacturer cards (Store, Console page): v3 tiles with the console color */
+.rgs-console-card, .rgs-constructeur-card {
+  background: color-mix(in srgb, var(--k) 12%, var(--panel));
+  border: 3px solid var(--panel);
+  border-radius: 20px;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--k) 70%, transparent);
+  overflow: hidden;
+}
+.rgs-console-card:hover, .rgs-constructeur-card:hover { box-shadow: 0 0 0 3px var(--k), var(--shadow-lg); border-color: var(--panel); }
+.rgs-console-card__img { background: transparent; }
+.rgs-console-card__info { border-top: none; padding-top: 4px; }
+.rgs-console-card__name { font-family: var(--font-title); color: var(--ink); }
+.rgs-console-card__meta, .rgs-console-card__count { color: var(--mut); font-weight: 700; }
+
+/* Game rows (Vimm results, pack files) */
+.rgs-files-grid { display: flex; flex-direction: column; gap: 8px; }
+.rgs-file-row { background: var(--panel); border: none; border-radius: var(--radius-lg); padding: 10px 12px 10px 20px; box-shadow: var(--shadow-soft); }
+.rgs-file-row:hover { background: var(--panel); box-shadow: 0 0 0 3px var(--sec-store), var(--shadow-soft); }
+.rgs-file-name { font-weight: 800; color: var(--ink); }
+.vimm-tag { border-radius: var(--radius-pill); padding: 3px 10px; font-weight: 800; background: var(--soft); color: var(--mut); }
+.vimm-tag--console { background: color-mix(in srgb, var(--sec-games) 16%, var(--panel)); color: var(--ink); }
+.vimm-tag--region { background: color-mix(in srgb, var(--accent) 14%, var(--panel)); color: var(--ink); }
+.vimm-tag--size { background: color-mix(in srgb, var(--sec-trophy) 18%, var(--panel)); color: var(--ink); }
+.vimm-tag--version { background: var(--soft); color: var(--mut); }
+.rgs-folder-count { font-weight: 800; color: var(--mut); }
+
+/* RetroGameSets packs */
+.rgs-lien-card { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-soft); }
+.rgs-lien-card:hover { box-shadow: 0 0 0 3px var(--sec-store), var(--shadow-soft); }
+
+/* Downloads */
+.download-banner { background: var(--panel); border: none; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); }
+.download-panel { background: var(--panel); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); border: none; }
+/* Results: the rows are the cards, no panel around them */
+.rgs-folder-view { background: transparent; border: none; box-shadow: none; padding: 0; overflow: visible; }
+.rgs-folder-header { background: transparent; border: none; padding: 0 4px 10px; }
+.rgs-folder-count { font-size: 14px; }
