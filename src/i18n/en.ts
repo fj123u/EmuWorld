@@ -832,6 +832,24 @@ const en: Translations = {
     fromFile: "From a file…",
     images: "Images",
   },
+  gameMenu: {
+    play: "Play",
+    addFavorite: "☆ Add to favorites",
+    removeFavorite: "★ Remove from favorites",
+    notes: "Notes",
+    newCollection: "New collection...",
+    screenshots: "Screenshots",
+    guide: "Guide",
+    reviews: "Community reviews",
+    similar: "Similar games",
+    delete: "Delete",
+  },
+  emuMenu: {
+    launch: "Launch",
+    install: "Install",
+    uninstall: "Uninstall",
+    website: "Website",
+  },
 };
 
 export default en;

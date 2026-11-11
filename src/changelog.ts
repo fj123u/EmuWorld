@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "2.7.4", date: "2026-11-11", changes: [
+    "🌍 Les menus des jeux (clic droit et manette) et des émulateurs suivent la langue de l'app : plus de « Jouer », « Avis communauté » ou « Jeux similaires » en français quand l'app est en anglais",
+  ] },
   { version: "2.7.3", date: "2026-11-11", changes: [
     "🖼️ « Choisir la cover » retient le jeu choisi : quand iiDB hésite entre plusieurs jeux, ton choix est réutilisé à chaque recherche de cover (même après « Vider le cache »), et marqué « ✓ Ton choix »",
     "🎮 Multijoueur : « Créer un lobby » n'apparaît plus que pour les jeux jouables en ligne (RetroArch, PPSSPP, Dolphin, Azahar), au lieu d'échouer au lancement une fois tout le monde prêt. S'il manque l'émulateur, EmuWorld dit lequel installer",

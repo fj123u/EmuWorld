@@ -8911,13 +8911,13 @@ export default function App() {
                     className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
                     onClick={() => { setGamepadContextMenu(null); handleLaunch(rom); }}
                   >
-                    <Play size={14} /> Jouer
+                    <Play size={14} /> {t("gameMenu.play")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleToggleFavorite(rom); }}
                   >
-                    {isFav ? "★ Retirer des favoris" : "☆ Mettre en favori"}
+                    {isFav ? t("gameMenu.removeFavorite") : t("gameMenu.addFavorite")}
                   </button>
                   {playtime.collections.length > 0 && playtime.collections.map(col => (
                     <button
@@ -8938,37 +8938,37 @@ export default function App() {
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleOpenNotes(rom); }}
                   >
-                    <StickyNote size={14} /> Notes
+                    <StickyNote size={14} /> {t("gameMenu.notes")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={async () => { setGamepadContextMenu(null); const entries = await invoke<{ path: string; data_url: string }[]>("get_screenshots", { gameName: rom.name, console: rom.console }); setScreenshotGallery({ gameName: rom.name, console: rom.console, entries }); }}
                   >
-                    <Camera size={14} /> Screenshots
+                    <Camera size={14} /> {t("gameMenu.screenshots")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleOpenGuide(rom); }}
                   >
-                    <BookOpen size={14} /> Guide
+                    <BookOpen size={14} /> {t("gameMenu.guide")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleOpenReviews(rom); }}
                   >
-                    <MessageCircle size={14} /> Avis communauté
+                    <MessageCircle size={14} /> {t("gameMenu.reviews")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); handleShowRecommendations(rom); }}
                   >
-                    <Sparkles size={14} /> Jeux similaires
+                    <Sparkles size={14} /> {t("gameMenu.similar")}
                   </button>
                   <button
                     className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
                     onClick={() => { setGamepadContextMenu(null); handleDeleteRom(rom); }}
                   >
-                    <Trash2 size={14} /> Supprimer
+                    <Trash2 size={14} /> {t("gameMenu.delete")}
                   </button>
                 </motion.div>
               </motion.div>
@@ -8999,14 +8999,14 @@ export default function App() {
                       className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
                       onClick={() => { setGamepadContextMenu(null); handleLaunch({ name: "", path: "", console: emu.console, extension: "", size: 0 }); }}
                     >
-                      <Play size={14} /> Lancer
+                      <Play size={14} /> {t("emuMenu.launch")}
                     </button>
                   ) : (
                     <button
                       className="gamepad-context-menu__btn gamepad-context-menu__btn--play gamepad-ctx-focused"
                       onClick={() => { setGamepadContextMenu(null); handleInstall(emu.id); }}
                     >
-                      <Download size={14} /> Installer
+                      <Download size={14} /> {t("emuMenu.install")}
                     </button>
                   )}
                   {isInstalled && (
@@ -9014,14 +9014,14 @@ export default function App() {
                       className="gamepad-context-menu__btn gamepad-context-menu__btn--danger"
                       onClick={() => { setGamepadContextMenu(null); handleUninstall(emu.id); }}
                     >
-                      <Trash2 size={14} /> Désinstaller
+                      <Trash2 size={14} /> {t("emuMenu.uninstall")}
                     </button>
                   )}
                   <button
                     className="gamepad-context-menu__btn"
                     onClick={() => { setGamepadContextMenu(null); window.open(emu.website, "_blank"); }}
                   >
-                    <ExternalLink size={14} /> Site web
+                    <ExternalLink size={14} /> {t("emuMenu.website")}
                   </button>
                 </motion.div>
               </motion.div>
@@ -9222,13 +9222,13 @@ export default function App() {
         <div className="rom-context-overlay" onClick={() => setRomContextMenu(null)}>
           <div className="rom-context-menu" style={{ left: romContextMenu.x, top: romContextMenu.y }} onClick={(e) => e.stopPropagation()}>
             <button className="rom-context-menu__btn" onClick={() => { handleLaunch(romContextMenu.rom); setRomContextMenu(null); }}>
-              <Play size={14} /> Jouer
+              <Play size={14} /> {t("gameMenu.play")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { handleToggleFavorite(romContextMenu.rom); setRomContextMenu(null); }}>
-              {playtime.games[`${romContextMenu.rom.console}::${romContextMenu.rom.name}`]?.favorite ? "★ Retirer des favoris" : "☆ Mettre en favori"}
+              {playtime.games[`${romContextMenu.rom.console}::${romContextMenu.rom.name}`]?.favorite ? t("gameMenu.removeFavorite") : t("gameMenu.addFavorite")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { handleOpenNotes(romContextMenu.rom); setRomContextMenu(null); }}>
-              <StickyNote size={14} /> Notes
+              <StickyNote size={14} /> {t("gameMenu.notes")}
             </button>
             <div className="rom-context-menu__sep" />
             {playtime.collections.map(col => {
@@ -9244,14 +9244,14 @@ export default function App() {
               );
             })}
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); setShowCollectionModal(true); }}>
-              <Package size={14} /> Nouvelle collection...
+              <Package size={14} /> {t("gameMenu.newCollection")}
             </button>
             <button className="rom-context-menu__btn" onClick={async () => {
               const entries = await invoke<{ path: string; data_url: string }[]>("get_screenshots", { gameName: romContextMenu.rom.name, console: romContextMenu.rom.console });
               setScreenshotGallery({ gameName: romContextMenu.rom.name, console: romContextMenu.rom.console, entries });
               setRomContextMenu(null);
             }}>
-              <Camera size={14} /> Screenshots
+              <Camera size={14} /> {t("gameMenu.screenshots")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { setCoverPickerRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <ImagePlus size={14} /> {t("coverPicker.menu")}
@@ -9264,13 +9264,13 @@ export default function App() {
             </button>
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenGuide(romContextMenu.rom); }}>
-              <BookOpen size={14} /> Guide
+              <BookOpen size={14} /> {t("gameMenu.guide")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleOpenReviews(romContextMenu.rom); }}>
-              <MessageCircle size={14} /> Avis communauté
+              <MessageCircle size={14} /> {t("gameMenu.reviews")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleShowRecommendations(romContextMenu.rom); }}>
-              <Sparkles size={14} /> Jeux similaires
+              <Sparkles size={14} /> {t("gameMenu.similar")}
             </button>
             {user && lobbyEmulatorFor(romContextMenu.rom.console) && (
               <button className="rom-context-menu__btn" onClick={() => { setRomContextMenu(null); handleCreateLobby(romContextMenu.rom); }}>
@@ -9279,7 +9279,7 @@ export default function App() {
             )}
             <div className="rom-context-menu__sep" />
             <button className="rom-context-menu__btn rom-context-menu__btn--danger" onClick={() => { handleDeleteRom(romContextMenu.rom); setRomContextMenu(null); }}>
-              <Trash2 size={14} /> Supprimer
+              <Trash2 size={14} /> {t("gameMenu.delete")}
             </button>
           </div>
         </div>

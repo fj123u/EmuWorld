@@ -416,6 +416,25 @@ describe("save states manager", () => {
   });
 });
 
+describe("game menu", () => {
+  it("speaks the app's language", async () => {
+    localStorage.setItem("emuworld-locale", "en");
+    const r = await renderApp();
+    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    fireEvent.change(await screen.findByDisplayValue("All"), { target: { value: "long" } });
+    await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
+    fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
+    const menu = (await screen.findByRole("button", { name: /Similar games/ })).closest(".rom-context-menu")!;
+    for (const label of ["Play", "Notes", "New collection...", "Screenshots", "Guide", "Community reviews", "Delete"]) {
+      expect(menu.textContent).toContain(label);
+    }
+    expect(menu.textContent).toMatch(/favorites/);
+    for (const french of ["Jouer", "Avis communauté", "Jeux similaires", "Supprimer", "favoris", "Mettre en favori"]) {
+      expect(menu.textContent).not.toContain(french);
+    }
+  });
+});
+
 describe("cover picker in the library", () => {
   it("opens from a game's menu and updates its card with the chosen cover", async () => {
     const r = await renderApp({

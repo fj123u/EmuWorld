@@ -830,6 +830,24 @@ const fr = {
     fromFile: "Depuis un fichier…",
     images: "Images",
   },
+  gameMenu: {
+    play: "Jouer",
+    addFavorite: "☆ Mettre en favori",
+    removeFavorite: "★ Retirer des favoris",
+    notes: "Notes",
+    newCollection: "Nouvelle collection...",
+    screenshots: "Captures d'écran",
+    guide: "Guide",
+    reviews: "Avis communauté",
+    similar: "Jeux similaires",
+    delete: "Supprimer",
+  },
+  emuMenu: {
+    launch: "Lancer",
+    install: "Installer",
+    uninstall: "Désinstaller",
+    website: "Site web",
+  },
 };
 
 export type Translations = typeof fr;
