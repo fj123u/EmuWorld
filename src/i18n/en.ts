@@ -24,6 +24,10 @@ const en: Translations = {
     monthlyWrap: "Monthly wrap",
     marketplace: "Marketplace",
     allGames: "All games",
+    home: "Home",
+    games: "Games",
+    social: "Social",
+    trophies: "Achievements",
   },
 
   // Header / Page titles

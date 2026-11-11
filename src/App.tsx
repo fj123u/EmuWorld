@@ -15,6 +15,7 @@ import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { BASE_THEMES, DARK_VARIANTS, themeNameKey, themeSwatch } from "./themes";
+import { Dock, SectionTabs, type Page } from "./navigation";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { spatialNext, type Direction } from "./gamepadSpatial";
@@ -455,7 +456,9 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
   settings: "Controller",
 };
 
-type Page = "discover" | "catalog" | "library" | "installed" | "settings" | "changelogs" | "account" | "store" | "controller" | "backup" | "leaderboard" | "stats" | "friends" | "challenges" | "wrap" | "marketplace";
+// Gamepad navigation zones: the v3 top bar, then the page.
+const TOP_NAV_SEL = ".v3-topbar .gamepad-nav-item";
+const CONTENT_NAV_SEL = ".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item";
 
 /* Brand logos: use one "emblematic" console logo per brand so everything comes
    from the same source (RetroArch monochrome pack) and looks visually consistent.
@@ -1535,8 +1538,6 @@ export default function App() {
   useEffect(() => () => applyConsoleAccent(document.documentElement, null), []);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<string[]>([]);
-  const [expandedSidebarConsoles, setExpandedSidebarConsoles] = useState<string[]>([]);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string[]>([]);
   const [installChoiceModal, setInstallChoiceModal] = useState<{ standalone: string; retroarch: string } | null>(null);
@@ -3299,10 +3300,9 @@ export default function App() {
       }
 
       if (moveDown || moveUp || moveRight || moveLeft) {
-        const SIDEBAR_SEL = ".sidebar__item";
-        const CONTENT_SEL = ".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item";
-        const sidebarItems = document.querySelectorAll<HTMLElement>(SIDEBAR_SEL);
-        const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_SEL);
+        // Two zones: the top bar (sections, account, tabs) and the page.
+        const sidebarItems = document.querySelectorAll<HTMLElement>(TOP_NAV_SEL);
+        const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_NAV_SEL);
         const allItems = [...sidebarItems, ...contentItems];
 
         if (allItems.length > 0) {
@@ -3310,10 +3310,10 @@ export default function App() {
           const inSidebar = idx < sidebarItems.length;
 
           if (inSidebar) {
-            // In sidebar: up/down moves within sidebar, right jumps to content
-            if (moveDown) idx = Math.min(idx + 1, sidebarItems.length - 1);
-            if (moveUp) idx = Math.max(idx - 1, 0);
-            if (moveRight && contentItems.length > 0) idx = sidebarItems.length; // first content item
+            // In the top bar: left/right moves along it, down goes into the page.
+            if (moveRight) idx = Math.min(idx + 1, sidebarItems.length - 1);
+            if (moveLeft) idx = Math.max(idx - 1, 0);
+            if (moveDown && contentItems.length > 0) idx = sidebarItems.length; // first content item
           } else {
             // In content: free movement with left/right + up/down by row
             const contentIdx = idx - sidebarItems.length;
@@ -3323,19 +3323,20 @@ export default function App() {
             let newContentIdx = contentIdx;
 
             if (moveDown) newContentIdx = Math.min(contentIdx + cols, contentItems.length - 1);
-            if (moveUp) newContentIdx = Math.max(contentIdx - cols, 0);
-            if (moveRight) newContentIdx = Math.min(contentIdx + 1, contentItems.length - 1);
-            if (moveLeft) {
-              if (contentIdx === 0 || contentIdx % cols === 0) {
-                // At left edge of content → go back to sidebar
-                idx = Math.min(Math.floor(contentIdx / cols), sidebarItems.length - 1);
-                focusIndexRef.current = idx;
-                setFocusIndex(idx);
+            if (moveUp) {
+              if (contentIdx < cols) {
+                // First row of the page → back to the top bar (the open tab, else the open section)
+                const top = [...sidebarItems];
+                const back = Math.max(0, top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active")), top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
+                focusIndexRef.current = back;
+                setFocusIndex(back);
                 lastGamepadButtonsRef.current = [...buttons];
                 return;
               }
-              newContentIdx = contentIdx - 1;
+              newContentIdx = Math.max(contentIdx - cols, 0);
             }
+            if (moveRight) newContentIdx = Math.min(contentIdx + 1, contentItems.length - 1);
+            if (moveLeft) newContentIdx = Math.max(contentIdx - 1, 0);
             idx = sidebarItems.length + newContentIdx;
           }
 
@@ -3440,8 +3441,8 @@ export default function App() {
   useEffect(() => {
     const applyFocus = () => {
       if (!gamepadActiveRef.current) return;
-      const sidebarItems = document.querySelectorAll<HTMLElement>(".sidebar__item");
-      const contentItems = document.querySelectorAll<HTMLElement>(".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item");
+      const sidebarItems = document.querySelectorAll<HTMLElement>(TOP_NAV_SEL);
+      const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_NAV_SEL);
       const allItems = [...sidebarItems, ...contentItems];
       allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
@@ -3458,8 +3459,11 @@ export default function App() {
 
   useEffect(() => {
     if (gamepadActive) {
-      focusIndexRef.current = 0;
-      setFocusIndex(0);
+      // New page: the pad stays on the open section of the top bar.
+      const top = [...document.querySelectorAll<HTMLElement>(TOP_NAV_SEL)];
+      const idx = Math.max(0, top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
+      focusIndexRef.current = idx;
+      setFocusIndex(idx);
     }
   }, [page]);
 
@@ -5381,22 +5385,7 @@ export default function App() {
     }
   };
 
-  const toggleCategory = (cat: string) => {
-    setExpandedCategories(prev =>
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
-    setCategoryFilter(cat);
-    setConsoleFilter(null);
-    if (page !== "catalog" && page !== "library") setPage("catalog");
-  };
 
-  const toggleSidebarConsole = (con: string) => {
-    setExpandedSidebarConsoles(prev =>
-      prev.includes(con) ? prev.filter(c => c !== con) : [...prev, con]
-    );
-    setConsoleFilter(con);
-    if (page !== "library") setPage("library");
-  };
 
   const toggleLibraryCategory = (cat: string) => {
     setExpandedLibraryCategories(prev =>
@@ -5512,6 +5501,59 @@ export default function App() {
 
   const bpRoms = bpConsoleFilter ? roms.filter(r => r.console === bpConsoleFilter) : roms;
   const bpConsoles = [...new Set(roms.map(r => r.console))].sort();
+
+  // ─── v3 navigation: section bar + tabs (src/navigation.tsx) ───
+  // Same side effects as the old sidebar buttons (reset filters, load data).
+  const navigateTo = (p: Page) => {
+    switch (p) {
+      case "catalog": setConsoleFilter(null); setCategoryFilter(null); break;
+      case "library": case "installed": setConsoleFilter(null); break;
+      case "store": setStoreConsoleFilter(null); break;
+      case "leaderboard": loadLeaderboard(); break;
+      case "challenges": loadChallenges(); break;
+      case "friends": loadFriends(); break;
+      case "backup": invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); break;
+      default: break;
+    }
+    setPage(p);
+  };
+  const incomingRequests = pendingRequests.filter(f => f.addressee_id === user?.id).length;
+  const userName = profile?.username || user?.email?.split("@")[0] || "";
+  const topBar = (
+    <header className="v3-topbar">
+      <div className="v3-topbar__row">
+        <Dock page={page} navigate={navigateTo} t={t} badges={{ social: incomingRequests }} />
+        <div className="v3-topbar__user">
+          {user ? (
+            <button
+              className="v3-user gamepad-nav-item"
+              onClick={() => { setNewPseudo(profile?.username || ""); setShowAccountModal(true); }}
+              aria-label={t("sidebar.accountSettings")}
+              title={`${userName} — ${achievementRank.rank} ${achievementRank.count}/${achievementRank.total}`}
+            >
+              <span className="v3-avatar v3-ring">
+                {profile?.avatar_url
+                  ? <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt={t("sidebar.avatar")} />
+                  : userName.slice(0, 2).toUpperCase() || <UserIcon size={20} />}
+              </span>
+              <span className="v3-user__rank" aria-hidden="true">{achievementRank.icon}</span>
+            </button>
+          ) : (
+            <button className="v3-login gamepad-nav-item" onClick={() => setShowLoginModal(true)}>
+              <LogIn size={16} />
+              <span>{t("sidebar.loginSignUp")}</span>
+            </button>
+          )}
+        </div>
+      </div>
+      <SectionTabs
+        page={page}
+        navigate={navigateTo}
+        t={t}
+        counts={{ library: roms.length, catalog: catalog.length, installed: installedCount, store: storeRoms.length }}
+      />
+    </header>
+  );
 
   // Lobby (invitations + panel) and toasts: shown in the app and in Big Picture.
   const lobbyUi = (
@@ -5696,332 +5738,9 @@ export default function App() {
       </div>
 
       <div className="app">
-        <aside className="sidebar">
-          <div className="sidebar__nav">
-          <div className="sidebar__section">
-            <div className="sidebar__label">{t("nav.navigation")}</div>
-            <button
-              className={`sidebar__item ${page === "discover" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("discover")}
-            >
-              <span className="sidebar__item-icon"><Compass size={16} /></span>
-              {t("nav.discover")}
-            </button>
-            <button
-              data-tour="emulators"
-              className={`sidebar__item ${page === "catalog" && !categoryFilter ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("catalog"); setConsoleFilter(null); setCategoryFilter(null); }}
-            >
-              <span className="sidebar__item-icon"><Grid3X3 size={16} /></span>
-              {t("nav.console")}
-              <span className="sidebar__item-count">{catalog.length}</span>
-            </button>
-            <button
-              data-tour="library"
-              className={`sidebar__item ${page === "library" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("library"); setConsoleFilter(null); }}
-            >
-              <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
-              {t("nav.roms")}
-              <span className="sidebar__item-count">{roms.length}</span>
-            </button>
-            <button
-              className={`sidebar__item ${page === "installed" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("installed"); setConsoleFilter(null); }}
-            >
-              <span className="sidebar__item-icon"><HardDrive size={16} /></span>
-              {t("nav.installed")}
-              <span className="sidebar__item-count">{installedCount}</span>
-            </button>
-            <button
-              data-tour="store"
-              className={`sidebar__item ${page === "store" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("store"); setStoreConsoleFilter(null); }}
-            >
-              <span className="sidebar__item-icon"><ShoppingBag size={16} /></span>
-              {t("nav.store")}
-              <span className="sidebar__item-count">{storeRoms.length}</span>
-            </button>
-            <button
-              className={`sidebar__item ${page === "controller" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("controller")}
-            >
-              <span className="sidebar__item-icon"><Gamepad2 size={16} /></span>
-              {t("nav.controller")}
-              {gamepadActive && <span className="sidebar__item-badge">●</span>}
-            </button>
-            <button
-              className={`sidebar__item ${page === "leaderboard" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("leaderboard"); loadLeaderboard(); }}
-            >
-              <span className="sidebar__item-icon"><Trophy size={16} /></span>
-              {t("nav.leaderboard")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "challenges" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("challenges"); loadChallenges(); }}
-            >
-              <span className="sidebar__item-icon"><Flame size={16} /></span>
-              {t("nav.challenges")}
-            </button>
-            <button
-              data-tour="friends"
-              className={`sidebar__item ${page === "friends" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("friends"); loadFriends(); }}
-            >
-              <span className="sidebar__item-icon"><Users size={16} /></span>
-              {t("nav.friends")}
-              {pendingRequests.filter(f => f.addressee_id === user?.id).length > 0 && (
-                <span className="sidebar__item-count" style={{ background: "var(--danger)", color: "var(--on-solid)" }}>
-                  {pendingRequests.filter(f => f.addressee_id === user?.id).length}
-                </span>
-              )}
-            </button>
-            <button
-              className={`sidebar__item ${page === "stats" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("stats")}
-            >
-              <span className="sidebar__item-icon"><Activity size={16} /></span>
-              {t("nav.stats")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "wrap" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("wrap")}
-            >
-              <span className="sidebar__item-icon"><Gift size={16} /></span>
-              {t("nav.monthlyWrap")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "backup" ? "sidebar__item--active" : ""}`}
-              onClick={() => { setPage("backup"); invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); }}
-            >
-              <span className="sidebar__item-icon"><Cloud size={16} /></span>
-              {t("nav.backup")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "settings" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("settings")}
-            >
-              <span className="sidebar__item-icon"><Settings size={16} /></span>
-              {t("nav.settings")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "marketplace" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("marketplace")}
-            >
-              <span className="sidebar__item-icon"><Palette size={16} /></span>
-              {t("nav.marketplace")}
-            </button>
-            <button
-              className={`sidebar__item ${page === "changelogs" ? "sidebar__item--active" : ""}`}
-              onClick={() => setPage("changelogs")}
-            >
-              <span className="sidebar__item-icon"><FileText size={16} /></span>
-              {t("nav.changelogs")}
-            </button>
-          </div>
+        {topBar}
 
-          <div className="sidebar__divider" />
-
-          <div className="sidebar__section">
-            {page === "catalog" ? (
-              <>
-                <div className="sidebar__label">{t("nav.consoles")}</div>
-                <button
-                  className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
-                  onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
-                >
-                  <span className="sidebar__item-icon">🕹️</span>
-                  {t("nav.allConsoles")}
-                </button>
-                {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
-                  const isCatExpanded = expandedCategories.includes(category);
-                  const isCatActive = categoryFilter === category;
-                  return (
-                    <div key={category} className="sidebar__category">
-                      <button
-                        className={`sidebar__category-title ${isCatActive ? "sidebar__category-title--active" : ""}`}
-                        onClick={() => toggleCategory(category)}
-                      >
-                        {isCatExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}
-                        {category}
-                      </button>
-                      <AnimatePresence>
-                        {isCatExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="sidebar__category-items"
-                          >
-                            {categoryConsoles.sort().map((con) => (
-                              <button
-                                key={con}
-                                className={`sidebar__item ${consoleFilter === con ? "sidebar__item--active" : ""}`}
-                                onClick={() => setConsoleFilter(con)}
-                              >
-                                <span className="sidebar__item-icon"><ConsoleLogo name={con} size={14} /></span>
-                                {con}
-                              </button>
-                            ))}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </>
-            ) : page === "store" ? (
-              <>
-                <div className="sidebar__divider" />
-                <div className="sidebar__label">{t("nav.manufacturers")}</div>
-                {storeMode === "vimm"
-                  ? (() => {
-                      const manus = Array.from(new Set(vimmConsoles.map((c) => c.manufacturer)));
-                      return manus.map((m) => (
-                        <button
-                          key={m}
-                          className={`sidebar__item ${selectedVimmManufacturer === m ? "sidebar__item--active" : ""}`}
-                          onClick={() =>
-                            setSelectedVimmManufacturer(selectedVimmManufacturer === m ? null : m)
-                          }
-                        >
-                          <span className="sidebar__item-icon"><BrandLogo brand={m} size={16} /></span>
-                          {m}
-                        </button>
-                      ));
-                    })()
-                  : rgsConstructeurs.map((c) => (
-                      <button
-                        key={c.id}
-                        className={`sidebar__item ${selectedConstructeur === c.id ? "sidebar__item--active" : ""}`}
-                        onClick={() => handleSelectConstructeur(c.id, c.nom)}
-                      >
-                        <span className="sidebar__item-icon"><BrandLogo brand={c.nom} size={16} /></span>
-                        {c.nom}
-                      </button>
-                    ))}
-              </>
-            ) : page === "library" ? (
-              <>
-                <div className="sidebar__label">{t("nav.library")}</div>
-                <button
-                  className={`sidebar__item ${!categoryFilter && !consoleFilter ? "sidebar__item--active" : ""}`}
-                  onClick={() => { setCategoryFilter(null); setConsoleFilter(null); }}
-                >
-                  <span className="sidebar__item-icon">📂</span>
-                  {t("nav.allGames")}
-                </button>
-                {Object.entries(consolesByCategory).map(([category, categoryConsoles]) => {
-                  const isCatExpanded = expandedCategories.includes(category);
-                  const isCatActive = categoryFilter === category;
-                  return (
-                    <div key={category} className="sidebar__category">
-                      <button
-                        className={`sidebar__category-title ${isCatActive ? "sidebar__category-title--active" : ""}`}
-                        onClick={() => toggleCategory(category)}
-                      >
-                        {isCatExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}
-                        {category}
-                      </button>
-                      <AnimatePresence>
-                        {isCatExpanded && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="sidebar__category-items"
-                          >
-                            {categoryConsoles.sort().map((con) => {
-                              const isConExpanded = expandedSidebarConsoles.includes(con);
-                              const isConActive = consoleFilter === con;
-                              const consoleGames = roms.filter(r => r.console === con);
-                              
-                              if (consoleGames.length === 0) return null;
-
-                              return (
-                                <div key={con} className="sidebar__console">
-                                  <button
-                                    className={`sidebar__item ${isConActive ? "sidebar__item--active" : ""}`}
-                                    onClick={() => toggleSidebarConsole(con)}
-                                  >
-                                    <span className="sidebar__item-icon">{isConExpanded ? <ChevronDown size={10} /> : <ChevronIcon size={10} />}</span>
-                                    <span className="sidebar__item-icon sidebar__item-icon--console"><ConsoleLogo name={con} size={14} /></span>
-                                    {con}
-                                    <span className="sidebar__item-count">{consoleGames.length}</span>
-                                  </button>
-                                  
-                                  <AnimatePresence>
-                                    {isConExpanded && (
-                                      <motion.div
-                                        initial={{ height: 0, opacity: 0 }}
-                                        animate={{ height: "auto", opacity: 1 }}
-                                        exit={{ height: 0, opacity: 0 }}
-                                        className="sidebar__game-list"
-                                      >
-                                        {consoleGames.sort((a,b) => a.name.localeCompare(b.name)).map(game => (
-                                          <button 
-                                            key={game.path} 
-                                            className="sidebar__game-item"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleLaunch(game);
-                                            }}
-                                            title={game.name}
-                                          >
-                                            <Play size={10} className="sidebar__game-icon" />
-                                            <span className="sidebar__game-name">{game.name}</span>
-                                          </button>
-                                        ))}
-                                      </motion.div>
-                                    )}
-                                  </AnimatePresence>
-                                </div>
-                              );
-                            })}
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  );
-                })}
-              </>
-            ) : null}
-          </div>
-
-          </div>
-          {/* User card at the bottom of the sidebar */}
-          <div className="sidebar__user-card">
-            {user ? (
-              <div className="sidebar__user-info" onClick={() => { setNewPseudo(profile?.username || ""); setShowAccountModal(true); }}>
-                <div className="sidebar__user-avatar">
-                  {profile?.avatar_url ? (
-                    <img src={`${profile.avatar_url}${avatarCacheKey ? `?v=${avatarCacheKey}` : ""}`} alt={t("sidebar.avatar")} />
-                  ) : (
-                    <UserIcon size={20} />
-                  )}
-                  <span className="sidebar__user-badge" title={`${achievementRank.rank} — ${achievementRank.count}/${achievementRank.total}`}>
-                    {achievementRank.icon}
-                  </span>
-                </div>
-                <div className="sidebar__user-details">
-                  <div className="sidebar__user-name">{profile?.username || user.email?.split('@')[0] || 'User'}</div>
-                  <div className="sidebar__user-email">{user.email}</div>
-                </div>
-                <button className="sidebar__user-settings" title={t("sidebar.accountSettings")}>
-                  <Settings size={14} />
-                </button>
-              </div>
-            ) : (
-              <button className="sidebar__login-btn" onClick={() => setShowLoginModal(true)}>
-                <LogIn size={16} />
-                <span>{t("sidebar.loginSignUp")}</span>
-              </button>
-            )}
-          </div>
-        </aside>
-
-        <main className="main-content" ref={mainContentRef}>
+        <main className="main-content" ref={mainContentRef} data-page={page}>
           <div className={`dynamic-bg ${bgCover ? "dynamic-bg--visible" : ""}`}>
             {bgCover && <img src={bgCover} alt="" />}
           </div>
@@ -6512,6 +6231,19 @@ export default function App() {
                     )
                   ) : !selectedVimmConsole ? (
                     /* ---- Console grid (empty query, no console selected) ---- */
+                    <>
+                    {/* Manufacturer filter (was in the sidebar before v3) */}
+                    <div className="v3-tabs store-manufacturers" role="group" aria-label={t("nav.manufacturers")}>
+                      {[null, ...Array.from(new Set(vimmConsoles.map((c) => c.manufacturer)))].map((m) => (
+                        <button
+                          key={m ?? "all"}
+                          className={`v3-tabs__item gamepad-nav-item${selectedVimmManufacturer === m ? " active" : ""}`}
+                          onClick={() => setSelectedVimmManufacturer(m)}
+                        >
+                          {m ? <><BrandLogo brand={m} size={16} /> {m}</> : t("nav.allConsoles")}
+                        </button>
+                      ))}
+                    </div>
                     <div className="rgs-console-grid">
                       {vimmConsoles
                         .filter((c) => !selectedVimmManufacturer || c.manufacturer === selectedVimmManufacturer)
@@ -6535,6 +6267,7 @@ export default function App() {
                         </motion.div>
                       ))}
                     </div>
+                    </>
                   ) : (
                     /* ---- Console selected but no query yet: hint the user ---- */
                     <div className="empty-state">

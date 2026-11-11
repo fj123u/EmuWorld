@@ -3,6 +3,8 @@
 // them is under 3:1 (texts on images or gradients are skipped).
 // window.__auditAll(themes, pages): runs it on every page of every theme and
 // stores the result in window.__auditResult (window.__auditDone = true).
+import { sectionOf, type Page } from "../../src/navigation";
+
 type Rgba = { r: number; g: number; b: number; a: number };
 
 function parse(c: string): Rgba | null {
@@ -62,7 +64,7 @@ export function audit(): string[] {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export async function auditAll(themes: (string | null)[], pages: string[]) {
+export async function auditAll(themes: (string | null)[], pages: Page[]) {
   const w = window as unknown as Record<string, unknown>;
   w.__auditDone = false;
   const result: Record<string, Record<string, string[]>> = {};
@@ -70,13 +72,14 @@ export async function auditAll(themes: (string | null)[], pages: string[]) {
     if (th) document.documentElement.setAttribute("data-theme", th);
     else document.documentElement.removeAttribute("data-theme");
     const res: Record<string, string[]> = {};
-    for (const label of pages) {
-      const btn = [...document.querySelectorAll<HTMLElement>("[data-nav-page], .sidebar__item, .v3-dock__item, .v3-tabs__item")]
-        .find((b) => b.getAttribute("data-nav-page") === label || b.textContent?.trim().replace(/\d+$/, "").trim() === label);
-      btn?.click();
+    for (const page of pages) {
+      // The section in the bar, then the page's tab.
+      document.querySelector<HTMLElement>(`[data-section="${sectionOf(page)}"]`)?.click();
+      await wait(300);
+      document.querySelector<HTMLElement>(`[data-nav-page="${page}"]`)?.click();
       await wait(500);
       const r = audit();
-      if (r.length) res[label] = r;
+      if (r.length) res[page] = r;
     }
     result[th ?? "light"] = res;
   }

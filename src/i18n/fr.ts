@@ -22,6 +22,10 @@ const fr = {
     monthlyWrap: "Wrap mensuel",
     marketplace: "Marketplace",
     allGames: "Tous les jeux",
+    home: "Accueil",
+    games: "Jeux",
+    social: "Social",
+    trophies: "Succès",
   },
 
   // Header / Page titles

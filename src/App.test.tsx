@@ -62,10 +62,24 @@ async function renderApp(overrides: Record<string, Handler> = {}) {
   return { backend, ...utils };
 }
 
-function sidebarButtons(container: HTMLElement) {
-  const nav = container.querySelector(".sidebar__nav");
-  if (!nav) throw new Error("sidebar not found");
-  return [...nav.querySelectorAll("button")].filter((b) => b.textContent?.trim());
+/** Buttons of the v3 navigation: the section bar, then the tabs of the open section. */
+function navButtons(container: HTMLElement) {
+  const bar = container.querySelector(".v3-topbar");
+  if (!bar) throw new Error("navigation bar not found");
+  return [...bar.querySelectorAll<HTMLElement>(".v3-dock__item, .v3-tabs__item")];
+}
+
+/** Opens a page by its label: the section in the bar, then its tab ("Roms" is a tab of Jeux). */
+function navTo(container: HTMLElement, label: string) {
+  const find = () => navButtons(container).find((b) => (b.getAttribute("aria-label") ?? "") === label || b.textContent?.trim().startsWith(label));
+  let button = find();
+  for (const section of [...container.querySelectorAll<HTMLElement>(".v3-dock__item")]) {
+    if (button) break;
+    fireEvent.click(section);
+    button = find();
+  }
+  if (!button) throw new Error(`no navigation button "${label}"`);
+  fireEvent.click(button);
 }
 
 describe("App", () => {
@@ -75,7 +89,7 @@ describe("App", () => {
     // The library scan uses the configured ROMs folder.
     const scan = backend.calls.find((c) => c.cmd === "scan_roms");
     expect(scan?.args).toMatchObject({ directory: "D:\\Roms" });
-    expect(sidebarButtons(container).length).toBeGreaterThan(5);
+    expect(navButtons(container).length).toBeGreaterThanOrEqual(6);
   });
 
   it("shows the app's real version in the titlebar", async () => {
@@ -84,13 +98,10 @@ describe("App", () => {
     await waitFor(() => expect(container.querySelector(".titlebar__version")?.textContent).toBe("v0.0.0-test"));
   });
 
-  it("opens every sidebar page without crashing", async () => {
+  it("opens every page without crashing", async () => {
     const { container, backend } = await renderApp();
-    const labels = sidebarButtons(container).map((b) => b.textContent!.trim());
-    // Guard against the test silently visiting nothing if the sidebar markup changes.
-    expect(labels.length).toBeGreaterThanOrEqual(12);
-    for (const label of labels) {
-      const button = sidebarButtons(container).find((b) => b.textContent!.trim() === label)!;
+    const visited = new Set<string>();
+    const open = async (button: HTMLElement) => {
       await act(async () => {
         fireEvent.click(button);
       });
@@ -98,10 +109,21 @@ describe("App", () => {
       await act(async () => {
         await new Promise((r) => setTimeout(r, 50));
       });
-      expect(screen.queryByTestId("crashed"), `page "${label}" crashed`).toBeNull();
-      const main = container.querySelector("main.main-content");
-      expect(main?.textContent?.trim().length, `page "${label}" rendered nothing`).toBeGreaterThan(0);
+      const main = container.querySelector<HTMLElement>("main.main-content")!;
+      const page = main.dataset.page!;
+      visited.add(page);
+      expect(screen.queryByTestId("crashed"), `page "${page}" crashed`).toBeNull();
+      expect(main.textContent?.trim().length, `page "${page}" rendered nothing`).toBeGreaterThan(0);
+    };
+    // Every section of the bar, then every tab of that section.
+    const sections = [...container.querySelectorAll<HTMLElement>(".v3-dock__item")];
+    expect(sections.length).toBe(6);
+    for (const section of sections) {
+      await open(section);
+      for (const tab of [...container.querySelectorAll<HTMLElement>(".v3-tabs__item[data-nav-page]")]) await open(tab);
     }
+    // Same 15 pages as the old sidebar: the test must not visit fewer.
+    expect([...visited].sort()).toEqual(["backup", "catalog", "challenges", "changelogs", "controller", "discover", "friends", "installed", "leaderboard", "library", "marketplace", "settings", "stats", "store", "wrap"]);
     // Commands answered with `null` because tauriMock.ts has no handler.
     // Not a failure, but a hint the mock should learn the real return shape.
     if (backend.unknown.size > 0) {
@@ -116,7 +138,7 @@ describe("App", () => {
 
   it("shows hostile ROM names as text, never as HTML", async () => {
     const { container } = await renderApp();
-    fireEvent.click(sidebarButtons(container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(container, "Roms");
     await act(async () => {
       await new Promise((r) => setTimeout(r, 50));
     });
@@ -148,7 +170,7 @@ describe("Vimm store download", () => {
 
   async function openVimmResults(overrides: Record<string, Handler>) {
     const r = await renderApp({ search_vimm: () => [vimmGame], ...overrides });
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Store"))!);
+    navTo(r.container, "Store");
     const search = await screen.findByPlaceholderText(/Vimm/i);
     fireEvent.change(search, { target: { value: "zelda" } });
     const row = await screen.findByText("Zelda Test", {}, { timeout: 3000 });
@@ -214,7 +236,7 @@ describe("Vimm store download", () => {
 describe("smart playlists", () => {
   async function openLibraryFilter() {
     const r = await renderApp();
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     const filter = (await screen.findByDisplayValue("Tous")) as HTMLSelectElement;
     return { ...r, filter };
   }
@@ -243,7 +265,7 @@ describe("smart playlists", () => {
 describe("RetroArch rewind setting", () => {
   it("saves the choice in the config, and can hand control back to RetroArch", async () => {
     const { container, backend } = await renderApp();
-    fireEvent.click(sidebarButtons(container).find((b) => b.textContent?.trim() === "Réglages")!);
+    navTo(container, "Réglages");
     const field = (await screen.findByText("Rembobinage (rewind)")).closest(".settings__field") as HTMLElement;
     const button = (name: string) => [...field.querySelectorAll("button")].find((b) => b.textContent === name)!;
 
@@ -319,7 +341,7 @@ describe("console colours", () => {
 
   async function openNesInLibrary() {
     const r = await renderApp();
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.click(await screen.findByText("Nintendo", { selector: ".rgs-console-card__name" }));
     fireEvent.click(await screen.findByText("NES", { selector: ".rgs-console-card__name" }));
     return r;
@@ -330,7 +352,7 @@ describe("console colours", () => {
     await waitFor(() => expect(root.hasAttribute("data-console-accent")).toBe(true));
     expect(root.style.getPropertyValue("--console-hue")).toBe("0");
 
-    fireEvent.click(sidebarButtons(container).find((b) => b.textContent?.trim() === "Réglages")!);
+    navTo(container, "Réglages");
     await waitFor(() => expect(root.hasAttribute("data-console-accent")).toBe(false));
   });
 
@@ -353,7 +375,7 @@ describe("save states manager", () => {
 
   async function openSaveStates(overrides: Record<string, Handler> = {}) {
     const r = await renderApp({ list_save_states: () => states, ...overrides });
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
@@ -407,7 +429,7 @@ describe("save states manager", () => {
 
   it("explains how to make one when the game has none", async () => {
     const r = await renderApp({ list_save_states: () => [] });
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
     const card = r.container.querySelector(".game-grid .game-card")!;
     fireEvent.contextMenu(card);
@@ -420,7 +442,7 @@ describe("game menu", () => {
   it("speaks the app's language", async () => {
     localStorage.setItem("emuworld-locale", "en");
     const r = await renderApp();
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.change(await screen.findByDisplayValue("All"), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     fireEvent.contextMenu(r.container.querySelector(".game-grid .game-card")!);
@@ -442,7 +464,7 @@ describe("cover picker in the library", () => {
         { url: "https://assets.iisu.network/smb3.png", thumbnail: null, region: "Europe", console_id: "nes" },
       ] }],
     });
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
@@ -515,10 +537,39 @@ describe("cover picker in Big Picture", () => {
   });
 });
 
+describe("gamepad in the v3 navigation", () => {
+  async function pad(pressed: number | null) {
+    const buttons = Array.from({ length: 16 }, (_, i) => i === pressed);
+    await act(async () => {
+      await emit("gamepad-state", { connected: true, name: "Pad", buttons, axes: [0, 0, 0, 0] });
+    });
+  }
+  async function press(button: number) {
+    await pad(button);
+    await pad(null);
+  }
+  const focused = (c: HTMLElement) => c.querySelector<HTMLElement>(".gamepad-focused");
+
+  it("moves along the section bar, opens a section with A, goes down into the page and back up", async () => {
+    const r = await renderApp();
+    await pad(null); // pad connected
+    await press(15); // right: Accueil -> Jeux
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-section")).toBe("games"));
+    await press(0); // A
+    await waitFor(() => expect(r.container.querySelector<HTMLElement>("main.main-content")!.dataset.page).toBe("library"));
+    // The pad stays on the open section of the bar.
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-section")).toBe("games"));
+    await press(13); // down: into the page
+    await waitFor(() => expect(focused(r.container)?.closest("main.main-content")).not.toBeNull());
+    await press(12); // up from the first row: back to the bar, on the open tab
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
+  });
+});
+
 describe("gamepad in the library", () => {
   it("Y toggles the favorite of the focused game", async () => {
     const r = await renderApp();
-    fireEvent.click(sidebarButtons(r.container).find((b) => b.textContent?.includes("Roms"))!);
+    navTo(r.container, "Roms");
     fireEvent.change(await screen.findByDisplayValue("Tous"), { target: { value: "long" } });
     await waitFor(() => expect(r.container.querySelector(".game-grid .game-card")).not.toBeNull());
     const card = r.container.querySelector(".game-grid .game-card") as HTMLElement;
