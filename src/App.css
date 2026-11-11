@@ -7016,7 +7016,7 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
   box-shadow: 0 0 0 3px var(--k);
   background: color-mix(in srgb, var(--k) 28%, var(--panel));
 }
-.game-card:hover .game-card__cover { box-shadow: 0 0 0 3px var(--k); }
+.game-card:hover .game-card__cover { box-shadow: var(--shadow-soft); }
 .game-card__placeholder { background: transparent; }
 /* Name and details sit on the page under the cover (no card behind them). */
 .game-card__info { background: transparent; border: none; padding: 10px 4px 4px; }
@@ -7092,7 +7092,7 @@ textarea.settings__field-input { border-radius: var(--radius-md); padding-top: 1
 .home-game { display: flex; flex-direction: column; gap: 8px; text-align: left; color: var(--ink); border-radius: var(--radius-md); }
 .home-game__name { font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-game__meta { color: var(--mut); font-size: 13px; }
-.home-game:hover .v3-cover { box-shadow: 0 0 0 3px var(--k); }
+.home-game:hover .v3-cover { box-shadow: var(--shadow-soft); }
 
 .home-card { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; box-shadow: var(--shadow-soft); }
 .home-card__title { font-size: 20px; line-height: 1.2; color: var(--ink); }
@@ -7433,7 +7433,7 @@ img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }
 .game-card.gamepad-focused, .bp-card.gamepad-focused,
 .big-picture__console-card.gamepad-focused, .rgs-console-card.gamepad-focused { outline: none !important; }
 .game-card.gamepad-focused { box-shadow: none; }
-.game-card.gamepad-focused .game-card__cover { box-shadow: 0 0 0 3px var(--k), 0 0 0 8px var(--accent); }
+.game-card.gamepad-focused .game-card__cover { box-shadow: 0 0 0 3px var(--panel), 0 0 0 7px var(--accent); }
 .rgs-console-card.gamepad-focused { box-shadow: 0 0 0 3px var(--k), 0 0 0 8px var(--accent); }
 /* Store: the search bar and its buttons on one row, never on top of each other */
 .rgs-search-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
@@ -7441,3 +7441,16 @@ img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }
 .rgs-search-header .btn { flex: none; }
 /* Library selects: the app's font and size, like the tabs next to them */
 .library-sort-select, .lobby-panel__invite-select { font-family: inherit; font-size: 15px; font-weight: 800; }
+/* Covers: the image alone, no ring in the console color (the card clipped
+   it, leaving a colored strip under the cover). The console color stays on
+   a game without a cover. */
+.game-card { overflow: visible; }
+.game-card__cover, .bp-card__cover, .home-cover { border: none; box-shadow: var(--shadow-soft); background: var(--soft); }
+.game-card__cover:not(:has(img)), .bp-card__cover:not(:has(img)), .home-cover:not(:has(img)) { background-color: color-mix(in srgb, var(--k) 28%, var(--panel)); }
+.home-resume .home-cover { box-shadow: var(--shadow-soft); }
+/* Search bars: the pill shows the focus; the field inside draws no second
+   (rectangular) outline, with the keyboard or the pad. */
+.search-bar__input:focus, .search-bar__input:focus-visible, .search-bar__input.gamepad-focused { outline: none !important; box-shadow: none; }
+.search-bar:has(.search-bar__input.gamepad-focused) { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent); }
+/* Social: "Voir plus" under the recent activity */
+.activity-feed__more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }

@@ -628,6 +628,9 @@ const fr = {
     allUpToDate: "Tous les émulateurs sont à jour !",
     available: "{count} mise(s) à jour disponible(s)",
     update: "Mettre à jour",
+    installAll: "Installer toutes les mises à jour ({count})",
+    installingAll: "Mise à jour de {count} émulateur(s)…",
+    allInstalled: "{count} émulateur(s) mis à jour",
   },
 
   // Challenges
@@ -1018,6 +1021,9 @@ const fr = {
     activityAdded: "a ajouté",
     activityAddedEnd: "à sa bibliothèque",
     activityCompleted: "a terminé",
+    activityUnlocked: "a débloqué",
+    activityMore: "Voir {count} de plus",
+    activityLess: "Voir moins",
     justNow: "à l'instant",
     minutesAgo: "il y a {n} min",
     hoursAgo: "il y a {n} h",

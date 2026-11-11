@@ -58,6 +58,9 @@ export function defaultHandlers(): Record<string, Handler> {
     watch_roms_directory: () => null,
     check_roms_health: () => [],
     check_emulator_updates: () => [],
+    install_emulator: (args) => `installed ${(args as { emulatorId: string }).emulatorId}`,
+    uninstall_emulator: (args) => `uninstalled ${(args as { emulatorId: string }).emulatorId}`,
+    save_emulator_version: () => null,
     fetch_boxart: () => null,
     get_cover_url: () => null,
     // Playtime & profile

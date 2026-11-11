@@ -6,7 +6,7 @@ import { Component, type ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
-import App, { CoverImage } from "./App";
+import App, { BrandLogo, ConsoleLogo, CoverImage } from "./App";
 import { AchievementCelebration, CELEBRATION_MS } from "./AchievementCelebration";
 import { mockBackend, type Handler } from "./test/tauriMock";
 
@@ -615,6 +615,14 @@ describe("cover picker in Big Picture", () => {
     expect(r.container.querySelector(".big-picture")).not.toBeNull();
   });
 
+  it("highlights only the game the pad is on (the back button is the first item)", async () => {
+    const r = await openBigPictureOnNes();
+    await press(15); // right: from the back button to the first game
+    const card = r.container.querySelector(".big-picture .bp-card")!;
+    await waitFor(() => expect(card.classList.contains("bp-card--focused")).toBe(true));
+    expect(r.container.querySelectorAll(".big-picture .bp-card--focused, .big-picture .bp-card.gamepad-focused")).toHaveLength(1);
+  });
+
   it("Y asks for a lobby for the focused game, and says why not when signed out", async () => {
     const r = await openBigPictureOnNes();
     expect(bpHints(r.container)).toContain("YCréer un lobby");
@@ -666,18 +674,26 @@ describe("gamepad in the v3 navigation", () => {
     await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
   });
 
-  it("RB / LB open the next / previous tab in the order of the bar", async () => {
+  it("RB / LB change section; on the tabs, they change tab inside the section", async () => {
     const r = await renderApp();
     await pad(null);
     const page = () => r.container.querySelector<HTMLElement>("main.main-content")!.dataset.page;
     navTo(r.container, "Roms");
-    await press(5); // RB: Roms → Console (was Installé)
-    await waitFor(() => expect(page()).toBe("catalog"));
-    navTo(r.container, "Store");
-    await press(5); // RB: Store → Marketplace (was Réglages)
-    await waitFor(() => expect(page()).toBe("marketplace"));
-    await press(4); // LB
+    await press(5); // RB, pad on the section bar: Jeux → Store
     await waitFor(() => expect(page()).toBe("store"));
+    await press(4); // LB: back to Jeux
+    await waitFor(() => expect(page()).toBe("library"));
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-section")).toBe("games"));
+    await press(13); // down: onto the tabs (Roms)
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
+    await press(5); // RB on the tabs: Roms → Console, the pad stays on the tabs
+    await waitFor(() => expect(page()).toBe("catalog"));
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("catalog"));
+    await press(5);
+    await waitFor(() => expect(page()).toBe("installed"));
+    await press(5); // last tab: stays in Jeux
+    await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("installed"));
+    expect(page()).toBe("installed");
   });
 });
 
@@ -699,6 +715,50 @@ describe("gamepad in the library", () => {
     const args = r.backend.calls.find((c) => c.cmd === "toggle_favorite")?.args as { console: string; name: string };
     expect(args.name.length).toBeGreaterThan(0);
     expect(args.console.length).toBeGreaterThan(0);
+  });
+});
+
+describe("emulator updates", () => {
+  it("installs every update found, one emulator after the other", async () => {
+    const r = await renderApp({
+      check_emulator_updates: () => [
+        { id: "mesen", name: "Mesen 2", current_version: "2.0.0", latest_version: "2.1.0" },
+        { id: "mgba", name: "mGBA", current_version: "0.10.3", latest_version: "0.10.5" },
+      ],
+    });
+    navTo(r.container, "Roms");
+    await screen.findByRole("combobox", { name: "Playlists intelligentes" });
+    navTo(r.container, "Installé");
+    // The previous page leaves with an animation first.
+    const check = await screen.findByRole("button", { name: /Vérifier les mises à jour/ }, { timeout: 4000 });
+    expect(screen.queryByRole("button", { name: /Installer toutes les mises à jour/ })).toBeNull();
+    await act(async () => {
+      fireEvent.click(check);
+    });
+    const all = await screen.findByRole("button", { name: "Installer toutes les mises à jour (2)" });
+    await act(async () => {
+      fireEvent.click(all);
+    });
+    await waitFor(() => expect(r.backend.count("save_emulator_version")).toBe(2));
+    const steps = r.backend.calls
+      .filter((c) => ["uninstall_emulator", "install_emulator", "save_emulator_version"].includes(c.cmd))
+      .map((c) => `${c.cmd} ${(c.args as { emulatorId: string }).emulatorId}`);
+    expect(steps).toEqual([
+      "uninstall_emulator mesen", "install_emulator mesen", "save_emulator_version mesen",
+      "uninstall_emulator mgba", "install_emulator mgba", "save_emulator_version mgba",
+    ]);
+    expect(r.backend.calls.find((c) => c.cmd === "save_emulator_version" && (c.args as { emulatorId: string }).emulatorId === "mgba")?.args).toMatchObject({ version: "0.10.5" });
+    // Done: the button goes away with the updates.
+    await waitFor(() => expect(screen.queryByRole("button", { name: /Installer toutes les mises à jour/ })).toBeNull());
+  });
+});
+
+describe("console and manufacturer logos", () => {
+  it("shows RetroArch's logo for Multi-System (no console wordmark exists)", () => {
+    const { container } = render(<><BrandLogo brand="Multi-System" size={40} /><ConsoleLogo name="Multi-System" size={40} /></>);
+    const imgs = [...container.querySelectorAll("img")];
+    expect(imgs).toHaveLength(2);
+    for (const img of imgs) expect(img.getAttribute("src")).toContain("libretro/RetroArch");
   });
 });
 

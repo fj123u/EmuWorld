@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { memo, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -15,12 +15,15 @@ import { DEFAULT_COLLECTIONS } from "./defaultCollections";
 import { AchievementCelebration, achievementAnimationEnabled, ACHIEVEMENT_ANIMATION_KEY, type CelebratedAchievement } from "./AchievementCelebration";
 import { applyConsoleAccent, consoleColorsEnabled, consoleHue, CONSOLE_COLORS_KEY } from "./consoleTheme";
 import { BASE_THEMES, DARK_VARIANTS, DEFAULT_THEME, themeNameKey, themeSwatch } from "./themes";
-import { Dock, SectionTabs, adjacentTabPage, type Page } from "./navigation";
+import { ActivityFeed } from "./ActivityFeed";
+import { Dock, SectionTabs, adjacentSectionPage, adjacentTabInSection, type Page } from "./navigation";
 import { HomePage } from "./HomePage";
 import appIcon from "./assets/app-icon.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
+import { clearCoverCache, loadCover, useLazyCover } from "./coverCache";
+import { pushBoxartLog, useBoxartLogs, type BoxartLog } from "./boxartLogs";
 import { boxOf, moveFocus, spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
@@ -518,7 +521,24 @@ const BRAND_CARBON_SLUG: Record<string, string | null> = {
   "Multi-System": "retroarch",
 };
 
-const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
+/** Logos that are a picture, not a console wordmark: Multi-System is RetroArch. */
+const LOGO_IMAGE: Record<string, string> = {
+  "Multi-System": "https://raw.githubusercontent.com/libretro/RetroArch/master/media/retroarch-96x96.png",
+};
+
+/** A square logo picture (LOGO_IMAGE), or the emoji when it cannot load. */
+const LogoImage = ({ name, size, className, emoji }: { name: string; size: number; className: string; emoji: string }) => {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <span className={`${className} ${className}--emoji`} style={{ fontSize: size * 0.75 }} aria-label={name}>{emoji}</span>;
+  return <img className={className} src={LOGO_IMAGE[name]} alt={name} style={{ height: size, width: size, objectFit: "contain" }} onError={() => setFailed(true)} />;
+};
+
+export const BrandLogo = ({ brand, size = 32 }: { brand: string; size?: number }) => {
+  if (LOGO_IMAGE[brand]) return <LogoImage name={brand} size={size} className="brand-logo" emoji={BRAND_EMOJI_FALLBACK[brand] || "🎮"} />;
+  return <BrandWordmark brand={brand} size={size} />;
+};
+
+const BrandWordmark = ({ brand, size }: { brand: string; size: number }) => {
   const carbonSlug = BRAND_CARBON_SLUG[brand];
   const retroarchSlug = BRAND_REPRESENTATIVE_CONSOLE[brand];
   const emoji = BRAND_EMOJI_FALLBACK[brand] || "🎮";
@@ -729,7 +749,12 @@ const CONSOLE_CARBON_SLUG: Record<string, string> = {
   "CDi": "cdi",
 };
 
-const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
+export const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
+  if (LOGO_IMAGE[name]) return <LogoImage name={name} size={size} className="console-logo" emoji={CONSOLE_ICONS[name] || "🎮"} />;
+  return <ConsoleWordmark name={name} size={size} />;
+};
+
+const ConsoleWordmark = ({ name, size }: { name: string; size: number }) => {
   const carbonSlug = CONSOLE_CARBON_SLUG[name];
   const retroarchSlug = CONSOLE_RETROARCH_SLUG[name];
   const emoji = CONSOLE_ICONS[name] || "🎮";
@@ -879,9 +904,7 @@ function consoleHueStyle(consoleName: string): React.CSSProperties | undefined {
 const DiscoverCover = ({ rom }: { rom: RomFile }) => {
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
-    invoke<string>("fetch_boxart", { gameName: rom.name, console: rom.console, forceRefresh: false })
-      .then(setCover)
-      .catch(() => {});
+    loadCover(rom.name, rom.console).then(setCover).catch(() => {});
   }, [rom.name, rom.console]);
   return (
     <div className="discover-card__cover">
@@ -893,9 +916,7 @@ const DiscoverCover = ({ rom }: { rom: RomFile }) => {
 const SuggestionCover = ({ gameName, console: consoleName }: { gameName: string; console: string }) => {
   const [cover, setCover] = useState<string | null>(null);
   useEffect(() => {
-    invoke<string>("fetch_boxart", { gameName, console: consoleName, forceRefresh: false })
-      .then(setCover)
-      .catch(() => {});
+    loadCover(gameName, consoleName).then(setCover).catch(() => {});
   }, [gameName, consoleName]);
   return (
     <div style={{ width: 56, height: 56, borderRadius: 10, overflow: "hidden", background: "var(--soft)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -904,7 +925,34 @@ const SuggestionCover = ({ gameName, console: consoleName }: { gameName: string;
   );
 };
 
-const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
+/** Settings → last cover-search events. Owns its subscription, so only it re-renders. */
+const BoxartLogList = () => {
+  const { t } = useTranslation();
+  const logs = useBoxartLogs();
+  const endRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+  if (logs.length === 0) return <p className="settings__field-desc">{t("settings.noLogs")}</p>;
+  return (
+    <div className="logs-container">
+      {logs.map((log, i) => (
+        <div key={i} className="log-item">
+          <span className="log-game">[{log.game}]</span>
+          <span className="log-url">{log.url}</span>
+          <span className={`log-status log-status--${log.status.toLowerCase().includes("success") ? "success" : "info"}`}>
+            {log.status}
+          </span>
+        </div>
+      ))}
+      <div ref={endRef} />
+    </div>
+  );
+};
+
+// Memoized: the library shows hundreds of these, and App re-renders often.
+// Every prop passed to it must keep its identity between renders.
+const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
@@ -917,33 +965,13 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
   onContextMenu?: (rom: RomFile, x: number, y: number) => void,
 }) => {
   const { t } = useTranslation();
-  const [cover, setCover] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  const fetchCover = useCallback(async (forceRefresh = false) => {
-    try {
-      setLoading(true);
-      const dataUrl: string = await invoke("fetch_boxart", {
-        gameName: rom.name,
-        console: rom.console,
-        forceRefresh,
-      });
-      setCover(dataUrl);
-    } catch (e) {
-      // No cover available, placeholder will show
-    } finally {
-      setLoading(false);
-    }
-  }, [rom.name, rom.console]);
-
-  useEffect(() => {
-    fetchCover();
-  }, [fetchCover]);
+  // The cover is only loaded once the card comes near the screen.
+  const { ref: cardRef, cover, setCover, loading, retry } = useLazyCover(rom);
   useCoverChanges(rom, setCover);
 
   return (
     <motion.div
-      layout
+      ref={cardRef}
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       whileHover={{ scale: 1.02, y: -4 }}
@@ -964,7 +992,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
             <div className="game-card__placeholder-title">{rom.name}</div>
             <button
               className="game-card__retry"
-              onClick={(e) => { e.stopPropagation(); fetchCover(true); }}
+              onClick={(e) => { e.stopPropagation(); retry(); }}
               title={t("card.retryTitle")}
             >
               <RefreshCw size={12} /> {t("card.retry")}
@@ -1057,7 +1085,7 @@ const GameCard = ({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, 
       </div>
     </motion.div>
   );
-};
+});
 
 const BigPictureCard = ({ rom, focused, entry, onLaunch, onChooseCover }: {
   rom: RomFile;
@@ -1069,9 +1097,7 @@ const BigPictureCard = ({ rom, focused, entry, onLaunch, onChooseCover }: {
   const [cover, setCover] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<string>("fetch_boxart", { gameName: rom.name, console: rom.console })
-      .then(setCover)
-      .catch(() => {});
+    loadCover(rom.name, rom.console).then(setCover).catch(() => {});
   }, [rom.name, rom.console]);
   useCoverChanges(rom, setCover);
 
@@ -1441,26 +1467,14 @@ export default function App() {
     return <SpeedrunRoot />;
   }
 
-  const [boxartLogs, setBoxartLogs] = useState<{ game: string; url: string; status: string; error?: string }[]>([]);
-  const logsEndRef = useRef<HTMLDivElement>(null);
-
+  // Cover-search events go to a store outside React state (see boxartLogs.ts):
+  // one arrives per cover, and App must not re-render for each of them.
   useEffect(() => {
-    const unlisten = listen<{ game: string; url: string; status: string; error?: string }>(
-      "boxart-log",
-      (event) => {
-        setBoxartLogs((prev) => [...prev, event.payload].slice(-50));
-      }
-    );
+    const unlisten = listen<BoxartLog>("boxart-log", (event) => pushBoxartLog(event.payload));
     return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
-
-  useEffect(() => {
-    if (logsEndRef.current) {
-      logsEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [boxartLogs]);
 
   const { t, locale, setLocale } = useTranslation();
   /** t() for keys built at runtime: `fallback` when the key does not exist. */
@@ -1555,10 +1569,18 @@ export default function App() {
   useEffect(() => () => applyConsoleAccent(document.documentElement, null), []);
   const [newCollectionName, setNewCollectionName] = useState("");
   const [romContextMenu, setRomContextMenu] = useState<{ rom: RomFile; x: number; y: number } | null>(null);
+  // Stable callbacks for the memoized game cards: handleLaunch / handleDeleteRom
+  // are re-created on every render, so the cards get these wrappers instead.
+  const launchRef = useRef<(rom: RomFile) => void>(() => {});
+  const deleteRef = useRef<(rom: RomFile) => void>(() => {});
+  const launchFromCard = useCallback((rom: RomFile) => launchRef.current(rom), []);
+  const deleteFromCard = useCallback((rom: RomFile) => deleteRef.current(rom), []);
+  const openRomMenu = useCallback((rom: RomFile, x: number, y: number) => setRomContextMenu({ rom, x, y }), []);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string[]>([]);
   const [installChoiceModal, setInstallChoiceModal] = useState<{ standalone: string; retroarch: string } | null>(null);
   const [emuUpdates, setEmuUpdates] = useState<any[]>([]);
+  const [updatingAll, setUpdatingAll] = useState(false);
   const [romHealthChecking, setRomHealthChecking] = useState(false);
   const [activeLibraryFilter, setActiveLibraryFilter] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -3032,6 +3054,8 @@ export default function App() {
   pageRef.current = page;
   // LB / RB open a tab like a click (navigateTo is defined further down).
   const navigateToRef = useRef<(p: Page) => void>(setPage);
+  /** LB/RB moved along the tabs: keep the pad on the tabs on the new page. */
+  const padOnTabsRef = useRef(false);
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
   gamepadContextMenuRef.current = gamepadContextMenu;
   const bpSelectedIndexRef = useRef(bpSelectedIndex);
@@ -3434,9 +3458,17 @@ export default function App() {
       }
 
       // LB/RB = previous / next tab, in the order of the top bar
+      // LB/RB = previous / next section; with the pad on the tabs of the
+      // top bar, previous / next tab of the open section.
       if (getAction("prevPage") || getAction("nextPage")) {
-        const next = adjacentTabPage(pageRef.current, getAction("prevPage") ? -1 : 1);
-        if (next !== pageRef.current) navigateToRef.current(next);
+        const step = getAction("prevPage") ? -1 : 1;
+        // From the focus index, not the class (a re-render can drop it for a moment).
+        const onTabs = !!document.querySelectorAll<HTMLElement>(TOP_NAV_SEL)[focusIndexRef.current]?.classList.contains("v3-tabs__item");
+        const next = onTabs ? adjacentTabInSection(pageRef.current, step) : adjacentSectionPage(pageRef.current, step);
+        if (next !== pageRef.current) {
+          padOnTabsRef.current = onTabs;
+          navigateToRef.current(next);
+        }
       }
       if (getAction("settings")) {
         setPage("controller");
@@ -3472,9 +3504,12 @@ export default function App() {
 
   useEffect(() => {
     if (gamepadActive) {
-      // New page: the pad stays on the open section of the top bar.
+      // New page: the pad stays on the open section of the top bar (on the
+      // open tab when LB/RB moved along the tabs).
       const top = [...document.querySelectorAll<HTMLElement>(TOP_NAV_SEL)];
-      const idx = Math.max(0, top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
+      const onTab = padOnTabsRef.current ? top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active")) : -1;
+      padOnTabsRef.current = false;
+      const idx = onTab >= 0 ? onTab : Math.max(0, top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active")));
       focusIndexRef.current = idx;
       setFocusIndex(idx);
     }
@@ -5257,6 +5292,11 @@ export default function App() {
     doInstall(id);
   };
 
+  /** Emulator updates in the daily log file (log_event → push_log). */
+  const logUpdate = (level: "INFO" | "WARN" | "ERROR", message: string) => {
+    invoke("log_event", { level, message: `Mises à jour émulateurs : ${message}` }).catch(() => {});
+  };
+
   const doInstall = async (id: string) => {
     setInstallChoiceModal(null);
     setInstalling((prev) => [...prev, id]);
@@ -5279,6 +5319,33 @@ export default function App() {
     }
   };
 
+  /** Reinstalls an emulator at its latest version (uninstall, install, save the version). */
+  const updateEmulator = async (update: { id: string; latest_version: string }) => {
+    logUpdate("INFO", `${update.id} → ${update.latest_version}`);
+    await handleUninstall(update.id);
+    await doInstall(update.id);
+    await invoke("save_emulator_version", { emulatorId: update.id, version: update.latest_version })
+      .catch((err) => logUpdate("ERROR", `version de ${update.id} non enregistrée : ${err}`));
+    setEmuUpdates(prev => prev.filter(u => u.id !== update.id));
+  };
+
+  /** "Install all updates": one emulator after the other (one download at a time). */
+  const handleUpdateAllEmulators = async () => {
+    const updates = [...emuUpdates];
+    setUpdatingAll(true);
+    logUpdate("INFO", `tout mettre à jour (${updates.length})`);
+    showToast(t("updates.installingAll", { count: updates.length }), "info");
+    try {
+      for (const update of updates) await updateEmulator(update);
+      showToast(t("updates.allInstalled", { count: updates.length }), "success");
+      logUpdate("INFO", `installées : ${updates.map(u => u.id).join(", ")}`);
+    } catch (err) {
+      logUpdate("ERROR", `mise à jour groupée interrompue : ${err}`);
+    } finally {
+      setUpdatingAll(false);
+    }
+  };
+
   const handleDeleteRom = async (rom: RomFile) => {
     try {
       await invoke("delete_rom", { path: rom.path });
@@ -5293,6 +5360,7 @@ export default function App() {
     if (!confirm(tl("toast.confirmClearCache"))) return;
     try {
       await invoke("clear_cover_cache");
+      clearCoverCache();
       showToast(tl("toast.cacheClearedRescan"), "success");
       await loadData();
       triggerHiddenAchievement("clear_covers");
@@ -5380,6 +5448,8 @@ export default function App() {
       showToast(tl("toast.launchFailed", { error: String(err) }), "error");
     }
   };
+  launchRef.current = handleLaunch;
+  deleteRef.current = handleDeleteRom;
 
   const handleSaveConfig = async (newConfig: AppConfig) => {
     try {
@@ -5806,7 +5876,8 @@ export default function App() {
                 <BigPictureCard
                   key={rom.path}
                   rom={rom}
-                  focused={bpSelectedIndex === i}
+                  // Item 0 of the pad's grid is the back button above the games.
+                  focused={bpSelectedIndex === i + 1}
                   entry={playtime.games[`${rom.console}::${rom.name}`]}
                   onLaunch={() => handleLaunch(rom)}
                   onChooseCover={() => setCoverPickerRom(rom)}
@@ -6074,30 +6145,30 @@ export default function App() {
                               <GameCard
                                 key={`fav-${favRom.console}::${favRom.name}`}
                                 rom={favRom}
-                                onLaunch={handleLaunch}
-                                onDelete={handleDeleteRom}
+                                onLaunch={launchFromCard}
+                                onDelete={deleteFromCard}
                                 entry={playtime.games[`${favRom.console}::${favRom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
-                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
+                                onContextMenu={openRomMenu}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
                               <GameCard
                                 key={`recent-${rom.console}::${rom.name}`}
                                 rom={rom}
-                                onLaunch={handleLaunch}
-                                onDelete={handleDeleteRom}
+                                onLaunch={launchFromCard}
+                                onDelete={deleteFromCard}
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
-                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
+                                onContextMenu={openRomMenu}
                               />
                             ))}
                           </div>
@@ -6822,15 +6893,15 @@ export default function App() {
                               <GameCard
                                 key={rom.path}
                                 rom={rom}
-                                onLaunch={handleLaunch}
-                                onDelete={handleDeleteRom}
+                                onLaunch={launchFromCard}
+                                onDelete={deleteFromCard}
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
-                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
+                                onContextMenu={openRomMenu}
                               />
                             ))}
                           </div>
@@ -6913,15 +6984,15 @@ export default function App() {
                               <GameCard
                                 key={rom.path}
                                 rom={rom}
-                                onLaunch={handleLaunch}
-                                onDelete={handleDeleteRom}
+                                onLaunch={launchFromCard}
+                                onDelete={deleteFromCard}
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
                                 onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
-                                onContextMenu={(r, x, y) => setRomContextMenu({ rom: r, x, y })}
+                                onContextMenu={openRomMenu}
                               />
                             ))}
                           </div>
@@ -6975,7 +7046,12 @@ export default function App() {
 
               {page === "installed" && (
                 <div>
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "1rem" }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginBottom: "1rem" }}>
+                    {emuUpdates.length > 0 && (
+                      <button className="btn btn--primary btn--sm gamepad-nav-item" disabled={updatingAll} onClick={handleUpdateAllEmulators}>
+                        <Download size={12} /> {t("updates.installAll", { count: emuUpdates.length })}
+                      </button>
+                    )}
                     <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
                       showToast(t("updates.checking"), "success");
                       const updates: any[] = await invoke("check_emulator_updates");
@@ -7005,7 +7081,7 @@ export default function App() {
                       {update && (
                         <div className="emu-card__update-info">
                           <span>{update.current_version} → {update.latest_version}</span>
-                          <button className="btn btn--primary btn--sm" onClick={async () => { handleUninstall(emu.id); setTimeout(() => handleInstall(emu.id), 500); await invoke("save_emulator_version", { emulatorId: emu.id, version: update.latest_version }); setEmuUpdates(prev => prev.filter(u => u.id !== emu.id)); }}>
+                          <button className="btn btn--primary btn--sm gamepad-nav-item" disabled={updatingAll} onClick={() => updateEmulator(update)}>
                             <Download size={12} /> {t("updates.update")}
                           </button>
                         </div>
@@ -7300,22 +7376,7 @@ export default function App() {
                   <div className="settings__group">
                     <div className="settings__group-title"><Activity size={16} /> {t("settings.boxartLogs")}</div>
                     <div className="settings__logs">
-                      {boxartLogs.length === 0 ? (
-                        <p className="settings__field-desc">{t("settings.noLogs")}</p>
-                      ) : (
-                        <div className="logs-container">
-                          {boxartLogs.map((log, i) => (
-                            <div key={i} className="log-item">
-                              <span className="log-game">[{log.game}]</span>
-                              <span className="log-url">{log.url}</span>
-                              <span className={`log-status log-status--${log.status.toLowerCase().includes("success") ? "success" : "info"}`}>
-                                {log.status}
-                              </span>
-                            </div>
-                          ))}
-                          <div ref={logsEndRef} />
-                        </div>
-                      )}
+                      <BoxartLogList />
                     </div>
                   </div>
 
@@ -7743,40 +7804,7 @@ export default function App() {
                       {activityFeed.length > 0 && (
                         <div className="settings__group">
                           <div className="settings__group-title"><Activity size={16} /> {t("friendsUi.recentActivity")}</div>
-                          <div className="activity-feed">
-                            {activityFeed.map(a => (
-                              <div key={a.id} className="activity-feed__item">
-                                <div className="activity-feed__avatar">
-                                  {a.avatar_url ? (
-                                    <img src={a.avatar_url} alt="" />
-                                  ) : (
-                                    <div className="friend-card__avatar-placeholder" style={{ width: 28, height: 28, fontSize: 10 }}>
-                                      {(a.username || "?").slice(0, 2).toUpperCase()}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="activity-feed__content">
-                                  <span className="activity-feed__text">
-                                    <strong>{a.username}</strong>{" "}
-                                    {a.event_type === "game_started" && <>{t("friendsUi.activityStarted")} <em>{a.game_name}</em></>}
-                                    {a.event_type === "achievement_unlocked" && <>a débloqué {a.details}</>}
-                                    {a.event_type === "game_added" && <>{t("friendsUi.activityAdded")} <em>{a.game_name}</em> {t("friendsUi.activityAddedEnd")}</>}
-                                    {a.event_type === "game_completed" && <>{t("friendsUi.activityCompleted")} <em>{a.game_name}</em></>}
-                                  </span>
-                                  <span className="activity-feed__time">
-                                    {(() => {
-                                      const diff = Date.now() - new Date(a.created_at).getTime();
-                                      if (diff < 60000) return t("friendsUi.justNow");
-                                      if (diff < 3600000) return t("friendsUi.minutesAgo", { n: Math.floor(diff / 60000) });
-                                      if (diff < 86400000) return t("friendsUi.hoursAgo", { n: Math.floor(diff / 3600000) });
-                                      return t("friendsUi.daysAgo", { n: Math.floor(diff / 86400000) });
-                                    })()}
-                                    {a.console && ` · ${a.console}`}
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                          <ActivityFeed items={activityFeed} t={t} />
                         </div>
                       )}
                     </>

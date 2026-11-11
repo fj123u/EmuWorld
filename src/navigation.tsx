@@ -30,14 +30,23 @@ export const SECTIONS: { id: Section; labelKey: string; pages: Page[] }[] = [
 export const TAB_PAGES: Page[] = SECTIONS.flatMap((s) => s.pages).filter((p) => p !== "account");
 
 /**
- * LB / RB: the previous / next tab, in the order of the bar (Roms → Console →
- * Installé → Store → Marketplace…), across sections; stays on the first and
- * last. The account dialog belongs to Settings.
+ * LB / RB: the previous / next of the 6 sections (its first page); stays on
+ * the first and last. The account dialog belongs to Settings.
  */
-export function adjacentTabPage(page: Page, step: -1 | 1): Page {
-  const idx = TAB_PAGES.indexOf(page === "account" ? "settings" : page);
-  const next = TAB_PAGES[idx + step];
-  return idx < 0 || !next ? page : next;
+export function adjacentSectionPage(page: Page, step: -1 | 1): Page {
+  const idx = SECTIONS.findIndex((s) => s.id === sectionOf(page));
+  const next = SECTIONS[idx + step];
+  return next ? next.pages[0] : page;
+}
+
+/**
+ * LB / RB with the pad on the tabs: the previous / next tab of the open
+ * section (Roms → Console → Installé), never leaving it.
+ */
+export function adjacentTabInSection(page: Page, step: -1 | 1): Page {
+  const pages = SECTIONS.find((s) => s.id === sectionOf(page))!.pages.filter((p) => p !== "account");
+  const idx = pages.indexOf(page === "account" ? "settings" : page);
+  return pages[idx + step] ?? page;
 }
 
 /** Label of each page's tab. */

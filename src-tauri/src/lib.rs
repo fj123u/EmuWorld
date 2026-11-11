@@ -375,10 +375,38 @@ mod speedrun;
 mod libretro_index;
 mod launchbox;
 
+/// The cover-search trace is a debugging aid, not an archive: past this size it
+/// starts over (it had reached 12 MB on a real library).
+const BOXART_LOG_MAX_BYTES: u64 = 2 * 1024 * 1024;
+
+/// Empties `path` when it is larger than `max_bytes`. Returns true if it did.
+fn reset_log_if_large(path: &std::path::Path, max_bytes: u64) -> bool {
+    match std::fs::metadata(path) {
+        Ok(meta) if meta.len() > max_bytes => std::fs::write(path, b"").is_ok(),
+        _ => false,
+    }
+}
+
+/// A cover already saved under the game's exact file name, read without
+/// listing the console's whole cover folder (hundreds of files, and this runs
+/// once per game card). Files under `min_size` are leftovers of failed downloads.
+fn exact_cached_cover(console_covers_dir: &std::path::Path, safe_name: &str, min_size: usize) -> Option<(Vec<u8>, &'static str)> {
+    for (ext, mime) in [("webp", "image/webp"), ("png", "image/png")] {
+        let path = console_covers_dir.join(format!("{}.{}", safe_name, ext));
+        if let Ok(data) = std::fs::read(&path) {
+            if data.len() >= min_size {
+                return Some((data, mime));
+            }
+        }
+    }
+    None
+}
+
 fn write_to_boxart_log(message: &str) {
     let mut path = emuworld_base_dir();
     path.push("boxart_fetch.log");
-    
+    reset_log_if_large(&path, BOXART_LOG_MAX_BYTES);
+
     if let Ok(mut file) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -2063,8 +2091,6 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
 
-    push_log("INFO", &format!("Fetch cover: '{}' ({}) [force={}]", game_name, console, force_refresh));
-
     // Helper to log to frontend via events
     let log_event = {
         let app_handle = app_handle.clone();
@@ -2171,6 +2197,17 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
         None
     };
 
+    // Fast path, taken for almost every card of a library that already has its
+    // covers: the file saved under this game's name. No log line, no event to
+    // the UI and no folder listing — with hundreds of cards, those were what
+    // kept the CPU and the disk busy while a console was opening.
+    if !force_refresh {
+        if let Some((data, mime)) = exact_cached_cover(&console_covers_dir, &safe_name, min_size) {
+            return Ok(format!("data:{};base64,{}", mime, base64::engine::general_purpose::STANDARD.encode(&data)));
+        }
+    }
+
+    push_log("INFO", &format!("Fetch cover: '{}' ({}) [force={}]", game_name, console, force_refresh));
     write_to_boxart_log(&format!("=== FETCH START: {} ({}) {} ===", game_name, console, if force_refresh { "[force]" } else { "" }));
 
     // If the user hit Retry, remove any stale cache entry so we can't fall back to it.
@@ -7179,6 +7216,43 @@ mod tests {
         assert_ne!(fs::read(dir.join("Celeste [01002B30028F6000].webp")).unwrap(), b"old webp");
         assert!(replace_cached_cover(&dir, "Celeste", b"not an image").is_none());
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    // A library that already has its covers must not list the cover folder,
+    // nor take a file left behind by a failed download.
+    #[test]
+    fn exact_cached_cover_reads_the_game_file_directly() {
+        let dir = std::env::temp_dir().join(format!("emuworld_cover_exact_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Zelda.webp"), vec![7u8; 6000]).unwrap();
+        std::fs::write(dir.join("Mario.png"), vec![9u8; 6000]).unwrap();
+        std::fs::write(dir.join("Broken.webp"), vec![1u8; 10]).unwrap();
+
+        let (data, mime) = exact_cached_cover(&dir, "Zelda", 5000).expect("webp cover");
+        assert_eq!((data.len(), mime), (6000, "image/webp"));
+        let (_, mime) = exact_cached_cover(&dir, "Mario", 5000).expect("png cover");
+        assert_eq!(mime, "image/png");
+        assert!(exact_cached_cover(&dir, "Broken", 5000).is_none(), "too small to be a cover");
+        assert!(exact_cached_cover(&dir, "Unknown", 5000).is_none());
+        assert!(exact_cached_cover(&dir.join("no such console"), "Zelda", 5000).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn boxart_log_starts_over_when_too_large() {
+        let dir = std::env::temp_dir().join(format!("emuworld_boxart_log_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("boxart_fetch.log");
+        std::fs::write(&log, vec![b'x'; 300]).unwrap();
+
+        assert!(!reset_log_if_large(&log, 1000), "small log is kept");
+        assert_eq!(std::fs::metadata(&log).unwrap().len(), 300);
+        assert!(reset_log_if_large(&log, 100));
+        assert_eq!(std::fs::metadata(&log).unwrap().len(), 0);
+        assert!(!reset_log_if_large(&dir.join("missing.log"), 100));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {

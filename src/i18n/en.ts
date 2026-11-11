@@ -630,6 +630,9 @@ const en: Translations = {
     allUpToDate: "All emulators are up to date!",
     available: "{count} update(s) available",
     update: "Update",
+    installAll: "Install all updates ({count})",
+    installingAll: "Updating {count} emulator(s)…",
+    allInstalled: "{count} emulator(s) updated",
   },
 
   // Challenges
@@ -1020,6 +1023,9 @@ const en: Translations = {
     activityAdded: "added",
     activityAddedEnd: "to their library",
     activityCompleted: "finished",
+    activityUnlocked: "unlocked",
+    activityMore: "Show {count} more",
+    activityLess: "Show less",
     justNow: "just now",
     minutesAgo: "{n} min ago",
     hoursAgo: "{n} h ago",

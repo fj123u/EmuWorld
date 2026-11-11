@@ -73,7 +73,7 @@ describe("v3 fixes after the first test", () => {
   it("keeps games and consoles in their own colors under the mouse", () => {
     expect(finalValue(".game-card:hover .game-card__overlay", "display")).toBe("none");
     expect(finalValue(".game-card:hover .game-card__cover", "box-shadow")).toBe(finalValue(".game-card__cover", "box-shadow"));
-    expect(finalValue(".home-game:hover .v3-cover", "box-shadow")).toBe(finalValue(".v3-ring", "box-shadow"));
+    expect(finalValue(".home-game:hover .v3-cover", "box-shadow")).toBe(finalValue(".home-cover", "box-shadow"));
     expect(finalValue(".library-tile:hover", "box-shadow")).toBe(finalValue(".v3-ring", "box-shadow"));
     expect(finalValue(".rgs-console-card:hover", "box-shadow")).toBe(finalValue(".rgs-console-card", "box-shadow"));
     expect(finalValue(".big-picture__console-card:hover", "background")).toBe(finalValue(".big-picture__console-card", "background"));
@@ -92,5 +92,25 @@ describe("v3 fixes after the first test", () => {
 
   it("writes the library menus in the app's font", () => {
     expect(finalValue(".library-sort-select", "font-family")).toBe("inherit");
+  });
+});
+
+describe("covers without a colored strip", () => {
+  it("shows the cover alone: no console ring, and the card no longer clips it", () => {
+    expect(finalValue(".game-card", "overflow")).toBe("visible");
+    for (const cover of [".game-card__cover", ".bp-card__cover", ".home-cover"]) {
+      expect(finalValue(cover, "box-shadow"), cover).toBe("var(--shadow-soft)");
+      expect(finalValue(cover, "border"), cover).toBe("none");
+    }
+    // The console color stays on a game that has no cover yet.
+    expect(finalValue(".game-card__cover:not(:has(img))", "background-color")).toContain("var(--k)");
+  });
+});
+
+describe("search bars", () => {
+  it("draw no rectangle inside the pill when focused", () => {
+    expect(finalValue(".search-bar__input:focus-visible", "outline")).toBe("none !important");
+    expect(finalValue(".search-bar__input.gamepad-focused", "outline")).toBe("none !important");
+    expect(finalValue(".search-bar:has(.search-bar__input.gamepad-focused)", "box-shadow")).toBe("0 0 0 3px var(--accent)");
   });
 });

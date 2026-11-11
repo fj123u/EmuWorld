@@ -4,7 +4,7 @@
 // "Discover" page showed (game of the day, suggestion, top games…) is passed
 // as children and stays below.
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { loadCover } from "./coverCache";
 import { consoleHue } from "./consoleTheme";
 import { formatPlaytime, type HomeRom } from "./home";
 
@@ -21,8 +21,8 @@ function Cover({ rom, className = "" }: { rom: HomeRom; className?: string }) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    invoke<string | null>("fetch_boxart", { gameName: rom.name, console: rom.console, forceRefresh: false })
-      .then((c) => { if (alive && c) setSrc(c); })
+    loadCover(rom.name, rom.console)
+      .then((c) => { if (alive) setSrc(c); })
       .catch(() => {});
     return () => { alive = false; };
   }, [rom.name, rom.console]);

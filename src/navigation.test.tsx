@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { Dock, PAGE_LABEL_KEYS, SECTIONS, SectionTabs, TAB_PAGES, adjacentTabPage, sectionOf, type Page } from "./navigation";
+import { Dock, PAGE_LABEL_KEYS, SECTIONS, SectionTabs, TAB_PAGES, adjacentSectionPage, adjacentTabInSection, sectionOf, type Page } from "./navigation";
 import fr from "./i18n/fr";
 
 const t = (key: string) => key.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)?.[k], fr) as string ?? key;
@@ -43,14 +43,22 @@ describe("v3 navigation", () => {
 });
 
 describe("LB / RB", () => {
-  it("follow the tabs of the bar, across sections", () => {
-    expect(adjacentTabPage("library", 1)).toBe("catalog"); // Roms → Console
-    expect(adjacentTabPage("catalog", 1)).toBe("installed");
-    expect(adjacentTabPage("store", 1)).toBe("marketplace"); // not Settings
-    expect(adjacentTabPage("marketplace", 1)).toBe("lobby");
-    expect(adjacentTabPage("catalog", -1)).toBe("library");
-    expect(adjacentTabPage("discover", -1)).toBe("discover");
-    expect(adjacentTabPage("changelogs", 1)).toBe("changelogs");
-    expect(adjacentTabPage("account", 1)).toBe("controller"); // the account dialog is in Settings
+  it("move between the 6 sections (their first page)", () => {
+    expect(adjacentSectionPage("discover", 1)).toBe("library");
+    expect(adjacentSectionPage("installed", 1)).toBe("store"); // from any tab of Jeux
+    expect(adjacentSectionPage("store", 1)).toBe("lobby");
+    expect(adjacentSectionPage("marketplace", -1)).toBe("library");
+    expect(adjacentSectionPage("discover", -1)).toBe("discover");
+    expect(adjacentSectionPage("changelogs", 1)).toBe("changelogs");
+    expect(adjacentSectionPage("account", -1)).toBe("stats"); // the account dialog is in Settings
+  });
+
+  it("move between the tabs of the open section when the pad is on them", () => {
+    expect(adjacentTabInSection("library", 1)).toBe("catalog"); // Roms → Console
+    expect(adjacentTabInSection("catalog", 1)).toBe("installed");
+    expect(adjacentTabInSection("installed", 1)).toBe("installed"); // never leaves Jeux
+    expect(adjacentTabInSection("store", 1)).toBe("marketplace");
+    expect(adjacentTabInSection("library", -1)).toBe("library");
+    expect(adjacentTabInSection("discover", 1)).toBe("discover");
   });
 });
