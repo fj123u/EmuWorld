@@ -17,7 +17,7 @@ Style : fond pointillé clair (variante sombre), icônes et jaquettes à double 
 
 ### 🕹️ Multijoueur
 
-- [ ] **Lobbies en mode Big Picture**
+- [x] **Lobbies en mode Big Picture** — Y crée un lobby, Start passe dans le panneau (2.7.4)
 - [ ] **Tournois** *(gros)* — brackets entre amis (simple/double élimination), seeds et résultats
 - [ ] **Clubs / Guildes** *(gros)* — groupes permanents avec chat de groupe, événements, classement interne
 - [ ] **Live spectate** *(très gros)* — regarder un ami jouer en direct (basse qualité mais instantané)
