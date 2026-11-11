@@ -1,7 +1,7 @@
 // Floating panel of the lobby the player is in: game, members and their
 // state, invite, ready, launch (host) / join (friends), leave.
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Copy, Download, Play, RefreshCw, Send, Wifi } from "lucide-react";
 import { everyoneReady, isValidHostCode } from "./netplay";
 
@@ -36,6 +36,8 @@ interface Props {
   /** The host launched Dolphin/Azahar and still has to share its code. */
   awaitingHostCode: boolean;
   onPublishCode: (code: string) => void;
+  /** The lobby's chat (LobbyChat), under the members. */
+  chat?: ReactNode;
   t: (key: string, params?: Record<string, string | number>) => string;
   onInvite: (friendId: string) => void;
   onReady: () => void;
@@ -52,7 +54,7 @@ const STEPS: Record<string, { host: string; client: string }> = {
   ppsspp: { host: "lobby.stepsPpsspp", client: "lobby.stepsPpsspp" },
 };
 
-export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode }: Props) {
+export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat }: Props) {
   const [codeDraft, setCodeDraft] = useState("");
   const [copied, setCopied] = useState(false);
   const members = lobby.members ?? [];
@@ -87,6 +89,7 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
           </div>
         ))}
       </div>
+      {chat}
       {playing && <div className="lobby-panel__live"><Wifi size={12} /> {t("lobby.playing")}</div>}
       {method && STEPS[method] && (playing || awaitingHostCode) && (
         <p className="lobby-panel__steps">{t(isHost ? STEPS[method].host : STEPS[method].client)}</p>

@@ -20,7 +20,8 @@ import { spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
 import { LobbyPanel } from "./LobbyPanel";
-import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
+import { acceptLobbyInvite, LobbyInviteGone, supabaseLobbyChat } from "./lobbyApi";
+import { LobbyChat } from "./LobbyChat";
 import { accountUrl, authCallbackUrl, profileUrl, profileUrlLabel } from "./webPanel";
 import { fetchCloudNotes, syncCloudNotes } from "./playtimeNotes";
 import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
@@ -4058,6 +4059,7 @@ export default function App() {
   const [hostAwaitingCode, setHostAwaitingCode] = useState<string | null>(null);
   // Lobbies this player already joined the game of: one launch per lobby.
   const joinedLobbiesRef = useRef<Set<string>>(new Set());
+  const lobbyChatApi = useMemo(() => supabaseLobbyChat(), []);
   const lobbyLog = useCallback((level: "INFO" | "WARN" | "ERROR", message: string) => {
     invoke("log_event", { level, message: `Lobby: ${message}` }).catch(() => {});
   }, []);
@@ -9196,6 +9198,16 @@ export default function App() {
           hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
           awaitingHostCode={hostAwaitingCode !== null}
           onPublishCode={publishHostCode}
+          chat={user && (
+            <LobbyChat
+              lobbyId={currentLobby.id}
+              userId={user.id}
+              names={Object.fromEntries((currentLobby.members || []).map(m => [m.user_id, m.profile?.username || ""]))}
+              api={lobbyChatApi}
+              t={t}
+              onLog={lobbyLog}
+            />
+          )}
           t={t}
           onInvite={handleInviteToLobby}
           onReady={handleReadyLobby}

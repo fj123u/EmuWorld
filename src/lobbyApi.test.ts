@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { acceptLobbyInvite, LobbyInviteGone } from "./lobbyApi";
+import { acceptLobbyInvite, addLobbyMessage, cleanLobbyMessage, LOBBY_CHAT_HISTORY, LOBBY_MESSAGE_MAX, LobbyInviteGone } from "./lobbyApi";
 
 /** Supabase double: answers reads from `rows`, records any write. */
 function fakeDb(rows: { lobby_members?: unknown; lobbies?: unknown }) {
@@ -79,5 +79,36 @@ describe("lobby access rules (scratch/supabase_lobbies_rls_v2.sql)", () => {
   it("drops every older policy and keeps the host from changing hands", () => {
     expect(sql).toMatch(/FOR pol IN[\s\S]*tablename IN \('lobbies', 'lobby_members'\)[\s\S]*DROP POLICY/);
     expect(policy("Host updates the lobby")).toContain("WITH CHECK (host_id = auth.uid())");
+  });
+});
+
+describe("lobby chat messages", () => {
+  const m = (id: string, minute: number) => ({ id, lobby_id: "l1", user_id: "u", content: id, created_at: `2026-11-11T20:${String(minute).padStart(2, "0")}:00Z` });
+
+  it("accepts 1 to 500 characters once trimmed", () => {
+    expect(cleanLobbyMessage("  gg  ")).toBe("gg");
+    expect(cleanLobbyMessage("   ")).toBeNull();
+    expect(cleanLobbyMessage("é".repeat(LOBBY_MESSAGE_MAX))).toBe("é".repeat(LOBBY_MESSAGE_MAX));
+    expect(cleanLobbyMessage("a".repeat(LOBBY_MESSAGE_MAX + 1))).toBeNull();
+    // Counted in characters like Postgres, not UTF-16 units: 500 emoji fit.
+    expect(cleanLobbyMessage("🎮".repeat(LOBBY_MESSAGE_MAX))).not.toBeNull();
+  });
+
+  it("adds each message once, in time order, keeping the latest ones", () => {
+    let list = addLobbyMessage([], m("b", 2));
+    list = addLobbyMessage(list, m("a", 1));
+    list = addLobbyMessage(list, m("b", 2));
+    expect(list.map((x) => x.id)).toEqual(["a", "b"]);
+    let many: ReturnType<typeof m>[] = [];
+    for (let i = 0; i < LOBBY_CHAT_HISTORY + 5; i++) many = addLobbyMessage(many, { ...m(`x${i}`, 0), created_at: new Date(Date.UTC(2026, 10, 11, 0, 0, i)).toISOString() });
+    expect(many).toHaveLength(LOBBY_CHAT_HISTORY);
+    expect(many[0].id).toBe("x5");
+  });
+
+  it("keeps the database rules of the chat in the repository", () => {
+    const sql = readFileSync(join(__dirname, "..", "scratch", "supabase_lobby_chat.sql"), "utf8");
+    expect(sql).toMatch(/ENABLE ROW LEVEL SECURITY/);
+    expect(sql).toMatch(/BETWEEN 1 AND 500/);
+    expect(sql).toMatch(/REVOKE ALL ON public\.lobby_messages FROM anon, authenticated/);
   });
 });
