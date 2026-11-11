@@ -1,155 +1,72 @@
 # EmuWorld — Plan de route
 
-## Revue du code — 01/10/2026
+## 🔜 À faire
 
-### Urgence
+### 🎨 V3 — Refonte de l'interface
 
-- [x] **P1 — Protéger les données locales contre la corruption** (`src-tauri/src/playtime.rs`, `src-tauri/src/cloud_backup.rs`) : les fichiers absents restent initialisés vides, mais les erreurs de lecture/désérialisation sont remontées au lieu d'être écrasées. Playtime et configuration cloud sont sauvegardés par remplacement atomique ; tests de récupération, round-trip, statistiques et remplacement atomique ajoutés.
-- [x] **P1 — Mettre à jour les dépendances signalées par `npm audit`** : lockfile actualisé ; `npm audit` ne signale plus de vulnérabilité et l'audit est intégré à la CI avec un seuil haut.
-- [x] **P1 — Ajouter des tests automatisés et une CI de validation** : tests Rust de chargement/sauvegarde, corruption et statistiques ; le workflow de pull request exécute `npm ci`, `npm audit`, `npm run build` et `cargo test`.
+Direction validée le 11/11/2026, à lancer avec la v3. Maquettes : https://claude.ai/artifact/LijneYDo8khfAVua97C129
 
-### Travaux importants avant les prochaines grosses fonctionnalités
+Style : fond pointillé clair (variante sombre), icônes et jaquettes à double contour (liseré blanc + couleur de la section ou de la console), couleurs douces, dégradé bleu ciel → pervenche → mauve réservé au cadre principal et au bouton d'action, polices Outfit + Nunito.
 
-- [ ] **P2 — Versionner et vérifier le schéma Supabase** : les évolutions SQL sont conservées comme scripts manuels dans `scratch/`. Les convertir en migrations ordonnées et rejouables, puis tester les politiques RLS et les contraintes pour chaque table utilisée par l'app avant déploiement.
-- [ ] **P2 — Découper les deux monolithes après l'ajout de tests** : `src/App.tsx` (~10 000 lignes) et `src-tauri/src/lib.rs` (~6 400 lignes) concentrent trop de responsabilités. Extraire progressivement les domaines (bibliothèque, social, synchronisation, commandes Tauri) sans changer le comportement.
-- [x] **P2 — Réduire le JavaScript chargé au démarrage** : mesuré le 06/11/2026 sur le build de prod (968 kB, 279 kB gzip). Composition : code de l'app 299 kB, React DOM 176 kB, Supabase ~180 kB, Framer Motion 120 kB, traductions 46 kB. Coût réel au démarrage : DOMContentLoaded en 18–31 ms, 0 tâche longue (> 50 ms) — le JS est lu sur le disque dans Tauri, il n'y a pas de téléchargement. Découper ne ferait gagner que quelques ms : pas fait volontairement. Le vrai levier reste le découpage du monolithe App.tsx (point suivant), pour la maintenance plus que pour la vitesse.
+- [ ] **Jetons de couleur** — nouveau thème clair + sombre dans `App.css`, renommer les variables `--neon-*`, corriger les textes clairs codés en dur
+- [ ] **Composants de base** — boutons, cartes, pastilles, champs, cartes de jeu (CSS seul)
+- [ ] **Navigation** — barre d'icônes en pilule : Accueil, Jeux, Store, Social, Succès, Réglages à la place des 15 entrées de la barre latérale (tutoriel `data-tour`, navigation manette et tests à adapter)
+- [ ] **Page Accueil** — reprendre la partie, consoles, joués récemment, amis en ligne, défi de la semaine
+- [ ] **Pages une par une** — Bibliothèque, Social et lobby, puis Store, Stats, Réglages
 
-**Bilan :** aucun blocage P0 confirmé lors de cette revue statique. Le risque prioritaire est la perte silencieuse de données locales (P1) ; traiter les tâches P1 avant de consacrer du temps aux nouvelles fonctionnalités V3.
+### 🕹️ Multijoueur
 
-## 🚀 Ajouts
+- [ ] **Lobbies en mode Big Picture**
+- [ ] **Tournois** *(gros)* — brackets entre amis (simple/double élimination), seeds et résultats
+- [ ] **Clubs / Guildes** *(gros)* — groupes permanents avec chat de groupe, événements, classement interne
+- [ ] **Live spectate** *(très gros)* — regarder un ami jouer en direct (basse qualité mais instantané)
 
-- [x] **Date / heure dans l'app** *(quick win ~10 min)* — horloge discrète dans la titlebar ou sidebar footer
-- [x] **Discord Rich Presence** *(moyen)* — "Jouant à Mario Kart 8 via EmuWorld" avec le logo EmuWorld en grand (brand persistant) et l'icône de la console en petit. Idle = "Browsing the library · In the launcher"
+### 🎮 Gameplay
 
-  > ⚠️ Configuration requise côté Discord Developer Portal :
-  > 1. App actuelle : ID par défaut `1334862011723284510` dans `src-tauri/src/discord_rpc.rs` — remplace par le tien si tu veux être propriétaire
-  > 2. Uploader les assets avec ces keys exactes : `emuworld_logo` (grand), `playing_generic` (petit fallback), et `console_switch` / `console_wiiu` / `console_ps2` etc. (voir `console_icon_key` dans le module Rust pour la liste)
-  > 3. Sans assets, les icônes ne s'affichent pas mais le texte lui fonctionne quand même.
-- [x] **Manette (navigation UI au pad)** *(gros)* — Gilrs natif Rust, highlight focus, D-pad/stick → navigate, A → click/context menu, B → back, clavier virtuel, remap touches
-- [x] **Achievements in-app** *(gros)* — palier par installation, nb de ROMs, heures jouées, jeu favori, 10 consoles, etc. Notif in-app + badges sur le profil web
-- [x] **RetroAchievements par jeu** *(gros)* — wrapper de l'API [retroachievements.org](https://retroachievements.org), rattachement du compte, progression affichée sur la fiche jeu, auto-configuration des émulateurs (token injection + cores RetroArch), redirection automatique vers RetroArch pour les standalone sans support RA
-- [x] **Executable partageable** — workflow GitHub Actions qui build + signe le `.exe`/`.msi` à chaque tag `v*`, release en prerelease, guide dans [scratch/release_guide.md](scratch/release_guide.md)
-- [x] **Système d'amis** *(hard)*
-  - [x] liste d'amis (table Supabase `friendships` avec statut pending/accepted)
-  - [x] présence : "x est en train de jouer à Y"
-  - [x] inviter dans un lobby
-  - [x] voir le profil
-  - [x] chat 1:1
-- [x] **Multijoueur / lobby** *(très hard, dépend des émulateurs)* — netplay natif supporté uniquement par certains émus (RetroArch, Dolphin, Citra). On pourrait wrapper ces features.
-- [x] **Update Automatique** — plugin Tauri updater + signing key + workflow GitHub Actions. L'app check `latest.json` au boot, affiche un bouton "✨ Mise à jour" dans la titlebar, download + relance avec progress. Guide dans [scratch/release_guide.md](scratch/release_guide.md).
-- [x] **leaderboard in app**
-- [x] **Backup cloud des saves** — *Techniquement faisable sans souci* : scanner le dossier saves de chaque émulateur connu, zipper par jeu, uploader sur Supabase Storage (~quelques MB par save). Versioning simple avec timestamp. **Limite** : le plan gratuit Supabase c'est 1 GB de Storage donc ça tient facilement tant que tu restes seul. Si tu veux pousser à des amis c'est peut-être 5 GB (~50 jeux × 100 MB) qui suffisent aussi. Pas lourd, juste chiadé côté UI.
+- [ ] **Cheats database** *(moyen)* — codes Action Replay / GameShark activables en un clic avant de lancer le jeu
+- [ ] **Input display / macros** *(moyen)* — inputs en overlay (streams), enregistrer et rejouer des macros
+- [ ] **Auto-config émulateurs** *(moyen)* — détecter GPU/CPU et régler chaque émulateur automatiquement
+- [ ] **Performance monitoring** *(quick win)* — FPS, latence, RAM/CPU dans l'overlay
 
-## 🐛 Bugs
+### 👥 Social & profil
 
-- [x] **Covers qui restent manquantes** sur certains jeux (lesquels déjà ? faudrait lister les noms) et bugs sur covers wii u
-- [x] **OAuth Google / Discord** — `register_all()` au boot, page bounce sur alwaysdata pour que l'onglet se ferme proprement, playtime réinitialisé au switch de compte, et fix du listener `game-closed` qui tournait dans le vide.
-- [x] **Lancement jeux NES** ne fonctionne pas — à investiguer : quel émulateur est mappé au NES, quelle erreur remonte ?
-- [x] **Chargement Infini** page de connexion — résolu : serveur HTTP local remplace le deep-link, plus besoin de la page bounce.
-- [x] **Probleme lancement Cemu** lors du lancement d'une rom, cemu se lance bien masi pas la rom → fix: ajout flag `-g`
-- [x] **Probleme installation roms wii/gamecube** lors du finalize, la rom n'est pas dezip et dolphin n'arrive pas a lire le .ciso → fix: extraction 7z séparée du ZIP + ajout extensions ciso/gcz/nkit.iso
-- [x] **Probleme covers sites web**
-- [x] **Rendre tout controlable par manette**
-- [x] **Mannette pas parfaite**
+- [ ] **Profil personnalisable** *(quick win)* — bannière, bio, jeu favori épinglé, badges mis en avant sur le profil public
+- [ ] **Système de parrainage** *(quick win)* — code d'invitation, badges quand un ami s'inscrit
+- [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage Discord/amis, comparaison, slideshow
+- [ ] **Trading cards** *(moyen)* — cartes à collectionner par jeu/succès, échangeables entre amis
+- [ ] **Game recommendations AI** *(gros)* — recommandations selon les habitudes de jeu (temps, genre, console)
+- [ ] **Widgets bureau** *(moyen)* — dernière session, jeu en cours, succès récent, série
 
-## 💡 Idées en vrac (à rajouter au fil de l'eau)
+### 📱 Multi-plateforme & cloud
 
-- [x] Session recap toast à la fermeture de l'émulateur ("Session de 2h34 · +3 launches · total 47h")
-- [x] Discover page avec jeu du jour, suggestion classique du jour, top friends, covers en parallax
-- [x] Mode "Versus" / challenge 7 jours entre amis
-
-### 🎨 UI / UX
-
-- [x] **Thèmes personnalisables** *(moyen)* — 5-6 thèmes prédéfinis (dark purple actuel, midnight blue, OLED black, retro green CRT, pastel light) + accent color picker custom
-- [x] **Animations de lancement** *(quick win)* — quand tu lances un jeu, splash animé avec le logo console + nom du jeu pendant 2-3s (style boot screen)
-- [x] **Vue en liste / grille toggle** *(quick win)* — switcher entre la grille de covers actuelle et une vue tableau (nom, console, temps joué, dernier lancement, note)
-- [x] **Tri et filtres avancés** *(moyen)* — trier par : temps joué, dernier lancé, alphabétique, note perso, nb de launches. Filtrer par : non-joués, favoris, complétés
-- [x] **Catégories / Collections custom** *(moyen)* — l'utilisateur crée ses propres playlists de jeux ("RPGs du moment", "Couch co-op", "Backlog", "Terminés")
-- [x] **Mode Fullscreen / Big Picture** *(gros)* — UI alternative optimisée TV avec grosses covers, navigation 100% manette, pas de sidebar, style Steam Big Picture
-- [x] **Fond d'écran dynamique** *(quick win)* — utiliser la cover du jeu sélectionné en background blur derrière le contenu principal (style PlayStation Store)
-- [x] **Onboarding première utilisation** *(moyen)* — wizard de setup : choisir émulateurs, scanner dossier ROMs, connecter compte, tuto manette. Sinon l'app est intimidante au first launch
-
-### 📊 Statistiques & Social
-
-- [x] **Statistiques détaillées** *(moyen)* — page stats perso : graphe d'heures jouées par semaine (sparkline), top 5 jeux, top 3 consoles, streak actuel (jours consécutifs), heatmap style GitHub des sessions
-- [x] **Wrap annuel / mensuel** *(gros)* — "EmuWorld Wrapped" à la Spotify : tes stats du mois en slides animées (jeu le + joué, console préférée, temps total, achievement débloqués)
-- [x] **Partage de profil** *(moyen)* — URL publique `emuworld.alwaysdata.net/#/u/username` avec stats, bibliothèque, achievements, top jeux + bouton "Copier le lien" dans l'app
-- [x] **Activity feed** *(gros)* — fil d'activité entre amis : "Théo a joué 3h à Zelda", "Max a débloqué un achievement", "Léo a ajouté 12 jeux à sa bibliothèque"
-- [x] **Comparer avec un ami** *(moyen)* — vue side-by-side des stats entre toi et un pote (qui joue plus à quoi, qui a plus d'achievements, etc.)
-
-### 🖥️ Mode Intégré (Killer Feature)
-
-- [x] **Game View embarquée** *(très gros)* — overlay Steam-style : fenêtre transparente always-on-top séparée, Shift+Tab pour toggle. Panels : RetroAchievements (avec points), chat amis, notes persistantes. Fenêtre overlay dédiée créée au runtime via Rust, ne touche pas la fenêtre du jeu.
-
-### 🎮 Gameplay & Émulation
-
-- [x] **Screenshare / Screenshots** *(moyen)* — capturer un screenshot depuis l'émulateur en un raccourci, galerie intégrée dans la fiche du jeu
-- [x] **Notes par jeu** *(quick win)* — champ texte libre sur chaque fiche jeu pour noter des codes, astuces, où on en est, etc.
-- [x] **Rating / Note perso** *(quick win)* — étoiles ou note /10 sur chaque jeu, visible dans la bibliothèque et utilisable comme filtre/tri
-- [x] **Détection auto des ROMs** *(moyen)* — watcher sur le dossier ROMs qui détecte les nouveaux fichiers et propose automatiquement de les ajouter à la bibliothèque sans rescan manuel
-
-### 🔧 Technique & QoL
-
-- [x] **Import/Export de config** *(quick win)* — exporter toute sa config EmuWorld (émulateurs, paths, préférences) en JSON pour la restaurer sur un autre PC
-- [x] **Raccourcis clavier globaux** *(quick win)* — hotkeys pour lancer le dernier jeu joué, ouvrir EmuWorld, kill l'émulateur en cours, etc. même quand l'app est minimisée
-- [x] **Multi-langue** *(moyen)* — i18n avec au minimum FR/EN, fichier JSON de traductions, détection locale système
-- [x] **Logs & diagnostic** *(quick win)* — page dans settings qui affiche les derniers logs (lancement ému, fetch cover, erreurs) pour debug sans console
-- [x] **Portable mode** *(moyen)* — détection d'un fichier `portable.txt` à côté de l'exe → stocke tout dans `EmuWorld_Data/` à côté de l'exe (USB friendly)
-- [x] **Bandwidth limiter** *(quick win)* — réglage vitesse max de download dans le store (pour pas saturer la connexion)
-- [x] **Notifications système** *(quick win)* — notification Windows native quand un download est terminé, quand un ami se connecte, quand un achievement est débloqué
-
-### 🌐 Communauté & Contenu
-
-- [x] **Guides / Walkthroughs intégrés** *(gros)* — pour chaque jeu, panel latéral avec des guides texte/image scrapés depuis des wikis ou écrits par la communauté
-- [x] **Recommandations "Si t'as aimé X..."** *(moyen)* — algo simple basé sur console + genre + tags pour suggérer des jeux similaires depuis le store
-- [x] **Reviews par la communauté** *(gros)* — notes + commentaires publics sur chaque jeu, visibles par tous les utilisateurs EmuWorld
-- [x] **Événements / Challenges hebdo** *(gros)* — "Cette semaine : finir Mega Man 2 en moins de 2h" avec leaderboard dédié et badge reward
-- [x] **Marketplace de thèmes** *(moyen)* — les utilisateurs partagent leurs thèmes custom, téléchargeables en un clic depuis un onglet "Community"
-
-## 🚀 V3 — Nouvelles features
-
-### 🎮 Gameplay avancé
-
-- [x] **Speed run timer** *(gros)* — chrono intégré avec splits personnalisables, PB (personal best) sauvegardé par jeu, comparaison temps réel avec ton record, export/partage du run
-- [x] **Save states manager** *(moyen)* — gérer les save states RetroArch depuis l'app : prévisualisation screenshot, renommer, dupliquer, partager avec des amis  (partage : lancer scratch/supabase_savestates_sharing.sql)
-- [ ] **Cheats database** *(moyen)* — base de données de codes triches (Action Replay, GameShark) intégrée, activables en un clic avant de lancer le jeu
-- [ ] **Input display / macros** *(moyen)* — afficher les inputs en overlay (pour les streams), enregistrer et rejouer des macros pour les combos
-- [x] **Rewind intégré** *(quick win)* — activer automatiquement le rewind dans RetroArch au lancement (configurer retroarch.cfg)
-
-### 📱 Multi-plateforme & Cloud
-
-- [ ] **App mobile (companion)** *(très gros)* — app React Native qui affiche ta bibliothèque, stats, achievements, chat amis. Pas d'émulation, juste le social + remote launch
-- [ ] **Cloud gaming** *(très gros)* — streamer un jeu depuis ton PC vers un autre appareil (Moonlight/Sunshine wrapper)
-- [ ] **Synchronisation multi-PC** *(moyen)* — sync config, playtime, saves entre plusieurs installations EmuWorld via Supabase
-- [ ] **Web app** *(gros)* — version web complète (sans émulation) pour consulter sa bibliothèque, stats, amis depuis n'importe où
-
-### 🤖 Intelligence & Automatisation
-
-- [ ] **Auto-config émulateurs** *(moyen)* — détecter le hardware (GPU, CPU) et configurer automatiquement les settings optimaux de chaque émulateur
-- [x] **ROM health check** *(quick win)* — détecter les ROMs vides, les ZIP corrompus et les doublons par empreinte SHA-256, avec suppression sécurisée des fichiers manifestement invalides
-- [x] **Smart playlists** *(moyen)* — playlists auto-générées : "Pas joué depuis 1 mois", "Sessions courtes (<30min)", "Presque terminé", "Co-op entre amis"
-- [ ] **Game recommendations AI** *(gros)* — recommandations basées sur tes habitudes de jeu (temps, genre, console) via un algo ML simple
-
-### 🎨 UI & Experience
-
-- [x] **Thèmes dynamiques par console** *(quick win)* — quand tu navigues dans une console, les couleurs de l'app changent (bleu Nintendo, vert Xbox, etc.)
-- [ ] **Widgets bureau** *(moyen)* — mini-widgets Windows : dernière session, jeu en cours, achievement récent, streak
-- [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage sur Discord/amis, comparaison avant/après, slideshow
-- [ ] **Profil personnalisable** *(quick win)* — bannière custom, bio, jeu favori épinglé, badges mis en avant sur le profil public
-- [x] **Animations de déblocage** *(quick win)* — animation plein écran quand un achievement est débloqué (confettis, effet gold)
-
-### 🌐 Social & Communauté
-
-- [ ] **Tournois** *(gros)* — créer des tournois bracket entre amis (single/double elimination), avec seeds et résultats
-- [ ] **Clubs / Guildes** *(gros)* — groupes permanents de joueurs avec chat de groupe, événements, leaderboard interne
-- [ ] **Live spectate** *(très gros)* — regarder un ami jouer en temps réel via stream intégré (basse qualité mais instantané)
-- [ ] **Trading cards** *(moyen)* — cartes virtuelles à collectionner par jeu/achievement, échangeables entre amis
-- [ ] **Système de parrainage** *(quick win)* — inviter des amis avec un code, gagner des badges/récompenses quand ils s'inscrivent
+- [ ] **Synchronisation multi-PC** *(moyen)* — config, playtime et saves entre plusieurs installations via Supabase
+- [ ] **Web app** *(gros)* — bibliothèque, stats et amis consultables depuis un navigateur (sans émulation)
+- [ ] **Linux / macOS** *(gros)* — Tauri est multi-plateforme, mais les émulateurs changent
+- [ ] **App mobile compagnon** *(très gros)* — bibliothèque, stats, succès, chat amis, lancement à distance
+- [ ] **Cloud gaming** *(très gros)* — streamer un jeu du PC vers un autre appareil (Moonlight/Sunshine)
 
 ### 🔧 Technique
 
-- [x] **Web panel sur GitHub Pages** *(moyen)* — alwaysdata est supprimé (compte suspendu le 05/11/2026). Héberger `web-panel/` (profil public) sur GitHub Pages, remplacer `emuworld.alwaysdata.net` dans l'app (liens « partager mon profil », `emailRedirectTo`), puis dans Supabase : retirer l'URL alwaysdata des Redirect URLs et changer le Site URL. La connexion Google/Discord n'en dépend plus (retour local 127.0.0.1).
-- [ ] **Plugin system** *(très gros)* — API pour que les utilisateurs créent des extensions (nouveaux émulateurs, sources de covers, intégrations)
-- [ ] **Linux / macOS support** *(gros)* — porter l'app sur les autres OS (Tauri est cross-platform, mais les émulateurs changent)
-- [x] **Auto-update émulateurs** *(moyen)* — détecter les nouvelles versions des émulateurs installés et proposer la mise à jour
-- [ ] **Performance monitoring** *(quick win)* — afficher FPS, latence, usage RAM/CPU pendant le jeu dans l'overlay
+- [ ] **Versionner le schéma Supabase** *(P2)* — convertir les scripts SQL manuels de `scratch/` en migrations ordonnées et rejouables, tester les politiques RLS et les contraintes de chaque table avant déploiement
+- [ ] **Découper les deux monolithes** *(P2)* — `src/App.tsx` et `src-tauri/src/lib.rs` : extraire progressivement les domaines (bibliothèque, social, synchronisation, commandes Tauri) sans changer le comportement
+- [ ] **Plugin system** *(très gros)* — API d'extensions (nouveaux émulateurs, sources de covers, intégrations)
+
+## ✅ Fait
+
+**Base** — horloge, Discord Rich Presence, navigation manette complète (clavier virtuel, remap), mise à jour automatique, installeur signé par GitHub Actions, onboarding, multi-langue FR/EN, logs & diagnostic, mode portable, import/export de config, raccourcis globaux, notifications système, limiteur de bande passante.
+
+**Bibliothèque** — vue grille/liste, tri et filtres, collections, smart playlists, notes et étoiles par jeu, détection auto des ROMs, ROM health check, covers (cascade de sources), fond dynamique, animation de lancement, thèmes + couleur d'accent, thème par console, mode Big Picture.
+
+**Jeu** — overlay Shift+Tab (succès, chat, notes), screenshots, récap de session, speedrun timer, gestion des save states (partage : `scratch/supabase_savestates_sharing.sql`), rewind RetroArch, mise à jour auto des émulateurs, guides intégrés.
+
+**Succès & stats** — succès internes avec animation de déblocage, RetroAchievements par jeu, statistiques détaillées, Wrap mensuel, classement.
+
+**Social** — amis (présence, chat 1:1, invitations), lobbies multijoueur (netplay, chat de lobby, LDN Switch), fil d'activité, comparaison avec un ami, défis hebdo et versus, reviews communautaires, recommandations, marketplace de thèmes, page Discover, profil public partageable.
+
+**Cloud & web** — sauvegarde cloud des saves, web panel sur GitHub Pages (alwaysdata supprimé le 05/11/2026).
+
+**Qualité** — données locales protégées contre la corruption (écriture atomique), dépendances auditées, tests automatisés et CI sur chaque push. Poids du JS au démarrage mesuré le 06/11/2026 : découpage jugé inutile (lecture disque, 18–31 ms).
+
+**Bugs corrigés** — covers manquantes (dont Wii U), OAuth Google/Discord et chargement infini à la connexion, lancement NES, lancement de ROM dans Cemu (`-g`), extraction des ROMs Wii/GameCube, covers du site web, navigation manette.
+
+> Discord Rich Presence : l'ID d'application par défaut est dans `src-tauri/src/discord_rpc.rs` ; les assets à uploader sur le Developer Portal sont `emuworld_logo`, `playing_generic` et les `console_*` listés par `console_icon_key`.
