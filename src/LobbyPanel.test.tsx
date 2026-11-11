@@ -118,6 +118,16 @@ describe("lobby panel", () => {
     expect(screen.getByText(/rejoins la partie de l'hôte/)).toBeTruthy();
   });
 
+  it("offers friends as buttons in Big Picture, where a list can't be opened with a pad", () => {
+    const { onInvite } = renderPanel({ inviteButtons: true, friends: [{ id: "friend", username: "Léo" }, { id: "max", username: "Max" }] });
+    expect(screen.queryByRole("combobox")).toBeNull();
+    const max = screen.getByRole("button", { name: "+ Max" });
+    expect(max.classList.contains("gamepad-nav-item")).toBe(true);
+    expect(screen.queryByRole("button", { name: "+ Léo" })).toBeNull(); // already in the lobby
+    fireEvent.click(max);
+    expect(onInvite).toHaveBeenCalledWith("max");
+  });
+
   it("only offers friends who are not in the lobby yet", () => {
     const { onInvite } = renderPanel({ friends: [{ id: "friend", username: "Léo" }, { id: "max", username: "Max" }] });
     const select = screen.getByRole("combobox", { name: "Inviter un ami..." });

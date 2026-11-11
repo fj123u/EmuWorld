@@ -1516,6 +1516,10 @@ export default function App() {
   };
 
   const [bigPictureMode, setBigPictureMode] = useState(false);
+  // Big Picture: Start moves the pad into the lobby panel, B brings it back to the games.
+  const [bpLobbyFocus, setBpLobbyFocus] = useState(false);
+  const bpLobbyFocusRef = useRef(bpLobbyFocus);
+  bpLobbyFocusRef.current = bpLobbyFocus;
   const bigPictureModeRef = useRef(bigPictureMode);
   bigPictureModeRef.current = bigPictureMode;
   const [bpSelectedIndex, setBpSelectedIndex] = useState(0);
@@ -3221,8 +3225,39 @@ export default function App() {
 
       // Big Picture mode navigation
       if (bigPictureModeRef.current) {
+        // The games grid, without the lobby panel (it has its own focus, below).
+        const bpGridItems = () => Array.from(document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item")).filter(el => !el.closest(".bp-lobby"));
+        const lobbyItems = Array.from(document.querySelectorAll<HTMLElement>(".big-picture .bp-lobby button:not(:disabled), .big-picture .bp-lobby input"));
+        // Start = into the lobby panel (invitations or current lobby).
+        if (getAction("settings") && lobbyItems.length > 0 && !bpLobbyFocusRef.current) {
+          setBpLobbyFocus(true);
+          lobbyItems.forEach(el => el.classList.remove("gamepad-focused"));
+          lobbyItems[0].classList.add("gamepad-focused");
+          lobbyItems[0].scrollIntoView({ block: "nearest", behavior: "smooth" });
+          lastGamepadButtonsRef.current = [...buttons];
+          return;
+        }
+        if (bpLobbyFocusRef.current) {
+          const current = lobbyItems.findIndex(el => el.classList.contains("gamepad-focused"));
+          const dir: Direction | null = moveDown ? "down" : moveUp ? "up" : moveLeft ? "left" : moveRight ? "right" : null;
+          if (lobbyItems.length === 0 || getAction("back")) {
+            // Lobby gone, or B: back to the games.
+            lobbyItems.forEach(el => el.classList.remove("gamepad-focused"));
+            setBpLobbyFocus(false);
+          } else if (dir) {
+            const next = current < 0 ? 0 : spatialNext(lobbyItems.map(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; }), current, dir);
+            lobbyItems.forEach(el => el.classList.remove("gamepad-focused"));
+            lobbyItems[next]?.classList.add("gamepad-focused");
+            lobbyItems[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          } else if (getAction("confirm") && current >= 0) {
+            const el = lobbyItems[current];
+            if (el instanceof HTMLInputElement) el.focus(); else el.click();
+          }
+          lastGamepadButtonsRef.current = [...buttons];
+          return;
+        }
         if (moveDown || moveUp || moveRight || moveLeft) {
-          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
+          const items = bpGridItems();
           if (items.length > 0) {
             const cols = Math.max(1, Math.round((items[0]?.parentElement?.clientWidth ?? 300) / Math.max(1, (items[0]?.clientWidth ?? 200) + 20)));
             let idx = bpSelectedIndexRef.current;
@@ -3237,19 +3272,25 @@ export default function App() {
           }
         }
         if (getAction("confirm")) {
-          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
-          items[bpSelectedIndexRef.current]?.click();
+          bpGridItems()[bpSelectedIndexRef.current]?.click();
         }
         if (getAction("back")) {
           if (bpConsoleFilterRef.current) { setBpConsoleFilter(null); setBpSelectedIndex(0); }
           else setBigPictureMode(false);
         }
+        const focusedRom = () => {
+          const romPath = bpGridItems()[bpSelectedIndexRef.current]?.getAttribute("data-rom-path");
+          return romPath ? romsRef.current.find(r => r.path === romPath) : undefined;
+        };
         // X = choose the focused game's cover
         if (getAction("details")) {
-          const items = document.querySelectorAll<HTMLElement>(".big-picture .gamepad-nav-item");
-          const romPath = items[bpSelectedIndexRef.current]?.getAttribute("data-rom-path");
-          const rom = romPath ? romsRef.current.find(r => r.path === romPath) : undefined;
+          const rom = focusedRom();
           if (rom) setCoverPickerRom(rom);
+        }
+        // Y = create a lobby for the focused game
+        if (getAction("favorite")) {
+          const rom = focusedRom();
+          if (rom) handleCreateLobbyRef.current(rom);
         }
         lastGamepadButtonsRef.current = [...buttons];
         return;
@@ -4127,7 +4168,7 @@ export default function App() {
   }, [lobbyEmulatorFor, tl]);
 
   const handleCreateLobby = useCallback(async (rom: RomFile) => {
-    if (!user) return;
+    if (!user) { showToast(tl("lobby.signInRequired"), "info"); return; }
     // The host launches first: refuse before inviting friends to a game that can't start.
     const problem = lobbyEmulatorProblem(rom.console);
     if (problem) {
@@ -4146,6 +4187,8 @@ export default function App() {
     lobbyLog("INFO", `lobby ${data.id} créé pour ${rom.name} (${rom.console})`);
     showToast(tl("lobby.created"), "success");
   }, [user, showToast, tl, loadLobbyMembers, lobbyLog, lobbyEmulatorProblem]);
+  const handleCreateLobbyRef = useRef(handleCreateLobby);
+  handleCreateLobbyRef.current = handleCreateLobby;
 
   const handleInviteToLobby = useCallback(async (friendId: string) => {
     if (!currentLobby) return;
@@ -5462,10 +5505,79 @@ export default function App() {
       setBpSelectedIndex(0);
       setBpConsoleFilter(null);
     }
+    setBpLobbyFocus(false);
   }, [bigPictureMode]);
 
   const bpRoms = bpConsoleFilter ? roms.filter(r => r.console === bpConsoleFilter) : roms;
   const bpConsoles = [...new Set(roms.map(r => r.console))].sort();
+
+  // Lobby (invitations + panel) and toasts: shown in the app and in Big Picture.
+  const lobbyUi = (
+    <>
+        {!currentLobby && lobbyInvites.length > 0 && (
+          <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+            <div className="lobby-panel__header">
+              <h3>🎮 {t("lobby.title")}</h3>
+            </div>
+            {lobbyInvites.map(inv => (
+              <div key={inv.id} className="lobby-panel__game" style={{ marginBottom: 8 }}>
+                {t("lobby.invitedBy", { friend: inv.host_profile?.username || t("lobby.player") })}
+                <div><small>{inv.game_name} ({inv.game_console})</small></div>
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  <button className="btn btn--success btn--sm" onClick={() => handleJoinLobby(inv.id)}>{t("versus.accept")}</button>
+                  <button className="btn btn--ghost btn--sm" onClick={async () => { await supabase.from("lobby_members").delete().eq("lobby_id", inv.id).eq("user_id", user?.id); loadLobbyInvites(); }}>{t("versus.decline")}</button>
+                </div>
+              </div>
+            ))}
+          </motion.div>
+        )}
+
+        {currentLobby && (
+          <LobbyPanel
+            lobby={currentLobby}
+            userId={user?.id ?? null}
+            friends={shareFriends}
+            myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
+            busy={lobbyBusy}
+            method={hostAwaitingCode ?? parseNetplayCode(currentLobby.netplay_code)?.method ?? null}
+            hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
+            awaitingHostCode={hostAwaitingCode !== null}
+            onPublishCode={publishHostCode}
+            inviteButtons={bigPictureMode}
+            chat={user && (
+              <LobbyChat
+                lobbyId={currentLobby.id}
+                userId={user.id}
+                names={Object.fromEntries((currentLobby.members || []).map(m => [m.user_id, m.profile?.username || ""]))}
+                api={lobbyChatApi}
+                t={t}
+                onLog={lobbyLog}
+              />
+            )}
+            t={t}
+            onInvite={handleInviteToLobby}
+            onReady={handleReadyLobby}
+            onLaunch={handleLaunchLobby}
+            onJoin={() => { if (currentLobby) joinLobbyGame(currentLobby); }}
+            onLeave={handleLeaveLobby}
+            onGetGame={() => { setBigPictureMode(false); setPage("store"); }}
+          />
+        )}
+    </>
+  );
+  const toastsUi = (
+        <div className="toasts">
+          <AnimatePresence>
+            {toasts.map((t) => (
+              <motion.div key={t.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className={`toast toast--${t.type}`}>
+                {t.type === "success" && <CheckCircle size={14} />}
+                {t.type === "error" && <AlertCircle size={14} />}
+                {t.message}
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+  );
 
   if (bigPictureMode) {
     return (
@@ -5494,7 +5606,7 @@ export default function App() {
                   >
                     <ConsoleLogo name={con} size={48} />
                     <span className="big-picture__console-name">{con}</span>
-                    <span className="big-picture__console-count">{count} {count === 1 ? "jeu" : "jeux"}</span>
+                    <span className="big-picture__console-count">{t(count === 1 ? "library.gameCountOne" : "library.gameCountMany", { count })}</span>
                   </motion.button>
                 );
               })}
@@ -5509,7 +5621,7 @@ export default function App() {
               <span className="big-picture__current-console">
                 <ConsoleLogo name={bpConsoleFilter} size={24} /> {bpConsoleFilter}
               </span>
-              <span className="big-picture__game-count">{bpRoms.length} {bpRoms.length === 1 ? "jeu" : "jeux"}</span>
+              <span className="big-picture__game-count">{t(bpRoms.length === 1 ? "library.gameCountOne" : "library.gameCountMany", { count: bpRoms.length })}</span>
             </div>
             <div className="big-picture__game-grid">
               {bpRoms.map((rom, i) => (
@@ -5527,10 +5639,12 @@ export default function App() {
         )}
 
         <div className="big-picture__footer">
-          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {t("gamepad.back")}{bpConsoleFilter && <> &nbsp; X — {t("coverPicker.menu")}</>} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
+          <span className="big-picture__hint">A — {t("gamepad.confirm")} &nbsp; B — {bpLobbyFocus ? t("bigPicture.backToGames") : t("gamepad.back")}{bpConsoleFilter && !bpLobbyFocus && <> &nbsp; X — {t("coverPicker.menu")} &nbsp; Y — {t("bigPicture.createLobby")}</>}{(currentLobby || lobbyInvites.length > 0) && !bpLobbyFocus && <> &nbsp; Start — {t("bigPicture.lobby")}</>} &nbsp; F11 / ESC — {t("bigPicture.exit")}</span>
         </div>
 
         {/* Inside .big-picture: its stacking context sits above the app's overlays. */}
+        <div className={`bp-lobby ${bpLobbyFocus ? "bp-lobby--focused" : ""}`}>{lobbyUi}</div>
+        {toastsUi}
         {coverPickerRom && (
           <CoverPicker rom={coverPickerRom} t={t} onClose={closeCoverPicker} onNotify={showToast} />
         )}
@@ -9174,54 +9288,7 @@ export default function App() {
         </div>
       )}
 
-      {!currentLobby && lobbyInvites.length > 0 && (
-        <motion.div className="lobby-panel" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-          <div className="lobby-panel__header">
-            <h3>🎮 {t("lobby.title")}</h3>
-          </div>
-          {lobbyInvites.map(inv => (
-            <div key={inv.id} className="lobby-panel__game" style={{ marginBottom: 8 }}>
-              {t("lobby.invitedBy", { friend: inv.host_profile?.username || t("lobby.player") })}
-              <div><small>{inv.game_name} ({inv.game_console})</small></div>
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                <button className="btn btn--success btn--sm" onClick={() => handleJoinLobby(inv.id)}>{t("versus.accept")}</button>
-                <button className="btn btn--ghost btn--sm" onClick={async () => { await supabase.from("lobby_members").delete().eq("lobby_id", inv.id).eq("user_id", user?.id); loadLobbyInvites(); }}>{t("versus.decline")}</button>
-              </div>
-            </div>
-          ))}
-        </motion.div>
-      )}
-
-      {currentLobby && (
-        <LobbyPanel
-          lobby={currentLobby}
-          userId={user?.id ?? null}
-          friends={shareFriends}
-          myRomName={findLobbyRom(roms, currentLobby)?.name ?? null}
-          busy={lobbyBusy}
-          method={hostAwaitingCode ?? parseNetplayCode(currentLobby.netplay_code)?.method ?? null}
-          hostCode={parseNetplayCode(currentLobby.netplay_code)?.host_code ?? null}
-          awaitingHostCode={hostAwaitingCode !== null}
-          onPublishCode={publishHostCode}
-          chat={user && (
-            <LobbyChat
-              lobbyId={currentLobby.id}
-              userId={user.id}
-              names={Object.fromEntries((currentLobby.members || []).map(m => [m.user_id, m.profile?.username || ""]))}
-              api={lobbyChatApi}
-              t={t}
-              onLog={lobbyLog}
-            />
-          )}
-          t={t}
-          onInvite={handleInviteToLobby}
-          onReady={handleReadyLobby}
-          onLaunch={handleLaunchLobby}
-          onJoin={() => { if (currentLobby) joinLobbyGame(currentLobby); }}
-          onLeave={handleLeaveLobby}
-          onGetGame={() => setPage("store")}
-        />
-      )}
+      {lobbyUi}
 
       {romContextMenu && (
         <div className="rom-context-overlay" onClick={() => setRomContextMenu(null)}>
@@ -9827,17 +9894,7 @@ export default function App() {
 
 
       <AchievementCelebration queue={celebrations} onDone={dismissCelebration} t={t} />
-      <div className="toasts">
-        <AnimatePresence>
-          {toasts.map((t) => (
-            <motion.div key={t.id} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className={`toast toast--${t.type}`}>
-              {t.type === "success" && <CheckCircle size={14} />}
-              {t.type === "error" && <AlertCircle size={14} />}
-              {t.message}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+      {toastsUi}
 
       {/* ===== ACCOUNT MODAL (RESTRICTED) ===== */}
       <AnimatePresence>

@@ -38,6 +38,8 @@ interface Props {
   onPublishCode: (code: string) => void;
   /** The lobby's chat (LobbyChat), under the members. */
   chat?: ReactNode;
+  /** Friends to invite as buttons (Big Picture: a <select> can't be opened with a pad). */
+  inviteButtons?: boolean;
   t: (key: string, params?: Record<string, string | number>) => string;
   onInvite: (friendId: string) => void;
   onReady: () => void;
@@ -55,7 +57,7 @@ const STEPS: Record<string, { host: string; client: string }> = {
   ryubing: { host: "lobby.stepsRyubingHost", client: "lobby.stepsRyubingClient" },
 };
 
-export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat }: Props) {
+export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat, inviteButtons }: Props) {
   const [codeDraft, setCodeDraft] = useState("");
   const [copied, setCopied] = useState(false);
   const members = lobby.members ?? [];
@@ -131,7 +133,15 @@ export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, ho
         </div>
       )}
       <div className="lobby-panel__actions">
-        {isHost && !playing && invitable.length > 0 && (
+        {isHost && !playing && invitable.length > 0 && inviteButtons && (
+          <div className="lobby-panel__invite-buttons">
+            <span>{t("lobby.inviteTitle")}</span>
+            {invitable.map((f) => (
+              <button key={f.id} className="btn btn--ghost btn--sm gamepad-nav-item" onClick={() => onInvite(f.id)}>+ {f.username}</button>
+            ))}
+          </div>
+        )}
+        {isHost && !playing && invitable.length > 0 && !inviteButtons && (
           <select
             className="lobby-panel__invite-select gamepad-nav-item"
             aria-label={t("lobby.inviteFriend")}

@@ -342,6 +342,9 @@ const en: Translations = {
     title: "Big Picture Mode",
     games: "games",
     game: "game",
+    createLobby: "Create a lobby",
+    lobby: "Lobby",
+    backToGames: "Back to games",
   },
 
   // Toasts
@@ -489,6 +492,8 @@ const en: Translations = {
     copied: "Copied!",
     waitingHostCode: "Start the game in the emulator, then share its code in the lobby.",
     otherVersion: "Your version: \"{mine}\". If it isn't the same ROM as the host's, the game may desync.",
+    signInRequired: "Sign in to create a lobby.",
+    inviteTitle: "Invite:",
   },
 
   // Versus

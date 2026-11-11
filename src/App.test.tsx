@@ -497,6 +497,17 @@ describe("cover picker in Big Picture", () => {
     expect(r.container.querySelector(".big-picture")).not.toBeNull();
   });
 
+  it("Y asks for a lobby for the focused game, and says why not when signed out", async () => {
+    const r = await openBigPictureOnNes();
+    expect(screen.getByText(/Y — Créer un lobby/)).toBeTruthy();
+    await press(15); // right: from the back button to the first game
+    await press(3); // Y
+    const toast = await screen.findByText("Connecte-toi pour créer un lobby.");
+    // Toasts show in Big Picture too (it is drawn above the app).
+    expect(toast.closest(".big-picture")).not.toBeNull();
+    expect(r.container.querySelector(".big-picture")).not.toBeNull();
+  });
+
   it("opens with a right-click on a game card", async () => {
     const r = await openBigPictureOnNes();
     fireEvent.contextMenu(r.container.querySelector(".big-picture .bp-card")!);

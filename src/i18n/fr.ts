@@ -340,6 +340,9 @@ const fr = {
     title: "Mode Big Picture",
     games: "jeux",
     game: "jeu",
+    createLobby: "Créer un lobby",
+    lobby: "Lobby",
+    backToGames: "Retour aux jeux",
   },
 
   // Toasts
@@ -487,6 +490,8 @@ const fr = {
     copied: "Copié !",
     waitingHostCode: "Lance la partie dans l'émulateur, puis partage son code dans le lobby.",
     otherVersion: "Ta version : « {mine} ». Si ce n'est pas la même ROM que l'hôte, la partie peut se désynchroniser.",
+    signInRequired: "Connecte-toi pour créer un lobby.",
+    inviteTitle: "Inviter :",
   },
 
   // Versus
