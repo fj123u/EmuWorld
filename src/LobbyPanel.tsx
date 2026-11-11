@@ -52,6 +52,7 @@ const STEPS: Record<string, { host: string; client: string }> = {
   dolphin: { host: "lobby.stepsDolphinHost", client: "lobby.stepsDolphinClient" },
   azahar: { host: "lobby.stepsAzaharHost", client: "lobby.stepsAzaharClient" },
   ppsspp: { host: "lobby.stepsPpsspp", client: "lobby.stepsPpsspp" },
+  ryubing: { host: "lobby.stepsRyubingHost", client: "lobby.stepsRyubingClient" },
 };
 
 export function LobbyPanel({ lobby, userId, friends, myRomName, busy, method, hostCode, awaitingHostCode, t, onInvite, onReady, onLaunch, onJoin, onLeave, onGetGame, onPublishCode, chat }: Props) {

@@ -108,6 +108,16 @@ describe("lobby panel", () => {
     expect(screen.getByText(/serveur ad hoc de PPSSPP/)).toBeTruthy();
   });
 
+  it("tells the host and friends how to meet in a Switch game", () => {
+    renderPanel({ lobby: { ...base, status: "playing" }, method: "ryubing" });
+    expect(screen.getByText(/crée une partie en jeu local \/ sans fil/)).toBeTruthy();
+  });
+
+  it("tells a friend to join the host's Switch session", () => {
+    renderPanel({ userId: "friend", lobby: { ...base, status: "playing" }, method: "ryubing" });
+    expect(screen.getByText(/rejoins la partie de l'hôte/)).toBeTruthy();
+  });
+
   it("only offers friends who are not in the lobby yet", () => {
     const { onInvite } = renderPanel({ friends: [{ id: "friend", username: "Léo" }, { id: "max", username: "Max" }] });
     const select = screen.getByRole("combobox", { name: "Inviter un ami..." });

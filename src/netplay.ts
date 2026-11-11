@@ -12,7 +12,7 @@ export interface RelaySession {
 
 /** What the host publishes in `lobbies.netplay_code` (JSON). */
 export interface NetplayCode {
-  /** "retroarch" (relay), "ppsspp" or "dolphin". */
+  /** "retroarch" (relay), "ppsspp", "dolphin", "azahar" or "ryubing" (LDN, private room of the lobby). */
   method: string;
   relay?: RelaySession | null;
   host_nick?: string | null;

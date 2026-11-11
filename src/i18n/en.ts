@@ -502,6 +502,8 @@ const en: Translations = {
     stepsDolphinClient: "In Dolphin: Tools → Start NetPlay → \"Connect\" tab. The host's code is already filled in: click \"Connect\".",
     stepsAzaharHost: "In Azahar: Multiplayer → Host Room (port 24872 must be open on your router). Paste the room name or your address (IP:port) here.",
     stepsAzaharClient: "In Azahar: Multiplayer → Browse Public Rooms (look for the room below) or Direct Connect with this address. Then start the game's local wireless mode.",
+    stepsRyubingHost: "Ryubing is online in a room only for this lobby. In the game, create a local / wireless session: your friends will see it.",
+    stepsRyubingClient: "Ryubing is online in the lobby's room. In the game, open local / wireless play and join the host's session (same game and Ryubing version if possible).",
     stepsPpsspp: "Everyone is on PPSSPP's ad hoc server: in the game, open local multiplayer (ad hoc), one player creates the room and the others join it.",
     codeLabelDolphin: "Dolphin NetPlay code",
     codeLabelAzahar: "Azahar room (name or IP:port)",

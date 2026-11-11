@@ -500,6 +500,8 @@ const fr = {
     stepsDolphinClient: "Dans Dolphin : Outils → Démarrer NetPlay → onglet « Se connecter ». Le code de l'hôte est déjà rempli : clique sur « Se connecter ».",
     stepsAzaharHost: "Dans Azahar : Multijoueur → Héberger un salon (le port 24872 doit être ouvert sur ta box). Colle ici le nom du salon ou ton adresse (IP:port).",
     stepsAzaharClient: "Dans Azahar : Multijoueur → Parcourir les salons publics (cherche le salon ci-dessous) ou Connexion directe avec cette adresse. Lance ensuite le mode sans fil local du jeu.",
+    stepsRyubingHost: "Ryubing est en ligne dans une salle réservée au lobby. Dans le jeu, crée une partie en jeu local / sans fil : tes amis la verront apparaître.",
+    stepsRyubingClient: "Ryubing est en ligne dans la salle du lobby. Dans le jeu, ouvre le jeu local / sans fil et rejoins la partie de l'hôte (même version du jeu et de Ryubing de préférence).",
     stepsPpsspp: "Vous êtes tous connectés au serveur ad hoc de PPSSPP : dans le jeu, ouvre le mode multijoueur local (ad hoc), un joueur crée la salle et les autres la rejoignent.",
     codeLabelDolphin: "Code NetPlay Dolphin",
     codeLabelAzahar: "Salon Azahar (nom ou IP:port)",

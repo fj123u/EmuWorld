@@ -215,6 +215,7 @@ pub fn netplay_method(emu: &crate::emulators::EmulatorInfo) -> Option<&'static s
         "ppsspp" => Some("ppsspp"),
         "dolphin" => Some("dolphin"),
         "azahar" => Some("azahar"),
+        "ryubing" => Some("ryubing"),
         id if emu.core_name.is_some() || crate::retroachievements::retroarch_core_for_emulator(id).is_some() => Some("retroarch"),
         _ => None,
     }
@@ -281,6 +282,7 @@ async fn launch_inner(
         "ppsspp" => return launch_ppsspp(&emus_dir, &final_path, username),
         "dolphin" => return launch_dolphin(&emus_dir, &final_path, username, is_host, host_code.as_deref()),
         "azahar" => return launch_azahar(&emus_dir, &emu.executable_name, &final_path),
+        "ryubing" => return launch_ryubing(&emus_dir, &emu.executable_name, &final_path, lobby_id),
         _ => {}
     }
 
@@ -502,6 +504,56 @@ fn launch_azahar(emus_dir: &Path, exe_name: &str, rom: &str) -> Result<NetplayLa
     Ok(NetplayLaunch { method: "azahar".into(), nick: None })
 }
 
+/// Ryubing (Switch) local wireless over the internet: its own LDN server
+/// ("LdnRyu"). Everyone in the lobby gets the same passphrase, made from the
+/// lobby id, so they only see each other's rooms; the host then creates the
+/// local wireless session in the game and friends join it in the game.
+/// Format checked by Ryubing: "Ryujinx-" + 8 lowercase hex digits.
+pub fn ryubing_passphrase(lobby_id: &str) -> Option<String> {
+    let hex: String = lobby_id.chars().filter(|c| c.is_ascii_hexdigit()).take(8).collect::<String>().to_ascii_lowercase();
+    (hex.len() == 8).then(|| format!("Ryujinx-{}", hex))
+}
+
+/// Ryubing's MultiplayerMode: Disabled = 0, LdnRyu = 1, LdnMitm = 2.
+const RYUBING_MODE_LDN_RYU: u64 = 1;
+
+/// Config.json with Ryubing's LDN mode and the lobby passphrase; every other
+/// setting is kept (the LDN server stays the user's, Ryubing's own by default).
+pub fn ryubing_netplay_config(json: &str, passphrase: &str) -> Result<String, String> {
+    let mut config: serde_json::Value = serde_json::from_str(json.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("Config.json de Ryubing illisible: {}", e))?;
+    let map = config.as_object_mut().ok_or("Config.json de Ryubing inattendu")?;
+    map.insert("multiplayer_mode".into(), RYUBING_MODE_LDN_RYU.into());
+    map.insert("multiplayer_ldn_passphrase".into(), passphrase.into());
+    serde_json::to_string_pretty(&config).map_err(|e| e.to_string())
+}
+
+/// `portable/` next to Ryujinx.exe when it exists (portable install),
+/// otherwise %APPDATA%\Ryujinx.
+pub fn ryubing_config_path(exe_dir: &Path, appdata: &Path) -> PathBuf {
+    let portable = exe_dir.join("portable");
+    if portable.is_dir() { portable.join("Config.json") } else { appdata.join("Ryujinx").join("Config.json") }
+}
+
+fn launch_ryubing(emus_dir: &Path, exe_name: &str, rom: &str, lobby_id: &str) -> Result<NetplayLaunch, String> {
+    let dir = emus_dir.join("ryubing");
+    let exe = crate::find_executable(&dir.to_path_buf(), exe_name).ok_or("Ryubing n'est pas installé")?;
+    let exe_dir = exe.parent().unwrap_or(&dir).to_path_buf();
+    let passphrase = ryubing_passphrase(lobby_id).ok_or("Identifiant de lobby invalide")?;
+    let appdata = dirs::config_dir().unwrap_or_else(|| exe_dir.clone());
+    let config_path = ryubing_config_path(&exe_dir, &appdata);
+    // Ryubing writes a full Config.json on its first start; a partial one
+    // would be replaced by its defaults (and lose the LDN settings).
+    let json = fs::read_to_string(&config_path).map_err(|_| "Lance Ryubing une fois (seul) pour qu'il crée sa configuration, puis relance la partie".to_string())?;
+    crate::atomic_file::write(&config_path, ryubing_netplay_config(&json, &passphrase)?.as_bytes())
+        .map_err(|e| format!("Config.json de Ryubing non modifiable: {}", e))?;
+    push_log("INFO", &format!("Netplay Ryubing: LDN activé, salle privée du lobby ({})", config_path.display()));
+    let mut c = Command::new(&exe);
+    c.current_dir(&exe_dir).arg(rom);
+    spawn(c)?;
+    Ok(NetplayLaunch { method: "ryubing".into(), nick: None })
+}
+
 /// Waits until the host's room shows on the public list and returns its relay session.
 #[tauri::command]
 pub async fn find_netplay_session(nick: String, timeout_secs: Option<u64>) -> Result<RelaySession, String> {
@@ -537,19 +589,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn ryubing_players_of_a_lobby_share_a_private_ldn_room() {
+        let lobby = "3F2A91C4-77aa-4b1e-9d0c-1234567890ab";
+        let pass = ryubing_passphrase(lobby).unwrap();
+        // Ryubing's own check: "Ryujinx-[0-9a-f]{8}", 16 characters.
+        assert_eq!(pass, "Ryujinx-3f2a91c4");
+        assert_eq!(ryubing_passphrase(lobby), ryubing_passphrase(&lobby.to_lowercase()));
+        assert_ne!(ryubing_passphrase("aaaaaaaa-0000"), ryubing_passphrase("bbbbbbbb-0000"));
+        assert_eq!(ryubing_passphrase("zz-12"), None);
+
+        let user = "\u{feff}{\n  \"version\": 70,\n  \"multiplayer_mode\": 0,\n  \"multiplayer_ldn_passphrase\": null,\n  \"ldn_server\": \"my.server\",\n  \"enable_vsync\": true\n}";
+        let out: serde_json::Value = serde_json::from_str(&ryubing_netplay_config(user, &pass).unwrap()).unwrap();
+        assert_eq!(out["multiplayer_mode"], 1);
+        assert_eq!(out["multiplayer_ldn_passphrase"], "Ryujinx-3f2a91c4");
+        // Everything else is the user's.
+        assert_eq!(out["ldn_server"], "my.server");
+        assert_eq!(out["enable_vsync"], true);
+        assert_eq!(out["version"], 70);
+        assert!(ryubing_netplay_config("not json", &pass).is_err());
+        assert!(ryubing_netplay_config("[1]", &pass).is_err());
+    }
+
+    #[test]
+    fn finds_ryubing_portable_or_appdata_config() {
+        let tmp = std::env::temp_dir().join(format!("ew_ryu_{}", std::process::id()));
+        let exe_dir = tmp.join("publish");
+        let appdata = tmp.join("AppData");
+        fs::create_dir_all(&exe_dir).unwrap();
+        assert_eq!(ryubing_config_path(&exe_dir, &appdata), appdata.join("Ryujinx").join("Config.json"));
+        fs::create_dir_all(exe_dir.join("portable")).unwrap();
+        assert_eq!(ryubing_config_path(&exe_dir, &appdata), exe_dir.join("portable").join("Config.json"));
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
     fn only_emulators_with_netplay_get_lobbies() {
         let catalog = crate::emulators::get_catalog();
         let method = |id: &str| netplay_method(catalog.iter().find(|e| e.id == id).unwrap_or_else(|| panic!("{} absent du catalogue", id)));
         assert_eq!(method("ppsspp"), Some("ppsspp"));
         assert_eq!(method("dolphin"), Some("dolphin"));
         assert_eq!(method("azahar"), Some("azahar"));
+        assert_eq!(method("ryubing"), Some("ryubing"));
         assert_eq!(method("mesen"), Some("retroarch"));
         assert_eq!(method("retroarch-nes"), Some("retroarch"));
         assert_eq!(method("flycast"), Some("retroarch"));
         // Every other emulator is a deliberate "no netplay": a new emulator
         // must be added to one list or the other.
         // ("retroarch" alone is the multi-system frontend: no core, no console.)
-        let without = ["cemu", "ryubing", "duckstation", "pcsx2", "rpcs3", "xemu", "xenia", "retroarch"];
+        let without = ["cemu", "duckstation", "pcsx2", "rpcs3", "xemu", "xenia", "retroarch"];
         for emu in &catalog {
             assert_eq!(netplay_method(emu).is_none(), without.contains(&emu.id.as_str()), "netplay de {} à décider", emu.id);
         }

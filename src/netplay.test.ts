@@ -85,6 +85,9 @@ describe("starting the host's game", () => {
     await startHostNetplay({ launch: async () => ({ method: "ppsspp", nick: null }), findSession, publish });
     expect(findSession).not.toHaveBeenCalled();
     expect(publish).toHaveBeenCalledWith({ method: "ppsspp" });
+    // Ryubing: everyone joins the lobby's private LDN room, nothing to wait for.
+    await startHostNetplay({ launch: async () => ({ method: "ryubing", nick: null }), findSession, publish });
+    expect(publish).toHaveBeenLastCalledWith({ method: "ryubing" });
   });
 
   it("waits for the host's code with Dolphin and Azahar", async () => {
