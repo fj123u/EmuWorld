@@ -1,0 +1,196 @@
+/* ================================================
+   EmuWorld v3 — jetons de couleur (étape 1 de la refonte)
+   À fusionner dans src/App.css à la place du bloc :root actuel
+   (lignes 9 à 75) et des thèmes qui suivent.
+
+   Deux niveaux :
+   1. les NOUVEAUX jetons (--bg, --panel, --ink…) : à utiliser dans tout
+      le code écrit pour la v3 ;
+   2. les ANCIENS noms (--bg-primary, --neon-purple…) gardés comme alias :
+      les 7000 lignes de CSS existantes continuent de marcher pendant la
+      migration, page par page. On les supprime à la fin.
+   ================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@600;700&family=Nunito:wght@400;600;700;800;900&display=swap');
+
+:root {
+  /* ─── Surfaces ─── */
+  --bg: #F1F2F7;            /* fond de l'app */
+  --dot: #D6D9E6;           /* points du fond */
+  --panel: #FFFFFF;         /* cartes, barres, modales */
+  --soft: #E9EBF4;          /* pastilles, boutons secondaires, champs */
+  --soft-hover: #DFE2EF;
+  --line: rgba(42, 43, 61, 0.10);        /* séparateurs */
+  --line-strong: rgba(42, 43, 61, 0.22);
+
+  /* ─── Texte ─── */
+  --ink: #2A2B3D;           /* texte principal */
+  --mut: #5C5F78;           /* texte secondaire */
+  --faint: #8387A0;         /* légendes, placeholders (jamais sur --soft en petit) */
+  --link: #4254C5;
+  --on-accent: #23243A;     /* texte posé sur le dégradé ou une couleur pastel */
+
+  /* ─── Accent (pervenche) ─── */
+  --accent: #6573E6;
+  --accent-strong: #4254C5;
+  --accent-soft: rgba(101, 115, 230, 0.14);
+  --accent-fill: #E3E7FF;   /* remplissage pastel des icônes */
+
+  /* ─── Dégradé : réservé au cadre principal, au bouton d'action,
+         aux barres de progression. Nulle part ailleurs. ─── */
+  --grad: linear-gradient(120deg, #7FC4F2, #8E9BF5 50%, #C58CF0);
+  --grad-soft: linear-gradient(120deg, #9FD0F7, #A9B4FA 50%, #D3A8F5);
+
+  /* ─── Couleurs de section (contour des icônes de navigation) ─── */
+  --sec-home: #E98B3A;      --sec-home-fill: #FFD9B0;
+  --sec-games: #5B8DEF;     --sec-games-fill: #C6DAFF;
+  --sec-store: #E06FA4;     --sec-store-fill: #FFD3E6;
+  --sec-social: #3DB878;    --sec-social-fill: #C8F1D9;
+  --sec-trophy: #DDA41C;    --sec-trophy-fill: #FFEDB5;
+  --sec-settings: #7A7F9A;  --sec-settings-fill: #DFE1EE;
+
+  /* ─── États ─── */
+  --ok: #2E9E63;
+  --warn: #C98A10;
+  --danger: #D9534F;
+  --danger-soft: rgba(217, 83, 79, 0.14);
+
+  /* ─── Couleur de contour courante (.v3-ring, .v3-tile, .v3-cover).
+         Par défaut l'accent ; une console la remplace avec --console-hue. ─── */
+  --k: var(--accent);
+
+  /* ─── Typo ─── */
+  --font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-title: 'Outfit', 'Nunito', sans-serif;
+  --font-pixel: var(--font-family);
+
+  /* ─── Mise en page ─── */
+  --sidebar-width: 260px;   /* disparaît à l'étape 3 (navigation) */
+  --titlebar-height: 40px;
+
+  /* ─── Mouvement ─── */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-bounce: 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ─── Rayons ─── */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* ─── Ombres (légères : le relief vient des contours, plus des ombres) ─── */
+  --shadow-soft: 0 2px 10px rgba(42, 43, 61, 0.08);
+  --shadow-lg: 0 12px 32px rgba(42, 43, 61, 0.16);
+
+  /* ════════ Alias des anciens noms (à supprimer en fin de migration) ════════ */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--panel);
+  --bg-card: var(--panel);
+  --bg-hover: var(--soft);
+  --bg-active: var(--soft-hover);
+  --bg-glass: color-mix(in srgb, var(--panel) 92%, transparent);
+
+  --neon-purple: var(--accent);
+  --neon-purple-soft: var(--accent-strong);
+  --neon-purple-glow: rgba(101, 115, 230, 0.28);
+  --neon-cyan: #5B9BEF;
+  --neon-cyan-glow: rgba(91, 155, 239, 0.22);
+  --neon-green: var(--ok);
+  --neon-green-glow: rgba(46, 158, 99, 0.22);
+  --neon-pink: var(--sec-store);
+  --neon-pink-glow: rgba(224, 111, 164, 0.22);
+  --neon-red: var(--danger);
+  --neon-red-glow: var(--danger-soft);
+  --neon-amber: var(--sec-trophy);
+
+  --accent-blue: var(--accent);
+  --accent-blue-ink: var(--link);
+  --accent-blue-deep: #C9CFFA;
+  --accent-blue-soft: var(--accent-soft);
+  --accent-orange: var(--sec-home);
+  --accent-orange-ink: #A85E14;
+
+  --text-primary: var(--ink);
+  --text-secondary: var(--mut);
+  --text-muted: var(--faint);
+
+  --border: var(--line);
+  --border-hover: var(--line-strong);
+  --border-neon: rgba(101, 115, 230, 0.45);
+
+  --volume-primary: var(--shadow-soft);
+  --volume-primary-hover: var(--shadow-lg);
+
+  /* Utilisées dans le code actuel mais jamais définies (elles tombent
+     aujourd'hui sur rien) : on leur donne enfin une valeur. */
+  --bg-tertiary: var(--soft);
+  --border-subtle: var(--line);
+  --card-bg: var(--panel);
+  --neon-primary: var(--accent);
+  --neon-rgb: 101, 115, 230;
+  --accent-rgb: 101, 115, 230;
+}
+
+/* ─── Thème sombre ─── */
+[data-theme="dark"] {
+  --bg: #0D0E14;
+  --dot: #20222F;
+  --panel: #181A24;
+  --soft: #242737;
+  --soft-hover: #2D3145;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.18);
+
+  --ink: #F1F2F8;
+  --mut: #A9ADC4;
+  --faint: #7E839C;
+  --link: #A9B8FA;
+
+  --accent: #8E9BF5;
+  --accent-strong: #A9B8FA;
+  --accent-soft: rgba(142, 155, 245, 0.18);
+  --accent-fill: #262A3E;
+
+  --ok: #4CC98A;
+  --warn: #F2C14E;
+  --danger: #F07F7B;
+  --danger-soft: rgba(240, 127, 123, 0.16);
+
+  --accent-blue-deep: #2B3052;
+  --accent-orange-ink: #F3B57C;
+
+  --shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.50);
+}
+
+/* ─── Couleur d'accent personnalisée (réglage existant) ─── */
+[data-accent-hue] {
+  --accent: hsl(var(--custom-hue), 68%, 64%);
+  --accent-strong: hsl(var(--custom-hue), 52%, 48%);
+  --accent-soft: hsla(var(--custom-hue), 68%, 64%, 0.14);
+  --accent-fill: hsl(var(--custom-hue), 90%, 94%);
+  --link: hsl(var(--custom-hue), 52%, 44%);
+}
+[data-theme="dark"][data-accent-hue] {
+  --accent-strong: hsl(var(--custom-hue), 85%, 82%);
+  --accent-fill: hsl(var(--custom-hue), 24%, 20%);
+  --link: hsl(var(--custom-hue), 85%, 82%);
+}
+
+/* ─── Couleur de console (quand on parcourt une console, ou sur une tuile) :
+       même mécanisme qu'aujourd'hui, en plus doux (80 % / 62 % avant). ─── */
+[data-console-accent],
+[style*="--console-hue"] {
+  --k: hsl(var(--console-hue), 72%, 68%);
+}
+
+/* ─── Fond pointillé ─── */
+body {
+  font-family: var(--font-family);
+  color: var(--ink);
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--dot) 1.2px, transparent 1.4px);
+  background-size: 18px 18px;
+}
+h1, h2, h3 { font-family: var(--font-title); font-weight: 700; }

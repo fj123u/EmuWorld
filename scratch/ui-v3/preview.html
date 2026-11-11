@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EmuWorld v3 — aperçu du kit</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="components.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; font-weight: 700; font-size: 15px; }
+  button { font: inherit; border: 0; cursor: pointer; background: none; color: inherit; }
+  h1, h2, p { margin: 0; }
+  h2 { font-size: 21px; }
+  .page { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; }
+  .mut { color: var(--mut); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="row" style="justify-content: space-between">
+    <nav class="v3-dock" aria-label="Navigation">
+      <button class="v3-dock__item active"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-home);--f:var(--sec-home-fill)"><path class="o" d="M6 15L16 6l10 9v10a1 1 0 0 1-1 1h-6v-7h-6v7H7a1 1 0 0 1-1-1z"/><path class="i" d="M6 15L16 6l10 9v10a1 1 0 0 1-1 1h-6v-7h-6v7H7a1 1 0 0 1-1-1z"/></svg><span class="v3-dock__label">Accueil</span></button>
+      <button class="v3-dock__item" aria-label="Jeux"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-games);--f:var(--sec-games-fill)"><path class="o" d="M10 11h12a6 6 0 0 1 0 12H10a6 6 0 0 1 0-12z"/><path class="i" d="M10 11h12a6 6 0 0 1 0 12H10a6 6 0 0 1 0-12z"/><path class="d" d="M11 15v4M9 17h4M21 16h.01M23 18.5h.01"/></svg></button>
+      <button class="v3-dock__item" aria-label="Store"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-store);--f:var(--sec-store-fill)"><path class="d" d="M12.5 12v-2a3.5 3.5 0 0 1 7 0v2" style="stroke-width:5"/><path class="o" d="M8 12h16l-1.5 14h-13z"/><path class="i" d="M8 12h16l-1.5 14h-13z"/></svg></button>
+      <button class="v3-dock__item" aria-label="Social"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-social);--f:var(--sec-social-fill)"><path class="o" d="M16 6a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM7 26a9 9 0 0 1 18 0z"/><path class="i" d="M16 6a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zM7 26a9 9 0 0 1 18 0z"/></svg><span class="v3-dock__badge">2</span></button>
+      <button class="v3-dock__item" aria-label="Succès"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-trophy);--f:var(--sec-trophy-fill)"><path class="o" d="M10 6h12v7a6 6 0 0 1-4 5.6V22h3v4H11v-4h3v-3.4A6 6 0 0 1 10 13z"/><path class="i" d="M10 6h12v7a6 6 0 0 1-4 5.6V22h3v4H11v-4h3v-3.4A6 6 0 0 1 10 13z"/></svg></button>
+      <button class="v3-dock__item" aria-label="Réglages"><svg class="v3-icon" viewBox="0 0 32 32" style="--k:var(--sec-settings);--f:var(--sec-settings-fill)"><path class="o" d="M16 6a10 10 0 1 1 0 20 10 10 0 0 1 0-20z"/><path class="i" d="M16 6a10 10 0 1 1 0 20 10 10 0 0 1 0-20z"/><path class="d" d="M16 12.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7z"/></svg></button>
+    </nav>
+    <button class="v3-btn" id="toggle">Clair / sombre</button>
+  </header>
+
+  <div class="v3-tabs">
+    <button class="v3-tabs__item active">Bibliothèque</button>
+    <button class="v3-tabs__item">Émulateurs</button>
+    <button class="v3-tabs__item">Installés</button>
+  </div>
+
+  <section class="v3-frame row" style="gap: 26px">
+    <div class="v3-cover v3-ring" style="--console-hue: 251; width: 150px"></div>
+    <div class="col" style="flex: 1 1 300px">
+      <span class="v3-pill" style="align-self: flex-start">Reprendre la partie</span>
+      <h1 style="font-size: 42px; line-height: 1.05">Kart Fiesta</h1>
+      <p class="mut">GameCube · 12 h 40 de jeu · dernière partie hier</p>
+      <div class="row">
+        <button class="v3-btn v3-btn--go"><span class="v3-key">A</span>Jouer</button>
+        <button class="v3-btn">Créer un lobby</button>
+        <button class="v3-btn v3-btn--danger">Supprimer</button>
+        <button class="v3-btn" disabled>Désactivé</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="col">
+    <h2>Tes consoles</h2>
+    <div class="grid">
+      <button class="v3-tile v3-ring" style="--console-hue: 3"><span class="v3-tile__name">Switch</span><span class="v3-pill" style="background: var(--panel)">24 jeux</span></button>
+      <button class="v3-tile v3-ring" style="--console-hue: 251"><span class="v3-tile__name">GameCube</span><span class="v3-pill" style="background: var(--panel)">18 jeux</span></button>
+      <button class="v3-tile v3-ring" style="--console-hue: 214"><span class="v3-tile__name">PSP</span><span class="v3-pill" style="background: var(--panel)">9 jeux</span></button>
+      <button class="v3-tile v3-ring" style="--console-hue: 154"><span class="v3-tile__name">Nintendo 64</span><span class="v3-pill" style="background: var(--panel)">12 jeux</span></button>
+      <button class="v3-tile v3-ring" style="--console-hue: 41"><span class="v3-tile__name">GBA</span><span class="v3-pill" style="background: var(--panel)">31 jeux</span></button>
+    </div>
+  </section>
+
+  <div class="row" style="align-items: stretch">
+    <section class="v3-card col" style="flex: 1 1 300px">
+      <h2>Amis en ligne</h2>
+      <div class="row" style="flex-wrap: nowrap">
+        <div class="v3-avatar v3-ring" style="--k: var(--sec-social)">LN</div>
+        <div style="flex: 1"><div>Léna</div><div class="mut" style="font-size: 13px">Joue à Kart Fiesta</div></div>
+        <button class="v3-btn v3-btn--sm">Rejoindre</button>
+      </div>
+      <input class="v3-input" placeholder="Chercher un ami" aria-label="Chercher un ami">
+    </section>
+    <section class="v3-card col" style="flex: 1 1 300px">
+      <span class="v3-pill" style="align-self: flex-start">Défi de la semaine</span>
+      <h2>Jouer 5 h sur une console rétro</h2>
+      <div class="v3-progress"><span style="width: 62%"></span></div>
+      <p class="mut">3 h 06 sur 5 h</p>
+    </section>
+  </div>
+
+</div>
+<script>
+  document.getElementById("toggle").addEventListener("click", () => {
+    const root = document.documentElement;
+    if (root.getAttribute("data-theme") === "dark") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", "dark");
+  });
+</script>
+</body>
+</html>
