@@ -41,6 +41,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🎨 Plus de fond qui change de couleur au survol d'un jeu, quel que soit le thème",
     "🪟 Manette : dans une fenêtre ouverte (profil, connexion, notes, profil d'un ami, chat…), on se déplace dedans, A clique, B la ferme, et la page derrière ne bouge plus",
     "⚡ Bibliothèque bien plus légère à l'ouverture d'une console : les jaquettes ne se chargent que quand elles arrivent à l'écran, restent en mémoire d'une visite à l'autre, et l'app ne se redessine plus en entier à chaque jaquette",
+    "🎮 PlayStation 4 et PlayStation 5 : shadPS4 et KytyPS5 (expérimental) s'installent depuis le catalogue ; les jeux en dossiers (CUSA…, PPSA…) rangés dans un dossier « PS4 » ou « PS5 » apparaissent avec leur vrai titre",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

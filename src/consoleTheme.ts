@@ -22,6 +22,8 @@ const CONSOLE_HUES: Record<string, number> = {
   "PlayStation 1": 220,
   "PlayStation 2": 228,
   "PlayStation 3": 212,
+  "PlayStation 4": 222,
+  "PlayStation 5": 200,
   "PlayStation Portable": 205,
   // Microsoft
   "Xbox": 120,

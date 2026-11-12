@@ -55,6 +55,8 @@ pub fn platforms(console: &str) -> &'static [&'static str] {
         "PlayStation 1" | "PS1" => &["PlayStation"],
         "PlayStation 2" | "PS2" => &["PlayStation 2"],
         "PlayStation 3" | "PS3" => &["PlayStation 3"],
+        "PlayStation 4" | "PS4" => &["PlayStation 4"],
+        "PlayStation 5" | "PS5" => &["PlayStation 5"],
         "PlayStation Portable" | "PSP" => &["PlayStation Portable"],
         "Xbox" => &["Xbox"],
         "Xbox 360" => &["Xbox 360"],

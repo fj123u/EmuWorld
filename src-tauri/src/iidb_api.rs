@@ -61,6 +61,9 @@ fn catalog_console_keys(console: &str) -> &'static [&'static str] {
         "PlayStation 1" => &["ps1"],
         "PlayStation 2" => &["ps2"],
         "PlayStation 3" => &["ps3"],
+        // Not checked against a live iiDB answer: a wrong key only means no iiDB cover.
+        "PlayStation 4" => &["ps4"],
+        "PlayStation 5" => &["ps5"],
         "PlayStation Portable" => &["psp"],
         "Xbox" => &["xbox"],
         "Xbox 360" => &["xbox360"],

@@ -374,6 +374,7 @@ mod netplay;
 mod speedrun;
 mod libretro_index;
 mod launchbox;
+mod ps_games;
 
 /// The cover-search trace is a debugging aid, not an archive: past this size it
 /// starts over (it had reached 12 MB on a real library).
@@ -1167,6 +1168,13 @@ async fn launch_emulator(
         (dir, exe, emu.id.clone())
     };
 
+    // KytyPS5 ships two programs: kyty_emulator.exe runs a game and only
+    // prints its usage without one, so "open the emulator" starts its launcher.
+    let exe_path = if effective_id == "kytyps5" && rom_path.is_none() {
+        find_executable(&install_dir, "kyty_launcher.exe").unwrap_or(exe_path)
+    } else {
+        exe_path
+    };
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
     if let Some(rom) = rom_path.clone() {
@@ -1246,9 +1254,9 @@ async fn launch_emulator(
             }
         }
 
-        // Cemu requires -g flag to launch a game
-        if emu.id == "cemu" {
-            cmd.arg("-g");
+        // Cemu, shadPS4 and KytyPS5 take the game behind a flag.
+        if let Some(flag) = game_path_flag(&emu.id) {
+            cmd.arg(flag);
         }
 
         cmd.arg(&final_path);
@@ -1277,6 +1285,8 @@ async fn launch_emulator(
             "pcsx2" => { cmd.arg("-fullscreen"); },
             "mgba" => { cmd.arg("-f"); },
             "rpcs3" => { if rom_path.is_some() { cmd.arg("--no-gui"); cmd.arg("--fullscreen"); } },
+            "shadps4" => { if rom_path.is_some() { cmd.arg("--fullscreen"); cmd.arg("true"); } },
+            "kytyps5" => { if rom_path.is_some() { cmd.arg("--fullscreen"); } },
             "ryubing" => { cmd.arg("--fullscreen"); },
             "azahar" => { /* no fullscreen flag — azahar doesn't support CLI fullscreen */ },
             "melonds" => { cmd.arg("--fullscreen"); },
@@ -1458,6 +1468,25 @@ fn orphan_session_seconds(session: &serde_json::Value) -> u64 {
     (last_seen - start).min(86_400)
 }
 
+/// Flag some emulators want before the game's path.
+fn game_path_flag(emulator_id: &str) -> Option<&'static str> {
+    match emulator_id {
+        "cemu" | "shadps4" => Some("-g"),
+        "kytyps5" => Some("--game"),
+        _ => None,
+    }
+}
+
+/// Whether a GitHub release asset is the Windows 64-bit build of an emulator
+/// ("…-win_x64.zip", "…-windows-x86_64.zip", "shadps4-win64-sdl-…zip").
+fn is_windows_x64_asset(name: &str) -> bool {
+    let name = name.to_lowercase();
+    name.contains("win")
+        && (name.contains("x64") || name.contains("x86_64") || name.contains("win64"))
+        && !name.contains("pdb")
+        && !name.contains("dbg")
+}
+
 fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
     let target_name = name.to_lowercase();
     
@@ -1544,10 +1573,36 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
         }
     }
 
+    // PS4 / PS5 games are folders too (ps_games.rs). Everything under those
+    // console folders is theirs: their eboot.bin and data files must not be
+    // picked up below as ROMs of another console.
+    let mut folder_console_dirs: Vec<PathBuf> = vec![];
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for console_dir in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
+            let console = console_dir.file_name()
+                .map(|n| normalize_console_folder(&n.to_string_lossy()))
+                .unwrap_or_default();
+            let Some(emulator_id) = ps_games::emulator_for(&console) else { continue };
+            for game in ps_games::scan_console_dir(&console_dir, &console) {
+                roms.push(RomFile {
+                    name: game.name,
+                    path: game.launch_path.to_string_lossy().to_string(),
+                    console: console.clone(),
+                    emulator_id: emulator_id.to_string(),
+                    extension: "bin".to_string(),
+                });
+            }
+            folder_console_dirs.push(console_dir);
+        }
+    }
+
     for entry in walkdir::WalkDir::new(&dir).max_depth(5) {
         if SCAN_CANCELLED.load(std::sync::atomic::Ordering::Relaxed) { break; }
         if let Ok(e) = entry {
             if e.file_type().is_file() {
+                if folder_console_dirs.iter().any(|d| e.path().starts_with(d)) {
+                    continue;
+                }
                 if let Some(ext) = e.path().extension() {
                     let ext_str = ext.to_string_lossy().to_lowercase();
 
@@ -1664,6 +1719,8 @@ fn normalize_console_folder(folder: &str) -> String {
         "ps1" | "psx" | "playstation" | "playstation 1" => "PlayStation 1".to_string(),
         "ps2" | "playstation 2" => "PlayStation 2".to_string(),
         "ps3" | "playstation 3" => "PlayStation 3".to_string(),
+        "ps4" | "playstation 4" => "PlayStation 4".to_string(),
+        "ps5" | "playstation 5" => "PlayStation 5".to_string(),
         "n64" | "nintendo 64" => "Nintendo 64".to_string(),
         "nds" | "ds" | "nintendo ds" => "Nintendo DS".to_string(),
         "3ds" | "nintendo 3ds" => "Nintendo 3DS".to_string(),
@@ -1862,6 +1919,13 @@ fn delete_rom(path: String) -> Result<String, String> {
     if !p.exists() {
         push_log("WARN", &format!("Suppression impossible — fichier introuvable: {}", path));
         return Err("File not found".to_string());
+    }
+
+    // PS3 / PS4 / PS5 games are whole folders: deleting the one file the
+    // library points at would leave the rest of the game on disk.
+    if ps_games::is_folder_game_path(&p) {
+        push_log("WARN", &format!("Suppression refusée (jeu en dossier): {}", path));
+        return Err("Ce jeu est un dossier complet : supprime son dossier depuis l'explorateur".to_string());
     }
 
     let config = get_config();
@@ -6370,13 +6434,11 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                 if let Ok(resp) = client.get(&api_url).header("User-Agent", "EmuWorld/2.0").send().await {
                     if let Ok(json) = resp.json::<serde_json::Value>().await {
                         if let Some(tag) = json["tag_name"].as_str() {
-                            let latest = tag.trim_start_matches('v').trim_start_matches("release-");
+                            // "v1.2", "release-1.2" and shadPS4's "v.0.21.0" all mean their number.
+                            let latest = tag.trim_start_matches('v').trim_start_matches('.').trim_start_matches("release-");
                             if latest != current && !latest.is_empty() {
                                 let dl_url = json["assets"].as_array()
-                                    .and_then(|assets| assets.iter().find(|a| {
-                                        let name = a["name"].as_str().unwrap_or("").to_lowercase();
-                                        name.contains("win") && (name.contains("x64") || name.contains("x86_64")) && !name.contains("pdb") && !name.contains("dbg")
-                                    }))
+                                    .and_then(|assets| assets.iter().find(|a| is_windows_x64_asset(a["name"].as_str().unwrap_or(""))))
                                     .and_then(|a| a["browser_download_url"].as_str())
                                     .unwrap_or("")
                                     .to_string();
@@ -7255,6 +7317,47 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    #[test]
+    fn scan_lists_ps4_and_ps5_folder_games_once() {
+        let root = fake_library("ps45", &[
+            "PS4/CUSA00900/eboot.bin",
+            "PS4/CUSA00900/sce_sys/about/right.sprx",
+            "PS4/CUSA00900/data/intro.bin",
+            "PlayStation 5/PPSA01234/eboot.bin",
+            "NES/Mario.nes",
+        ]);
+        let roms = scan_roms(root.to_string_lossy().to_string());
+        let mut found: Vec<(String, String)> = roms.iter().map(|r| (r.console.clone(), r.name.clone())).collect();
+        found.sort();
+        assert_eq!(found, [
+            ("NES".to_string(), "Mario".to_string()),
+            ("PlayStation 4".to_string(), "CUSA00900".to_string()),
+            ("PlayStation 5".to_string(), "PPSA01234".to_string()),
+        ], "one entry per game folder, nothing from inside it");
+        let ps4 = roms.iter().find(|r| r.console == "PlayStation 4").unwrap();
+        assert_eq!(ps4.emulator_id, "shadps4");
+        assert!(ps4.path.ends_with("eboot.bin"), "shadPS4 boots the executable: {}", ps4.path);
+        let ps5 = roms.iter().find(|r| r.console == "PlayStation 5").unwrap();
+        assert_eq!(ps5.emulator_id, "kytyps5");
+        assert!(ps5.path.ends_with("PPSA01234"), "KytyPS5 boots the folder: {}", ps5.path);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn game_flag_and_release_asset_of_the_ps4_ps5_emulators() {
+        assert_eq!(game_path_flag("cemu"), Some("-g"));
+        assert_eq!(game_path_flag("shadps4"), Some("-g"));
+        assert_eq!(game_path_flag("kytyps5"), Some("--game"));
+        assert_eq!(game_path_flag("dolphin"), None);
+
+        assert!(is_windows_x64_asset("shadps4-win64-sdl-0.21.0.zip"));
+        assert!(is_windows_x64_asset("KytyPS5-2026-11-11-bc934ef-Windows-x64.zip"));
+        assert!(is_windows_x64_asset("lichii-windows-x86_64.zip"));
+        assert!(!is_windows_x64_asset("shadps4-linux-sdl-0.21.0.zip"));
+        assert!(!is_windows_x64_asset("shadps4-macos-sdl-0.21.0.zip"));
+        assert!(!is_windows_x64_asset("emu-win-x64.pdb.zip"));
+    }
+
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {
         let root = std::env::temp_dir().join(format!("emuworld_scan_{}_{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&root);
@@ -7354,7 +7457,7 @@ mod tests {
         // a name that exists nowhere in the catalog silently breaks detection.
         let catalog = emulators::get_catalog();
         let aliases = [
-            "psp", "ps1", "psx", "ps2", "ps3", "n64", "nds", "ds", "3ds", "gc", "gamecube", "wii", "wiiu",
+            "psp", "ps1", "psx", "ps2", "ps3", "ps4", "ps5", "n64", "nds", "ds", "3ds", "gc", "gamecube", "wii", "wiiu",
             "nes", "famicom", "snes", "super famicom", "gba", "gb", "game boy", "gbc", "game boy color",
             "switch", "md", "genesis", "dc", "vb", "sega cd", "32x", "xbox", "xbox 360", "atari 5200",
             "atari 7800", "jaguar", "lynx", "tg16", "pc engine", "tgcd", "cdi", "saturn", "gg", "sms",
@@ -7377,7 +7480,9 @@ mod tests {
             assert!(ids.insert(e.id.clone()), "duplicate emulator id {}", e.id);
             assert_eq!(e.id, e.id.to_lowercase(), "emulator ids must be lowercase (folder names on disk): {}", e.id);
             assert!(!e.console.is_empty() && !e.name.is_empty(), "{} has an empty name/console", e.id);
-            assert!(!e.supported_extensions.is_empty(), "{} supports no extension", e.id);
+            // PS4 / PS5 games are folders found by ps_games.rs, not files with an extension.
+            let folder_games = ps_games::emulator_for(&e.console) == Some(e.id.as_str());
+            assert_eq!(e.supported_extensions.is_empty(), folder_games, "{}: file extensions, or folder games declared in ps_games.rs", e.id);
             for ext in &e.supported_extensions {
                 assert_eq!(ext, &ext.to_lowercase(), "{}: extensions are matched lowercase", e.id);
                 assert!(!ext.starts_with('.'), "{}: extension {:?} must not start with a dot", e.id, ext);
