@@ -448,7 +448,7 @@ const GAMEPAD_ACTIONS_FR: Record<string, string> = {
   favorite: "Favori",
   prevPage: "Page précédente",
   nextPage: "Page suivante",
-  search: "Recherche",
+  search: "Big Picture",
   settings: "Controller",
 };
 
@@ -459,7 +459,7 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
   favorite: "Favorite",
   prevPage: "Previous page",
   nextPage: "Next page",
-  search: "Search",
+  search: "Big Picture",
   settings: "Controller",
 };
 
@@ -926,16 +926,19 @@ const SuggestionCover = ({ gameName, console: consoleName }: { gameName: string;
 };
 
 /** Settings → last cover-search events. Owns its subscription, so only it re-renders. */
-const BoxartLogList = () => {
+export const BoxartLogList = () => {
   const { t } = useTranslation();
   const logs = useBoxartLogs();
-  const endRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  // The newest event in view, inside the list only: scrollIntoView also
+  // scrolled the page, so Settings opened at its bottom.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
   }, [logs]);
   if (logs.length === 0) return <p className="settings__field-desc">{t("settings.noLogs")}</p>;
   return (
-    <div className="logs-container">
+    <div className="logs-container" ref={listRef}>
       {logs.map((log, i) => (
         <div key={i} className="log-item">
           <span className="log-game">[{log.game}]</span>
@@ -945,21 +948,19 @@ const BoxartLogList = () => {
           </span>
         </div>
       ))}
-      <div ref={endRef} />
     </div>
   );
 };
 
 // Memoized: the library shows hundreds of these, and App re-renders often.
 // Every prop passed to it must keep its identity between renders.
-const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onHover, onRate, onNotes, onContextMenu }: {
+const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onRate, onNotes, onContextMenu }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
   entry?: GameEntry,
   onToggleFavorite?: (rom: RomFile) => void,
   onOpenRA?: (rom: RomFile) => void,
-  onHover?: (coverUrl: string | null) => void,
   onRate?: (rom: RomFile, rating: number) => void,
   onNotes?: (rom: RomFile) => void,
   onContextMenu?: (rom: RomFile, x: number, y: number) => void,
@@ -979,8 +980,6 @@ const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpe
       className="game-card"
       data-rom-path={rom.path}
       style={consoleHue(rom.console) !== null ? ({ "--console-hue": consoleHue(rom.console) } as React.CSSProperties) : undefined}
-      onMouseEnter={() => onHover?.(cover)}
-      onMouseLeave={() => onHover?.(null)}
       onContextMenu={(e) => { e.preventDefault(); onContextMenu?.(rom, e.clientX, e.clientY); }}
     >
       <div className={`game-card__cover ${loading ? 'game-card__cover--loading' : ''}`} onClick={() => onLaunch(rom)}>
@@ -1718,7 +1717,6 @@ export default function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   // ---- Dynamic background ----
-  const [bgCover, setBgCover] = useState<string | null>(null);
 
   // ---- Store state ----
   const [storeMode, setStoreMode] = useState<"rgs" | "vimm">("vimm");
@@ -3054,6 +3052,8 @@ export default function App() {
   pageRef.current = page;
   // LB / RB open a tab like a click (navigateTo is defined further down).
   const navigateToRef = useRef<(p: Page) => void>(setPage);
+  /** Select opens Big Picture (enterBigPicture is defined further down). */
+  const enterBigPictureRef = useRef<() => void>(() => {});
   /** LB/RB moved along the tabs: keep the pad on the tabs on the new page. */
   const padOnTabsRef = useRef(false);
   const gamepadContextMenuRef = useRef(gamepadContextMenu);
@@ -3354,9 +3354,18 @@ export default function App() {
             const activeTab = top.findIndex(el => el.classList.contains("v3-tabs__item") && el.classList.contains("active"));
             const activeSection = top.findIndex(el => el.classList.contains("v3-dock__item") && el.classList.contains("active"));
             // Sections ↔ tabs: through the open ones.
-            const next = dir === "up" && current?.classList.contains("v3-tabs__item") && activeSection >= 0 ? activeSection
+            const boxes = top.map(boxOf);
+            let next = dir === "up" && current?.classList.contains("v3-tabs__item") && activeSection >= 0 ? activeSection
               : dir === "down" && idx === activeSection && activeTab >= 0 ? activeTab
-              : moveFocus(top.map(boxOf), idx, dir);
+              // With a layout, only what is on screen that way (no page-order
+              // fallback: right of the profile is not the first tab).
+              : boxes.some(b => b.width > 0) ? spatialNext(boxes, idx, dir) : moveFocus(boxes, idx, dir);
+            // The row of sections, Big Picture and the profile loops: left of
+            // Accueil is the profile, right of the profile is Accueil.
+            if (next === idx && (dir === "left" || dir === "right") && !current?.classList.contains("v3-tabs__item")) {
+              const row = top.map((el, i) => i).filter(i => !top[i].classList.contains("v3-tabs__item"));
+              if (row.length > 1) next = dir === "left" && idx === row[0] ? row[row.length - 1] : dir === "right" && idx === row[row.length - 1] ? row[0] : idx;
+            }
             if (next !== idx) idx = next;
             else if (dir === "down" && contentItems.length > 0) {
               // Below the bar: the page's item nearest to it (else its first one).
@@ -3472,6 +3481,10 @@ export default function App() {
       }
       if (getAction("settings")) {
         setPage("controller");
+      }
+      // Select = Big Picture, from any page.
+      if (getAction("search")) {
+        enterBigPictureRef.current();
       }
 
       lastGamepadButtonsRef.current = [...buttons];
@@ -5569,6 +5582,7 @@ export default function App() {
       try { await appWindow.setFullscreen(true); setIsFullscreen(true); } catch (_) {}
     }
   }, [appWindow]);
+  enterBigPictureRef.current = enterBigPicture;
 
   const exitBigPicture = useCallback(async () => {
     setBigPictureMode(false);
@@ -5959,9 +5973,6 @@ export default function App() {
         {topBar}
 
         <main className="main-content" ref={mainContentRef} data-page={page}>
-          <div className={`dynamic-bg ${bgCover ? "dynamic-bg--visible" : ""}`}>
-            {bgCover && <img src={bgCover} alt="" />}
-          </div>
           <AnimatePresence mode="wait">
             <motion.div
               key={page}
@@ -6150,7 +6161,6 @@ export default function App() {
                                 entry={playtime.games[`${favRom.console}::${favRom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
-                                onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
@@ -6165,7 +6175,6 @@ export default function App() {
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
-                                onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
@@ -6898,7 +6907,6 @@ export default function App() {
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
-                                onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
@@ -6989,7 +6997,6 @@ export default function App() {
                                 entry={playtime.games[`${rom.console}::${rom.name}`]}
                                 onToggleFavorite={handleToggleFavorite}
                                 onOpenRA={handleOpenRaModal}
-                                onHover={setBgCover}
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}

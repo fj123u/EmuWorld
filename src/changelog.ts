@@ -35,6 +35,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🔄 La tuile Multi-System a le logo de RetroArch",
     "⬇️ Émulateurs installés : bouton « Installer toutes les mises à jour » après la vérification (un émulateur après l'autre)",
     "👥 Social : l'activité récente montre 8 lignes, avec « Voir plus » au lieu de 50 lignes d'un coup",
+    "📜 Les Réglages s'ouvrent en haut de la page (la liste des logs de jaquettes faisait défiler jusqu'en bas)",
+    "🕹️ Manette : la barre du haut boucle (à gauche d'Accueil, le profil), anneau de focus plus visible, et Select ouvre Big Picture",
+    "📺 Big Picture : le bouton « Bibliothèque » sélectionné n'est plus rogné en haut",
+    "🎨 Plus de fond qui change de couleur au survol d'un jeu, quel que soit le thème",
     "⚡ Bibliothèque bien plus légère à l'ouverture d'une console : les jaquettes ne se chargent que quand elles arrivent à l'écran, restent en mémoire d'une visite à l'autre, et l'app ne se redessine plus en entier à chaque jaquette",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [

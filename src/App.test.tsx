@@ -6,7 +6,8 @@ import { Component, type ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
-import App, { BrandLogo, ConsoleLogo, CoverImage } from "./App";
+import App, { BoxartLogList, BrandLogo, ConsoleLogo, CoverImage } from "./App";
+import { pushBoxartLog } from "./boxartLogs";
 import { AchievementCelebration, CELEBRATION_MS } from "./AchievementCelebration";
 import { mockBackend, type Handler } from "./test/tauriMock";
 
@@ -674,6 +675,15 @@ describe("gamepad in the v3 navigation", () => {
     await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
   });
 
+  it("Select opens Big Picture from any page", async () => {
+    const r = await renderApp();
+    await pad(null);
+    navTo(r.container, "Roms");
+    expect(r.container.querySelector(".big-picture")).toBeNull();
+    await press(8); // Select
+    await waitFor(() => expect(r.container.querySelector(".big-picture")).not.toBeNull());
+  });
+
   it("RB / LB change section; on the tabs, they change tab inside the section", async () => {
     const r = await renderApp();
     await pad(null);
@@ -750,6 +760,32 @@ describe("emulator updates", () => {
     expect(r.backend.calls.find((c) => c.cmd === "save_emulator_version" && (c.args as { emulatorId: string }).emulatorId === "mgba")?.args).toMatchObject({ version: "0.10.5" });
     // Done: the button goes away with the updates.
     await waitFor(() => expect(screen.queryByRole("button", { name: /Installer toutes les mises à jour/ })).toBeNull());
+  });
+});
+
+describe("page background", () => {
+  it("stays the same when the mouse is over a game (no blurred cover behind the page)", async () => {
+    const r = await renderApp();
+    navTo(r.container, "Roms");
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
+    const card = await waitFor(() => {
+      const el = r.container.querySelector<HTMLElement>(".game-grid .game-card");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    fireEvent.mouseEnter(card);
+    expect(r.container.querySelector(".dynamic-bg")).toBeNull();
+  });
+});
+
+describe("Settings opening", () => {
+  it("does not scroll the page to the cover logs at the bottom", () => {
+    const spy = vi.spyOn(Element.prototype, "scrollIntoView");
+    pushBoxartLog({ game: "Zelda", url: "https://example.org/zelda.png", status: "Success" });
+    const { container } = render(<BoxartLogList />);
+    expect(container.querySelector(".log-item")).not.toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 

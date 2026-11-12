@@ -61,6 +61,11 @@ describe("v3 Big Picture (TV sizes)", () => {
     expect(bg).toContain("var(--k)");
   });
 
+  it("leaves room above the first row so the focus ring of the back button is not cut", () => {
+    expect(finalValue(".big-picture__games", "padding")).toBe("12px 48px 48px");
+    expect(finalValue(".big-picture__consoles", "padding")).toBe("12px 48px 48px");
+  });
+
   it("uses TV sizes: 20 px text, 64 px buttons, a 4 px focus ring", () => {
     expect(finalValue(".big-picture", "font-size")).toBe("20px");
     expect(finalValue(".big-picture__exit", "min-height")).toBe("64px");
