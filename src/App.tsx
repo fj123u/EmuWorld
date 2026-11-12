@@ -5387,14 +5387,16 @@ export default function App() {
   };
 
   /** Reinstalls an emulator at its latest version (uninstall, install, save the version). */
-  const updateEmulator = async (update: { id: string; latest_version: string }) => {
+  const updateEmulator = async (update: { id: string; latest_version: string; download_url: string }) => {
     logUpdate("INFO", `${update.id} → ${update.latest_version}`);
     setInstalling((prev) => [...prev, update.id]);
     showToast(t("emulators.downloading"), "info");
     try {
       // One backend command: it keeps the saves and settings stored in the
       // emulator's folder, and puts the previous version back if it fails.
-      await invoke("update_emulator", { emulatorId: update.id });
+      // download_url is the file of the release that was found: without it the
+      // catalog's older archive would be installed again.
+      await invoke("update_emulator", { emulatorId: update.id, downloadUrl: update.download_url });
     } catch (err) {
       setInstalling((prev) => prev.filter((i) => i !== update.id));
       showToast(tl("toast.installFailed", { error: String(err) }), "error");

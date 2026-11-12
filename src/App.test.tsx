@@ -752,8 +752,8 @@ describe("emulator updates", () => {
   it("installs every update found, one emulator after the other", async () => {
     const r = await renderApp({
       check_emulator_updates: () => [
-        { id: "mesen", name: "Mesen 2", current_version: "2.0.0", latest_version: "2.1.0" },
-        { id: "mgba", name: "mGBA", current_version: "0.10.3", latest_version: "0.10.5" },
+        { id: "mesen", name: "Mesen 2", current_version: "2.0.0", latest_version: "2.1.0", download_url: "https://github.com/SourMesen/Mesen2/releases/download/2.1.0/Mesen_2.1.0_Windows.zip" },
+        { id: "mgba", name: "mGBA", current_version: "0.10.3", latest_version: "0.10.5", download_url: "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64.7z" },
       ],
     });
     navTo(r.container, "Roms");
@@ -780,6 +780,9 @@ describe("emulator updates", () => {
       "update_emulator mgba", "save_emulator_version mgba",
     ]);
     expect(r.backend.calls.find((c) => c.cmd === "save_emulator_version" && (c.args as { emulatorId: string }).emulatorId === "mgba")?.args).toMatchObject({ version: "0.10.5" });
+    // The file of the release that was found is what gets installed, not the catalog's older archive.
+    expect(r.backend.calls.find((c) => c.cmd === "update_emulator" && (c.args as { emulatorId: string }).emulatorId === "mgba")?.args)
+      .toMatchObject({ downloadUrl: "https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64.7z" });
     // Done: the button goes away with the updates.
     await waitFor(() => expect(screen.queryByRole("button", { name: /Installer toutes les mises à jour/ })).toBeNull());
   });

@@ -547,12 +547,23 @@ fn get_installed_emulators() -> Vec<String> {
 
 #[tauri::command]
 async fn install_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> Result<String, String> {
+    install_emulator_from(emulator_id, app_handle, None).await
+}
+
+/// Installs an emulator from the catalog's archive, or from `archive`
+/// (url, "zip" | "7z"): the newer release an update found.
+async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle, archive: Option<(String, &'static str)>) -> Result<String, String> {
     let catalog = emulators::get_catalog();
-    let emu = catalog
+    let mut emu = catalog
         .iter()
         .find(|e| e.id == emulator_id)
         .ok_or_else(|| format!("Emulator '{}' not found in catalog", emulator_id))?
         .clone();
+    if let Some((url, archive_type)) = archive {
+        push_log("INFO", &format!("Installation de {} depuis la release: {}", emu.id, url));
+        emu.download_url = url;
+        emu.archive_type = archive_type.to_string();
+    }
     push_log("INFO", &format!("Installation de {} ({})...", emu.name, emu.id));
 
     let config = get_config();
@@ -979,6 +990,87 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
     decompress_7z_safely(archive_path, install_dir)
 }
 
+/// "zip" or "7z" for an archive the installer can extract, from its file name.
+fn archive_type_of(name: &str) -> Option<&'static str> {
+    let lower = name.to_lowercase();
+    if lower.ends_with(".zip") {
+        Some("zip")
+    } else if lower.ends_with(".7z") {
+        Some("7z")
+    } else {
+        None
+    }
+}
+
+/// The file of a newer release that replaces the catalog's archive.
+///
+/// The catalog pins one known-good file per emulator (the Windows 64-bit
+/// build, not the installer, the debug symbols or the libretro core). The
+/// same file of the new release is the catalog's file name with the version
+/// swapped ("PPSSPP-v1.20.3-Windows-x64.zip" → "…v1.20.4…"), possibly as the
+/// other archive type. Projects that renamed their files fall back to the
+/// only plausible Windows 64-bit archive; when several remain, none is
+/// chosen: no update is better than the wrong program.
+fn release_asset_for(catalog_url: &str, catalog_version: &str, latest_version: &str, assets: &[(String, String)]) -> Option<(String, &'static str)> {
+    let pick = |(name, url): &(String, String)| archive_type_of(name).map(|kind| (url.clone(), kind));
+    let catalog_file = catalog_url.rsplit('/').next().unwrap_or("").to_lowercase();
+    let expected = if catalog_version.is_empty() {
+        catalog_file.clone()
+    } else {
+        catalog_file.replace(&catalog_version.to_lowercase(), &latest_version.to_lowercase())
+    };
+    let stem = |name: &str| name.rsplit_once('.').map(|(s, _)| s.to_string()).unwrap_or_else(|| name.to_string());
+
+    if let Some(asset) = assets.iter().find(|(name, _)| name.to_lowercase() == expected) {
+        return pick(asset);
+    }
+    if let Some(asset) = assets.iter().find(|(name, _)| archive_type_of(name).is_some() && stem(&name.to_lowercase()) == stem(&expected)) {
+        return pick(asset);
+    }
+
+    const NOT_THE_PROGRAM: [&str; 11] = ["installer", "symbols", "pdb", "dbg", "debug", "libretro", "arm64", "aarch64", "room", "src", "source"];
+    let candidates: Vec<&(String, String)> = assets.iter()
+        .filter(|(name, _)| {
+            let lower = name.to_lowercase();
+            archive_type_of(&lower).is_some() && lower.contains("win") && !NOT_THE_PROGRAM.iter().any(|word| lower.contains(word))
+        })
+        .collect();
+    let x64: Vec<&(String, String)> = candidates.iter().copied().filter(|(name, _)| is_windows_x64_asset(name)).collect();
+    match (x64.as_slice(), candidates.as_slice()) {
+        ([only], _) => pick(only),
+        ([], [only]) => pick(only),
+        _ => None,
+    }
+}
+
+/// (name, download url) of a release's files, from the GitHub / Forgejo JSON.
+fn release_assets(release: &serde_json::Value) -> Vec<(String, String)> {
+    release["assets"].as_array()
+        .map(|assets| assets.iter()
+            .filter_map(|a| Some((a["name"].as_str()?.to_string(), a["browser_download_url"].as_str()?.to_string())))
+            .collect())
+        .unwrap_or_default()
+}
+
+/// An update may only download from the place its emulator's releases live:
+/// the URL comes back from the UI, so it is checked again here.
+fn trusted_update_archive(emulator_id: &str, url: &str) -> Option<(String, &'static str)> {
+    let kind = archive_type_of(url.split(['?', '#']).next().unwrap_or(""))?;
+    let allowed_prefix = match emulators::update_info(emulator_id)? {
+        emulators::UpdateSource::GitHub(repo, _) => format!("https://github.com/{}/releases/download/", repo),
+        emulators::UpdateSource::Forgejo(api_url, _) => {
+            let host = api_url.strip_prefix("https://")?.split('/').next()?;
+            format!("https://{}/", host)
+        }
+        emulators::UpdateSource::DolphinEmu(_) => "https://dl.dolphin-emu.org/releases/".to_string(),
+    };
+    if url.starts_with(&allowed_prefix) && !url.contains("..") {
+        Some((url.to_string(), kind))
+    } else {
+        None
+    }
+}
+
 /// Folder an emulator's previous install waits in while its update is installed.
 fn update_backup_dir(emulators_dir: &std::path::Path, emulator_id: &str) -> PathBuf {
     emulators_dir.join(format!("{}.update-backup", emulator_id))
@@ -1031,9 +1123,14 @@ fn carry_over_user_files(previous: &PathBuf, updated: &PathBuf, executable_name:
 /// user's files are brought back, and only then is the old folder removed. If
 /// the install fails, the previous install is put back untouched.
 #[tauri::command]
-async fn update_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> Result<String, String> {
-    push_log("INFO", &format!("Mise à jour de l'émulateur: {}", emulator_id));
+async fn update_emulator(emulator_id: String, download_url: String, app_handle: tauri::AppHandle) -> Result<String, String> {
+    push_log("INFO", &format!("Mise à jour de l'émulateur: {} ({})", emulator_id, download_url));
     let id = emulator_id.to_lowercase();
+    // Installing the catalog's archive again would not be an update.
+    let Some(archive) = trusted_update_archive(&id, &download_url) else {
+        push_log("ERROR", &format!("Mise à jour de {} refusée: archive inattendue ({})", id, download_url));
+        return Err("Mise à jour impossible : fichier de la nouvelle version introuvable".to_string());
+    };
     let emu = emulators::get_catalog().into_iter().find(|e| e.id == id)
         .ok_or_else(|| format!("Emulator '{}' not found in catalog", emulator_id))?;
     let emulators_dir = PathBuf::from(&get_config().emulators_directory);
@@ -1043,7 +1140,7 @@ async fn update_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> R
     // RetroArch cores share one folder that an update never deletes; and with
     // nothing installed there is nothing to keep.
     if id.starts_with("retroarch-") || !install_dir.exists() {
-        return install_emulator(id, app_handle).await;
+        return install_emulator_from(id, app_handle, Some(archive)).await;
     }
 
     // Left by an update the app did not survive: its files were never brought back.
@@ -1063,7 +1160,7 @@ async fn update_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> R
         return Err("Mise à jour impossible : ferme l'émulateur puis réessaie".to_string());
     }
 
-    match install_emulator(id.clone(), app_handle).await {
+    match install_emulator_from(id.clone(), app_handle, Some(archive)).await {
         Ok(message) => {
             match carry_over_user_files(&backup, &install_dir, &emu.executable_name) {
                 Ok(count) => {
@@ -6549,12 +6646,10 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                             // "v1.2", "release-1.2" and shadPS4's "v.0.21.0" all mean their number.
                             let latest = tag.trim_start_matches('v').trim_start_matches('.').trim_start_matches("release-");
                             if latest != current && !latest.is_empty() {
-                                let dl_url = json["assets"].as_array()
-                                    .and_then(|assets| assets.iter().find(|a| is_windows_x64_asset(a["name"].as_str().unwrap_or(""))))
-                                    .and_then(|a| a["browser_download_url"].as_str())
-                                    .unwrap_or("")
-                                    .to_string();
-                                updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url });
+                                match release_asset_for(&emu.download_url, catalog_ver, latest, &release_assets(&json)) {
+                                    Some((dl_url, _)) => updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url }),
+                                    None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier Windows reconnu dans la release", emu.id, latest)),
+                                }
                             }
                         }
                     }
@@ -6568,15 +6663,10 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                         if let Some(release) = releases.first() {
                             if let Some(tag) = release["tag_name"].as_str() {
                                 if tag != current {
-                                    let dl_url = release["assets"].as_array()
-                                        .and_then(|assets| assets.iter().find(|a| {
-                                            let name = a["name"].as_str().unwrap_or("").to_lowercase();
-                                            name.contains("win") && name.contains("x64") && !name.contains("pdb")
-                                        }))
-                                        .and_then(|a| a["browser_download_url"].as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: tag.to_string(), download_url: dl_url });
+                                    match release_asset_for(&emu.download_url, catalog_ver, tag, &release_assets(release)) {
+                                        Some((dl_url, _)) => updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: tag.to_string(), download_url: dl_url }),
+                                        None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier Windows reconnu dans la release", emu.id, tag)),
+                                    }
                                 }
                             }
                         }
@@ -7525,6 +7615,70 @@ mod tests {
         assert_eq!(read(new_root.join("readme.txt")), "new readme");
         assert_eq!(update_backup_dir(&root, "shadps4"), root.join("shadps4.update-backup"));
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // An "update" used to install the catalog's pinned archive again and record
+    // the new version number. It must install the file of the release it found:
+    // the same file as the catalog's, not an installer, symbols or a libretro core.
+    #[test]
+    fn an_update_installs_the_matching_file_of_the_new_release() {
+        let assets = |names: &[&str]| -> Vec<(String, String)> {
+            names.iter().map(|n| (n.to_string(), format!("https://example.test/{}", n))).collect()
+        };
+        let pick = |catalog_url: &str, catalog_ver: &str, latest: &str, names: &[&str]| {
+            release_asset_for(catalog_url, catalog_ver, latest, &assets(names))
+                .map(|(url, kind)| (url.rsplit('/').next().unwrap().to_string(), kind))
+        };
+
+        // Same file name, new version.
+        assert_eq!(
+            pick("https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-win64.7z", "0.10.5", "0.11.0",
+                &["mGBA-0.11.0-win32-installer.exe", "mGBA-0.11.0-win32.7z", "mGBA-0.11.0-win64-installer.exe", "mGBA-0.11.0-win64.7z"]),
+            Some(("mGBA-0.11.0-win64.7z".to_string(), "7z")));
+        assert_eq!(
+            pick("https://github.com/PCSX2/pcsx2/releases/download/v2.6.3/pcsx2-v2.6.3-windows-x64-Qt.7z", "2.6.3", "2.8.2",
+                &["pcsx2-v2.8.2-windows-x64-installer.exe", "pcsx2-v2.8.2-windows-x64-Qt-symbols.7z", "pcsx2-v2.8.2-windows-x64-Qt.7z"]),
+            Some(("pcsx2-v2.8.2-windows-x64-Qt.7z".to_string(), "7z")));
+        // No "x64" in the name: the old matcher found nothing.
+        assert_eq!(
+            pick("https://github.com/SourMesen/Mesen2/releases/download/2.1.1/Mesen_2.1.1_Windows.zip", "2.1.1", "2.2.0",
+                &["Mesen_2.2.0_Linux_x64.zip", "Mesen_2.2.0_Windows.zip"]),
+            Some(("Mesen_2.2.0_Windows.zip".to_string(), "zip")));
+        // A file name without version, and one whose archive type changed.
+        assert_eq!(
+            pick("https://github.com/zortos293/Lichii/releases/download/build-160/lichii-windows-x86_64-pgo.zip", "build-160", "build-170",
+                &["lichii-linux-x86_64-pgo.tar.gz", "lichii-windows-x86_64-pgo.zip", "lichii-windows-x86_64.zip"]),
+            Some(("lichii-windows-x86_64-pgo.zip".to_string(), "zip")));
+        assert_eq!(
+            pick("https://github.com/xenia-canary/xenia-canary/releases/download/29311dd/xenia_canary_windows.zip", "29311dd", "11bea29",
+                &["xenia_canary_windows.7z"]),
+            Some(("xenia_canary_windows.7z".to_string(), "7z")));
+        // Renamed files: the only Windows 64-bit archive that is the program itself.
+        assert_eq!(
+            pick("https://github.com/xemu-project/xemu/releases/download/v0.8.135/xemu-win-x86_64-release.zip", "0.8.135", "0.8.139",
+                &["xemu-0.8.139-dbg-windows-x86_64.zip", "xemu-0.8.139-windows-arm64.zip", "xemu-0.8.139-windows-x86_64-pdb.zip", "xemu-0.8.139-windows-x86_64.zip"]),
+            Some(("xemu-0.8.139-windows-x86_64.zip".to_string(), "zip")));
+        // Nothing usable, or no way to tell which one: no update rather than the wrong program.
+        assert_eq!(pick("https://x.test/a/emu-1.0-win64.zip", "1.0", "2.0", &["emu-2.0-win64-installer.exe", "emu-2.0-linux.zip"]), None);
+        assert_eq!(pick("https://x.test/a/emu-windows-msvc-1.0.zip", "1.0", "2.0", &["emu-libretro-windows-x86_64-2.0.zip", "emu-windows-a-2.0.zip", "emu-windows-b-2.0.zip"]), None);
+    }
+
+    #[test]
+    fn an_update_only_downloads_from_its_emulator_release_page() {
+        let ok = "https://github.com/shadps4-emu/shadPS4/releases/download/v.0.22.0/shadps4-win64-sdl-0.22.0.zip";
+        assert_eq!(trusted_update_archive("shadps4", ok), Some((ok.to_string(), "zip")));
+        assert_eq!(
+            trusted_update_archive("dolphin", "https://dl.dolphin-emu.org/releases/2509/dolphin-2509-x64.7z").map(|a| a.1),
+            Some("7z"));
+        assert!(trusted_update_archive("ryubing", "https://git.ryujinx.app/projects/Ryubing/releases/download/1.3.4/ryujinx-1.3.4-win_x64.zip").is_some());
+        // Another repository, another host, not an archive, no update source, nothing.
+        assert!(trusted_update_archive("shadps4", "https://github.com/someone/else/releases/download/v1/shadps4-win64.zip").is_none());
+        assert!(trusted_update_archive("shadps4", "https://evil.example/shadps4-win64-sdl-0.22.0.zip").is_none());
+        assert!(trusted_update_archive("shadps4", "http://github.com/shadps4-emu/shadPS4/releases/download/v.0.22.0/a.zip").is_none());
+        assert!(trusted_update_archive("shadps4", "https://github.com/shadps4-emu/shadPS4/releases/download/v.0.22.0/setup.exe").is_none());
+        assert!(trusted_update_archive("shadps4", "https://github.com/shadps4-emu/shadPS4/releases/download/../../../evil/a.zip").is_none());
+        assert!(trusted_update_archive("retroarch-nes", ok).is_none());
+        assert!(trusted_update_archive("shadps4", "").is_none());
     }
 
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {
