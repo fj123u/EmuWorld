@@ -464,6 +464,18 @@ const GAMEPAD_ACTIONS_EN: Record<string, string> = {
 };
 
 // Gamepad navigation zones: the v3 top bar, then the page.
+/** Dialogs drawn over the app: while one is open the pad stays inside it. */
+const DIALOG_SEL = ".account-overlay, .login-overlay, .notes-modal-overlay, .friend-profile-overlay, .ra-overlay, .chat-overlay, .onboarding-overlay";
+/** The dialog on top (the last one drawn), if any. */
+function topDialog(): HTMLElement | null {
+  const all = document.querySelectorAll<HTMLElement>(DIALOG_SEL);
+  return all.length > 0 ? all[all.length - 1] : null;
+}
+/** What the pad can reach in a dialog: its visible buttons, fields and links. */
+function dialogNavItems(dialog: HTMLElement): HTMLElement[] {
+  return [...dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not([type=hidden]):not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]")]
+    .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 || r.height > 0 || !document.body.getBoundingClientRect().width; });
+}
 const TOP_NAV_SEL = ".v3-topbar .gamepad-nav-item";
 const CONTENT_NAV_SEL = ".main-content .game-card, .main-content .rgs-console-card, .main-content .emu-card, .main-content .vimm-game-row, .main-content .gamepad-nav-item, .main-content .friend-card, .main-content .btn, .main-content .settings__field-input, .main-content .leaderboard-entry, .main-content .changelog-card, .main-content .store-source-toggle__btn, .main-content .theme-picker__item";
 /** An item inside another one (a button on a card) is reached through it (A / menu). */
@@ -3268,6 +3280,34 @@ export default function App() {
         return;
       }
 
+      // A dialog is open (profile, sign-in, notes, a friend's profile…): the
+      // pad moves inside it only, A clicks, B closes it.
+      const dialog = topDialog();
+      if (dialog) {
+        const items = dialogNavItems(dialog);
+        const current = items.findIndex(el => el.classList.contains("gamepad-focused"));
+        const dir: Direction | null = moveDown ? "down" : moveUp ? "up" : moveLeft ? "left" : moveRight ? "right" : null;
+        if (dir && items.length > 0) {
+          const next = current < 0 ? 0 : moveFocus(items.map(boxOf), current, dir);
+          items.forEach(el => el.classList.remove("gamepad-focused"));
+          items[next]?.classList.add("gamepad-focused");
+          items[next]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+        if (getAction("confirm") && current >= 0) {
+          const el = items[current];
+          if (el instanceof HTMLInputElement && el.type !== "checkbox" && el.type !== "range") setGamepadKeyboard({ inputEl: el, keyIdx: 0 });
+          else if (el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) el.focus();
+          else el.click();
+        }
+        if (getAction("back")) {
+          // Its close button, else a click on the backdrop (closes every one of them).
+          const close = dialog.querySelector<HTMLElement>("[class*='__close'], [class*='-close']");
+          (close ?? dialog).click();
+        }
+        lastGamepadButtonsRef.current = [...buttons];
+        return;
+      }
+
       // Big Picture mode navigation
       if (bigPictureModeRef.current) {
         // The games grid, without the lobby panel (it has its own focus, below).
@@ -3502,6 +3542,11 @@ export default function App() {
       const sidebarItems = document.querySelectorAll<HTMLElement>(TOP_NAV_SEL);
       const contentItems = document.querySelectorAll<HTMLElement>(CONTENT_NAV_SEL);
       const allItems = [...sidebarItems, ...contentItems];
+      // A dialog has the pad: no focus ring (or scrolling) behind it.
+      if (topDialog()) {
+        allItems.forEach(el => el.classList.remove("gamepad-focused"));
+        return;
+      }
       allItems.forEach((el, i) => {
         if (i === focusIndexRef.current) {
           el.classList.add("gamepad-focused");

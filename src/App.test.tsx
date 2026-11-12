@@ -675,6 +675,26 @@ describe("gamepad in the v3 navigation", () => {
     await waitFor(() => expect(focused(r.container)?.getAttribute("data-nav-page")).toBe("library"));
   });
 
+  it("stays inside an open dialog: moves in it, A clicks, B closes, the page behind does not move", async () => {
+    const r = await renderApp();
+    await pad(null);
+    await press(14); // left of Accueil: the end of the row, the sign-in button
+    await waitFor(() => expect(focused(r.container)?.classList.contains("v3-login")).toBe(true));
+    await press(0); // A: opens the sign-in dialog
+    const dialog = await waitFor(() => {
+      const el = r.container.querySelector<HTMLElement>(".login-overlay");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    await press(13); // first move: the dialog's first item
+    await waitFor(() => expect(focused(r.container)?.closest(".login-overlay")).toBe(dialog));
+    await press(15); // next item, still in the dialog
+    await waitFor(() => expect(r.container.querySelectorAll(".gamepad-focused")).toHaveLength(1));
+    expect(focused(r.container)?.closest(".login-overlay")).toBe(dialog);
+    await press(1); // B closes it
+    await waitFor(() => expect(r.container.querySelector(".login-overlay")).toBeNull());
+  });
+
   it("Select opens Big Picture from any page", async () => {
     const r = await renderApp();
     await pad(null);
