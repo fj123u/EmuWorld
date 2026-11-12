@@ -51,6 +51,7 @@ pub fn platforms(console: &str) -> &'static [&'static str] {
         "GameCube / Wii" | "GameCube - Wii" | "GameCube" | "Wii" => &["GameCube", "Wii"],
         "Wii U" => &["Wii U"],
         "Nintendo Switch" => &["Nintendo Switch"],
+        "Nintendo Switch 2" => &["Nintendo Switch 2"],
         "Virtual Boy" => &["Virtual Boy"],
         "PlayStation 1" | "PS1" => &["PlayStation"],
         "PlayStation 2" | "PS2" => &["PlayStation 2"],

@@ -57,6 +57,8 @@ fn catalog_console_keys(console: &str) -> &'static [&'static str] {
         "GameCube / Wii" => &["gamecube", "wii"],
         "Wii U" => &["wiiu"],
         "Nintendo Switch" => &["switch"],
+        // Not checked against a live iiDB answer: a wrong key only means no iiDB cover.
+        "Nintendo Switch 2" => &["switch2"],
         "Virtual Boy" => &["virtualboy"],
         "PlayStation 1" => &["ps1"],
         "PlayStation 2" => &["ps2"],

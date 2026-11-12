@@ -636,7 +636,7 @@ mod tests {
         // Every other emulator is a deliberate "no netplay": a new emulator
         // must be added to one list or the other.
         // ("retroarch" alone is the multi-system frontend: no core, no console.)
-        let without = ["cemu", "duckstation", "pcsx2", "rpcs3", "shadps4", "kytyps5", "xemu", "xenia", "retroarch"];
+        let without = ["cemu", "duckstation", "pcsx2", "rpcs3", "shadps4", "kytyps5", "lichii", "xemu", "xenia", "retroarch"];
         for emu in &catalog {
             assert_eq!(netplay_method(emu).is_none(), without.contains(&emu.id.as_str()), "netplay de {} à décider", emu.id);
         }

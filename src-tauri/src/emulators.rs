@@ -59,6 +59,7 @@ pub fn update_info(id: &str) -> Option<UpdateSource> {
         "kytyps5" => Some(UpdateSource::GitHub("KytyPS5/KytyPS5", "KytyPS5-2026-11-11-bc934ef")),
         "xenia" => Some(UpdateSource::GitHub("xenia-canary/xenia-canary", "29311dd")),
         "project64" => Some(UpdateSource::GitHub("pj64team/Project64-Legacy", "1.6.4")),
+        "lichii" => Some(UpdateSource::GitHub("zortos293/Lichii", "build-160")),
         "ryubing" => Some(UpdateSource::Forgejo("https://git.ryujinx.app/api/v1/repos/projects/Ryubing/releases?limit=1", "1.3.3")),
         _ => None,
     }
@@ -224,6 +225,25 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
                     expected_sha256: None,
                 },
             ],
+        },
+        // Lichii also reads nsp / xci, but only `nup` (Switch 2 packages) is declared:
+        // Switch games stay with Ryubing. No keys or firmware are downloaded for it.
+        // Not run in portable mode on purpose: an update replaces the whole
+        // install folder, and a `user/` folder in it would lose the saves.
+        EmulatorInfo {
+            id: "lichii".to_string(),
+            name: "Lichii".to_string(),
+            console: "Nintendo Switch 2".to_string(),
+            description: "Émulateur Nintendo Switch 2 très expérimental (un à deux builds par jour) : peu de jeux tournent, et il demande un PC puissant. Jeux au format .nup. Réglages et sauvegardes dans %APPDATA%\\lichii.".to_string(),
+            download_url: "https://github.com/zortos293/Lichii/releases/download/build-160/lichii-windows-x86_64-pgo.zip".to_string(),
+            executable_name: "lichii.exe".to_string(),
+            supported_extensions: vec!["nup".to_string()],
+            icon: "🎮".to_string(),
+            website: "https://github.com/zortos293/Lichii".to_string(),
+            archive_type: "zip".to_string(),
+            category: "Nintendo".to_string(),
+            core_name: None,
+            setup_files: vec![],
         },
         EmulatorInfo {
             id: "retroarch-nes".to_string(),

@@ -14,6 +14,7 @@ const CONSOLE_HUES: Record<string, number> = {
   "GameCube / Wii": 255,
   "Wii U": 195,
   "Nintendo Switch": 355,
+  "Nintendo Switch 2": 8,
   "Game Boy Advance": 245,
   "Nintendo DS": 210,
   "Nintendo 3DS": 0,

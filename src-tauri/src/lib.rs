@@ -1288,6 +1288,7 @@ async fn launch_emulator(
             "shadps4" => { if rom_path.is_some() { cmd.arg("--fullscreen"); cmd.arg("true"); } },
             "kytyps5" => { if rom_path.is_some() { cmd.arg("--fullscreen"); } },
             "ryubing" => { cmd.arg("--fullscreen"); },
+            "lichii" => { if rom_path.is_some() { cmd.arg("-f"); } },
             "azahar" => { /* no fullscreen flag — azahar doesn't support CLI fullscreen */ },
             "melonds" => { cmd.arg("--fullscreen"); },
             "project64" => { cmd.arg("--fullscreen"); },
@@ -1471,7 +1472,7 @@ fn orphan_session_seconds(session: &serde_json::Value) -> u64 {
 /// Flag some emulators want before the game's path.
 fn game_path_flag(emulator_id: &str) -> Option<&'static str> {
     match emulator_id {
-        "cemu" | "shadps4" => Some("-g"),
+        "cemu" | "shadps4" | "lichii" => Some("-g"),
         "kytyps5" => Some("--game"),
         _ => None,
     }
@@ -1740,6 +1741,7 @@ fn normalize_console_folder(folder: &str) -> String {
         "atari 2600" | "atari2600" | "a2600" => "Atari 2600".to_string(),
         "wonderswan" | "wonderswan color" | "ws" | "wsc" => "WonderSwan".to_string(),
         "switch" | "nintendo switch" => "Nintendo Switch".to_string(),
+        "switch 2" | "switch2" | "ns2" | "nintendo switch 2" => "Nintendo Switch 2".to_string(),
         "md" | "megadrive" | "mega drive" | "genesis" => "Mega Drive".to_string(),
         "dc" | "dreamcast" => "Dreamcast".to_string(),
         "vb" | "virtual boy" => "Virtual Boy".to_string(),
@@ -7358,6 +7360,29 @@ mod tests {
         assert!(!is_windows_x64_asset("emu-win-x64.pdb.zip"));
     }
 
+    // Lichii reads Switch games too, but they must stay with Ryubing: only
+    // the Switch 2 package format goes to it, wherever the file is stored.
+    #[test]
+    fn scan_sends_nup_to_lichii_and_keeps_switch_games_on_ryubing() {
+        let root = fake_library("ns2", &[
+            "jeux switch 2/Mario Kart World [0400000000ABC000].nup",
+            "Switch 2/Donkey Kong Bananza.nup",
+            "jeux switch/Celeste [01002B30028F6000][v0].nsp",
+        ]);
+        let roms = scan_roms(root.to_string_lossy().to_string());
+        let mut found: Vec<(String, String, String)> = roms.iter()
+            .map(|r| (r.console.clone(), r.name.clone(), r.emulator_id.clone()))
+            .collect();
+        found.sort();
+        assert_eq!(found, [
+            ("Nintendo Switch".to_string(), "Celeste [01002B30028F6000][v0]".to_string(), "ryubing".to_string()),
+            ("Nintendo Switch 2".to_string(), "Donkey Kong Bananza".to_string(), "lichii".to_string()),
+            ("Nintendo Switch 2".to_string(), "Mario Kart World [0400000000ABC000]".to_string(), "lichii".to_string()),
+        ]);
+        assert_eq!(game_path_flag("lichii"), Some("-g"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {
         let root = std::env::temp_dir().join(format!("emuworld_scan_{}_{}", tag, std::process::id()));
         let _ = fs::remove_dir_all(&root);
@@ -7459,7 +7484,7 @@ mod tests {
         let aliases = [
             "psp", "ps1", "psx", "ps2", "ps3", "ps4", "ps5", "n64", "nds", "ds", "3ds", "gc", "gamecube", "wii", "wiiu",
             "nes", "famicom", "snes", "super famicom", "gba", "gb", "game boy", "gbc", "game boy color",
-            "switch", "md", "genesis", "dc", "vb", "sega cd", "32x", "xbox", "xbox 360", "atari 5200",
+            "switch", "switch 2", "ns2", "md", "genesis", "dc", "vb", "sega cd", "32x", "xbox", "xbox 360", "atari 5200",
             "atari 7800", "jaguar", "lynx", "tg16", "pc engine", "tgcd", "cdi", "saturn", "gg", "sms",
         ];
         for alias in aliases {
