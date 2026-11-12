@@ -979,6 +979,116 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
     decompress_7z_safely(archive_path, install_dir)
 }
 
+/// Folder an emulator's previous install waits in while its update is installed.
+fn update_backup_dir(emulators_dir: &std::path::Path, emulator_id: &str) -> PathBuf {
+    emulators_dir.join(format!("{}.update-backup", emulator_id))
+}
+
+/// Directory holding the emulator's executable inside `install_dir` (archives
+/// often extract into a versioned sub-folder), or `install_dir` itself.
+fn executable_dir(install_dir: &PathBuf, executable_name: &str) -> PathBuf {
+    find_executable(install_dir, executable_name)
+        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| install_dir.clone())
+}
+
+/// After an update: brings back from the previous install every file the new
+/// one does not have — saves, memory cards, settings, keys, firmware, shader
+/// caches… whatever the emulator or the user put next to its executable
+/// (shadPS4's `user/`, Ryubing's `portable/`, PPSSPP's `memstick/`…).
+/// Files shipped by the new version are never replaced. Returns how many
+/// files were brought back.
+fn carry_over_user_files(previous: &PathBuf, updated: &PathBuf, executable_name: &str) -> std::io::Result<usize> {
+    let old_root = executable_dir(previous, executable_name);
+    let new_root = executable_dir(updated, executable_name);
+    let mut restored = 0;
+    for entry in walkdir::WalkDir::new(&old_root) {
+        let entry = entry.map_err(std::io::Error::other)?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let Ok(relative) = entry.path().strip_prefix(&old_root) else { continue };
+        let target = new_root.join(relative);
+        if target.exists() {
+            continue;
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // Same disk: a rename is instant even for gigabytes of saves or shaders.
+        if fs::rename(entry.path(), &target).is_err() {
+            fs::copy(entry.path(), &target)?;
+        }
+        restored += 1;
+    }
+    Ok(restored)
+}
+
+/// Updates an emulator without losing what lives in its folder. Updating used
+/// to be "uninstall, then install": the whole folder was deleted, and with it
+/// the saves of every emulator that keeps them next to its executable.
+/// Now the previous install is set aside, the new version is installed, the
+/// user's files are brought back, and only then is the old folder removed. If
+/// the install fails, the previous install is put back untouched.
+#[tauri::command]
+async fn update_emulator(emulator_id: String, app_handle: tauri::AppHandle) -> Result<String, String> {
+    push_log("INFO", &format!("Mise à jour de l'émulateur: {}", emulator_id));
+    let id = emulator_id.to_lowercase();
+    let emu = emulators::get_catalog().into_iter().find(|e| e.id == id)
+        .ok_or_else(|| format!("Emulator '{}' not found in catalog", emulator_id))?;
+    let emulators_dir = PathBuf::from(&get_config().emulators_directory);
+    let install_dir = emulators_dir.join(&id);
+    let backup = update_backup_dir(&emulators_dir, &id);
+
+    // RetroArch cores share one folder that an update never deletes; and with
+    // nothing installed there is nothing to keep.
+    if id.starts_with("retroarch-") || !install_dir.exists() {
+        return install_emulator(id, app_handle).await;
+    }
+
+    // Left by an update the app did not survive: its files were never brought back.
+    if backup.exists() {
+        push_log("WARN", &format!("Mise à jour de {}: reprise d'une sauvegarde laissée par une mise à jour interrompue", id));
+        match carry_over_user_files(&backup, &install_dir, &emu.executable_name) {
+            Ok(_) => { let _ = fs::remove_dir_all(&backup); }
+            Err(e) => {
+                push_log("ERROR", &format!("Mise à jour de {}: reprise impossible ({}), mise à jour annulée", id, e));
+                return Err(format!("Mise à jour annulée : l'ancienne sauvegarde {} n'a pas pu être reprise ({})", backup.display(), e));
+            }
+        }
+    }
+
+    if let Err(e) = fs::rename(&install_dir, &backup) {
+        push_log("ERROR", &format!("Mise à jour de {}: dossier verrouillé ({})", id, e));
+        return Err("Mise à jour impossible : ferme l'émulateur puis réessaie".to_string());
+    }
+
+    match install_emulator(id.clone(), app_handle).await {
+        Ok(message) => {
+            match carry_over_user_files(&backup, &install_dir, &emu.executable_name) {
+                Ok(count) => {
+                    push_log("INFO", &format!("Mise à jour de {} terminée: {} fichier(s) conservé(s)", id, count));
+                    if let Err(e) = fs::remove_dir_all(&backup) {
+                        push_log("WARN", &format!("Mise à jour de {}: ancien dossier non supprimé ({})", id, e));
+                    }
+                }
+                // Nothing is lost: the previous install stays on disk and is
+                // picked up again by the next update.
+                Err(e) => push_log("ERROR", &format!("Mise à jour de {}: fichiers non repris ({}), ancien dossier gardé dans {}", id, e, backup.display())),
+            }
+            Ok(message)
+        }
+        Err(e) => {
+            push_log("ERROR", &format!("Mise à jour de {} échouée ({}): retour à la version précédente", id, e));
+            let _ = fs::remove_dir_all(&install_dir);
+            if let Err(restore) = fs::rename(&backup, &install_dir) {
+                push_log("ERROR", &format!("Mise à jour de {}: version précédente restée dans {} ({})", id, backup.display(), restore));
+            }
+            Err(e)
+        }
+    }
+}
+
 #[tauri::command]
 fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
     push_log("INFO", &format!("Désinstallation de l'émulateur: {}", emulator_id));
@@ -6887,6 +6997,7 @@ pub fn run() {
             get_installed_emulators,
             install_emulator,
             uninstall_emulator,
+            update_emulator,
             launch_emulator,
             scan_roms,
             cancel_scan,
@@ -7380,6 +7491,39 @@ mod tests {
             ("Nintendo Switch 2".to_string(), "Mario Kart World [0400000000ABC000]".to_string(), "lichii".to_string()),
         ]);
         assert_eq!(game_path_flag("lichii"), Some("-g"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    // Updating an emulator used to delete its whole folder: saves kept next to
+    // the executable (shadPS4 `user/`, Ryubing `portable/`…) went with it.
+    #[test]
+    fn update_brings_back_the_user_files_of_the_previous_install() {
+        let root = std::env::temp_dir().join(format!("emuworld_update_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let previous = update_backup_dir(&root, "shadps4");
+        let updated = root.join("shadps4");
+        let write = |path: PathBuf, content: &str| {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, content).unwrap();
+        };
+        // Previous install: extracted into a versioned folder, with the user's data.
+        write(previous.join("shadps4-0.20").join("shadPS4.exe"), "old program");
+        write(previous.join("shadps4-0.20").join("user").join("savedata").join("CUSA00900").join("save.bin"), "40 hours");
+        write(previous.join("shadps4-0.20").join("user").join("config.toml"), "my settings");
+        write(previous.join("shadps4-0.20").join("readme.txt"), "old readme");
+        // New install: another folder name, a new program and a new readme.
+        write(updated.join("shadps4-0.21").join("shadPS4.exe"), "new program");
+        write(updated.join("shadps4-0.21").join("readme.txt"), "new readme");
+
+        let restored = carry_over_user_files(&previous, &updated, "shadPS4.exe").unwrap();
+        assert_eq!(restored, 2, "the save and the settings");
+        let new_root = updated.join("shadps4-0.21");
+        let read = |p: PathBuf| std::fs::read_to_string(p).unwrap();
+        assert_eq!(read(new_root.join("user").join("savedata").join("CUSA00900").join("save.bin")), "40 hours");
+        assert_eq!(read(new_root.join("user").join("config.toml")), "my settings");
+        assert_eq!(read(new_root.join("shadPS4.exe")), "new program", "the new version is never overwritten");
+        assert_eq!(read(new_root.join("readme.txt")), "new readme");
+        assert_eq!(update_backup_dir(&root, "shadps4"), root.join("shadps4.update-backup"));
         let _ = std::fs::remove_dir_all(&root);
     }
 

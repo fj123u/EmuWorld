@@ -771,15 +771,45 @@ describe("emulator updates", () => {
     });
     await waitFor(() => expect(r.backend.count("save_emulator_version")).toBe(2));
     const steps = r.backend.calls
-      .filter((c) => ["uninstall_emulator", "install_emulator", "save_emulator_version"].includes(c.cmd))
+      .filter((c) => ["uninstall_emulator", "install_emulator", "update_emulator", "save_emulator_version"].includes(c.cmd))
       .map((c) => `${c.cmd} ${(c.args as { emulatorId: string }).emulatorId}`);
+    // An update is one backend command that keeps the emulator's saves: it is
+    // no longer "uninstall, then install", which deleted the whole folder.
     expect(steps).toEqual([
-      "uninstall_emulator mesen", "install_emulator mesen", "save_emulator_version mesen",
-      "uninstall_emulator mgba", "install_emulator mgba", "save_emulator_version mgba",
+      "update_emulator mesen", "save_emulator_version mesen",
+      "update_emulator mgba", "save_emulator_version mgba",
     ]);
     expect(r.backend.calls.find((c) => c.cmd === "save_emulator_version" && (c.args as { emulatorId: string }).emulatorId === "mgba")?.args).toMatchObject({ version: "0.10.5" });
     // Done: the button goes away with the updates.
     await waitFor(() => expect(screen.queryByRole("button", { name: /Installer toutes les mises à jour/ })).toBeNull());
+  });
+
+  it("keeps an update that failed in the list, without recording its version", async () => {
+    const r = await renderApp({
+      check_emulator_updates: () => [
+        { id: "mesen", name: "Mesen 2", current_version: "2.0.0", latest_version: "2.1.0" },
+      ],
+      update_emulator: () => {
+        throw new Error("Mise à jour impossible : ferme l'émulateur puis réessaie");
+      },
+    });
+    navTo(r.container, "Roms");
+    await screen.findByRole("combobox", { name: "Playlists intelligentes" });
+    navTo(r.container, "Installé");
+    const check = await screen.findByRole("button", { name: /Vérifier les mises à jour/ }, { timeout: 4000 });
+    await act(async () => {
+      fireEvent.click(check);
+    });
+    const all = await screen.findByRole("button", { name: "Installer toutes les mises à jour (1)" });
+    await act(async () => {
+      fireEvent.click(all);
+    });
+    await waitFor(() => expect(r.backend.count("update_emulator")).toBe(1));
+    await screen.findByText(/ferme l'émulateur puis réessaie/);
+    expect(r.backend.count("save_emulator_version")).toBe(0);
+    expect(r.backend.count("uninstall_emulator")).toBe(0);
+    // Still offered: nothing was installed.
+    expect(await screen.findByRole("button", { name: "Installer toutes les mises à jour (1)" })).toBeTruthy();
   });
 });
 

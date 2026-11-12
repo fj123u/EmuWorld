@@ -43,6 +43,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "⚡ Bibliothèque bien plus légère à l'ouverture d'une console : les jaquettes ne se chargent que quand elles arrivent à l'écran, restent en mémoire d'une visite à l'autre, et l'app ne se redessine plus en entier à chaque jaquette",
     "🎮 PlayStation 4 et PlayStation 5 : shadPS4 et KytyPS5 (expérimental) s'installent depuis le catalogue ; les jeux en dossiers (CUSA…, PPSA…) rangés dans un dossier « PS4 » ou « PS5 » apparaissent avec leur vrai titre",
     "🎮 Nintendo Switch 2 : l'émulateur Lichii (très expérimental) s'installe depuis le catalogue et lance les jeux au format .nup ; tes jeux Switch restent sur Ryubing",
+    "🛟 Mettre à jour un émulateur ne supprime plus ce qu'il range dans son dossier : sauvegardes, réglages, clés et firmware sont repris dans la nouvelle version, et l'ancienne est remise en place si l'installation échoue",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

@@ -5389,8 +5389,19 @@ export default function App() {
   /** Reinstalls an emulator at its latest version (uninstall, install, save the version). */
   const updateEmulator = async (update: { id: string; latest_version: string }) => {
     logUpdate("INFO", `${update.id} → ${update.latest_version}`);
-    await handleUninstall(update.id);
-    await doInstall(update.id);
+    setInstalling((prev) => [...prev, update.id]);
+    showToast(t("emulators.downloading"), "info");
+    try {
+      // One backend command: it keeps the saves and settings stored in the
+      // emulator's folder, and puts the previous version back if it fails.
+      await invoke("update_emulator", { emulatorId: update.id });
+    } catch (err) {
+      setInstalling((prev) => prev.filter((i) => i !== update.id));
+      showToast(tl("toast.installFailed", { error: String(err) }), "error");
+      logUpdate("ERROR", `${update.id} non mis à jour : ${err}`);
+      // Still listed as an update to install, and its version is not recorded.
+      throw err;
+    }
     await invoke("save_emulator_version", { emulatorId: update.id, version: update.latest_version })
       .catch((err) => logUpdate("ERROR", `version de ${update.id} non enregistrée : ${err}`));
     setEmuUpdates(prev => prev.filter(u => u.id !== update.id));
@@ -7142,7 +7153,7 @@ export default function App() {
                       {update && (
                         <div className="emu-card__update-info">
                           <span>{update.current_version} → {update.latest_version}</span>
-                          <button className="btn btn--primary btn--sm gamepad-nav-item" disabled={updatingAll} onClick={() => updateEmulator(update)}>
+                          <button className="btn btn--primary btn--sm gamepad-nav-item" disabled={updatingAll} onClick={() => { updateEmulator(update).catch(() => {}); }}>
                             <Download size={12} /> {t("updates.update")}
                           </button>
                         </div>

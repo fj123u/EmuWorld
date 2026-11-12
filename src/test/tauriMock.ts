@@ -60,6 +60,7 @@ export function defaultHandlers(): Record<string, Handler> {
     check_emulator_updates: () => [],
     install_emulator: (args) => `installed ${(args as { emulatorId: string }).emulatorId}`,
     uninstall_emulator: (args) => `uninstalled ${(args as { emulatorId: string }).emulatorId}`,
+    update_emulator: (args) => `${(args as { emulatorId: string }).emulatorId} installed successfully!`,
     save_emulator_version: () => null,
     fetch_boxart: () => null,
     get_cover_url: () => null,
