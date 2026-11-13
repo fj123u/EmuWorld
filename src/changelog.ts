@@ -49,6 +49,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🎮 Switch 2 : tous les jeux sont détectés, y compris ceux en .nsp / .xci (reconnus à leur Title ID 04… ou à leur dossier « switch 2 ») et les .nup qui portent un numéro de version",
     "🖼️ Jaquettes : le mot « ROM » ajouté au nom d'un fichier ne fausse plus la recherche, et une image Wikipedia n'est gardée que si l'article parle bien du jeu",
     "🖼️ Jaquettes LaunchBox en grande taille au lieu de la miniature floue ; un remake ne reçoit plus la boîte de l'ancienne console ; un jeu « Nintendo Switch 2 Edition » prend la jaquette du jeu Switch quand la sienne n'existe nulle part",
+    "🖼️ iiDB : un titre partagé avec un ancien jeu prend la version de ta console (Ocarina of Time sur Switch 2 n'a plus la boîte Nintendo 64), une faute de frappe dans le nom du fichier ne bloque plus la recherche, et « Choisir la cover » liste tous les jeux de ce titre, ceux de ta console en premier",
     "🖱️ Le pointeur de la souris disparaît dès que tu utilises la manette, et revient quand tu bouges la souris",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [

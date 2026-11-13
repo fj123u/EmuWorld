@@ -119,6 +119,8 @@ pub fn build_lookup(rom_name: &str, console: &str) -> Option<Value> {
         "artwork": "recommended",
         "slots": ["boxart"],
         "candidates_per_slot": 6,
+        // The matched game's platforms: a title can be an older game on another console.
+        "include": ["parent_metadata"],
     });
     // No `artwork_filters.console_id`: iiDB wants the console ids found on
     // its assets, which are not documented to equal `/platforms` keys, and a
@@ -202,6 +204,139 @@ pub fn choose_candidate(result: &Value, title: &str) -> Option<i64> {
         .iter()
         .filter(|c| c["name"].as_str().is_some_and(|n| crate::iidb::normalize_title(n) == wanted))
         .collect())
+}
+
+/// An iiDB game as the app needs it to choose: (id, name, platforms, year).
+pub type GameRow = (i64, String, Option<String>, Option<i64>);
+
+/// Whether an iiDB platform list ("Nintendo 64, Wii, Wii U") has the ROM's
+/// console. `None` when it cannot be told (no list, or a console the app has
+/// no iiDB name for): the caller then keeps what iiDB answered.
+pub fn on_rom_console(platforms: Option<&str>, console: &str) -> Option<bool> {
+    let names = match crate::iidb::platforms(console) {
+        [] => crate::iidb::platforms(&crate::normalize_console_folder(console)),
+        names => names,
+    };
+    let platforms = platforms.filter(|p| !p.trim().is_empty())?;
+    if names.is_empty() {
+        return None;
+    }
+    Some(platforms.split(',').map(str::trim).any(|p| names.iter().any(|n| n.eq_ignore_ascii_case(p))))
+}
+
+/// iiDB matched a game that does not exist on the ROM's console: a title
+/// shared with an older game ("Ocarina of Time" on Switch 2 is the 2026 one,
+/// not the Nintendo 64 one).
+pub fn matched_elsewhere(result: &Value, console: &str) -> bool {
+    if result["match"]["status"].as_str() != Some("matched") {
+        return false;
+    }
+    let parent = &result["match"]["parent"];
+    let platforms = parent["platform_summary"].as_str().or(parent["primary_platform"].as_str());
+    on_rom_console(platforms, console) == Some(false)
+}
+
+/// Same game as the ROM's title: the same words (iiDB's "(2026)" suffix
+/// aside), one typo apart ("Sports Resorts" for "Sports Resort"), or the
+/// "… Nintendo Switch 2 Edition + …" of the same base game.
+pub fn same_game_title(rom_title: &str, iidb_name: &str) -> bool {
+    let wanted = crate::iidb::normalize_title(rom_title);
+    let name = iidb_name.trim();
+    // "The Legend of Zelda: Ocarina of Time (2026)"
+    let name = match name.rsplit_once(" (") {
+        Some((head, tail)) if tail.len() == 5 && tail.ends_with(')') && tail[..4].chars().all(|c| c.is_ascii_digit()) => head,
+        _ => name,
+    };
+    let typo = one_typo_apart(rom_title, name);
+    let name = crate::iidb::normalize_title(name);
+    if wanted.is_empty() || name.is_empty() {
+        return false;
+    }
+    if wanted == name || typo {
+        return true;
+    }
+    const EDITION: &str = "switch2edition";
+    match wanted.find(EDITION) {
+        Some(at) if at >= 4 => name.starts_with(&wanted[..at]) && name.contains(EDITION),
+        _ => false,
+    }
+}
+
+/// Same words but one, itself one letter off ("Resorts" / "Resort"). Only in
+/// a word of five letters or more without digit: "Galaxy" and "Galaxy 2",
+/// "Fantasy V" and "Fantasy VI", "Kart 7" and "Kart 8" are different games.
+fn one_typo_apart(a: &str, b: &str) -> bool {
+    let words = |title: &str| -> Vec<String> {
+        let mut list: Vec<String> = title
+            .split(|c: char| !c.is_alphanumeric())
+            .map(crate::iidb::normalize_title)
+            .filter(|w| !w.is_empty())
+            .collect();
+        if list.first().map(String::as_str) == Some("the") {
+            list.remove(0);
+        }
+        list
+    };
+    let (a, b) = (words(a), words(b));
+    if a.len() != b.len() {
+        return false;
+    }
+    let different: Vec<(&String, &String)> = a.iter().zip(b.iter()).filter(|(x, y)| x != y).collect();
+    match different.as_slice() {
+        [(x, y)] => {
+            let plain = |w: &str| w.chars().count() >= 5 && !w.chars().any(|c| c.is_ascii_digit());
+            plain(x) && plain(y) && one_edit_apart(x, y)
+        }
+        _ => false,
+    }
+}
+
+/// One character added, removed or changed.
+fn one_edit_apart(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let (short, long) = if a.len() <= b.len() { (&a, &b) } else { (&b, &a) };
+    if long.len() - short.len() > 1 {
+        return false;
+    }
+    let start = short.iter().zip(long.iter()).take_while(|(x, y)| x == y).count();
+    if long.len() == short.len() {
+        short[start..].iter().skip(1).eq(long[start..].iter().skip(1))
+    } else {
+        short[start..].iter().eq(long[start + 1..].iter())
+    }
+}
+
+/// The one game of `rows` that is the ROM's game on the ROM's console.
+/// Several, or none: no guess.
+pub fn pick_on_console(rows: &[GameRow], rom_title: &str, console: &str) -> Option<i64> {
+    let hits: Vec<i64> = rows
+        .iter()
+        .filter(|(_, name, platforms, _)| on_rom_console(platforms.as_deref(), console) == Some(true) && same_game_title(rom_title, name))
+        .map(|row| row.0)
+        .collect();
+    if hits.len() == 1 { Some(hits[0]) } else { None }
+}
+
+/// Candidates of a `needs_choice` answer as rows.
+pub fn candidate_rows(result: &Value) -> Vec<GameRow> {
+    let read = |c: &Value| Some((
+        c["id"].as_i64()?,
+        c["name"].as_str()?.to_string(),
+        c["platform_summary"].as_str().or(c["primary_platform"].as_str()).map(String::from),
+        c["year"].as_i64(),
+    ));
+    result["candidates"].as_array().map(|list| list.iter().filter_map(read).collect()).unwrap_or_default()
+}
+
+/// Results of `GET /search/parents` as rows.
+pub fn search_rows(body: &Value) -> Vec<GameRow> {
+    let read = |r: &Value| Some((
+        r["parent_id"].as_i64()?,
+        r["name"].as_str()?.to_string(),
+        r["platform_list"].as_str().or(r["primary_platform"].as_str()).map(String::from),
+        r["initial_release_year"].as_i64(),
+    ));
+    body["results"].as_array().map(|list| list.iter().filter_map(read).collect()).unwrap_or_default()
 }
 
 /// `/assets/batch` row for a chosen iiDB parent.
@@ -518,6 +653,35 @@ async fn post_batch(path: &str, body: &Value, key: &str) -> Option<Vec<Value>> {
     None
 }
 
+/// Games iiDB lists for a title (`GET /search/parents`), paced like every
+/// other request. Empty when iiDB cannot be reached: the caller falls back.
+async fn search_parents(title: &str, key: &str) -> Vec<GameRow> {
+    let mut pace = pace().lock().await;
+    tokio::time::sleep(wait_before_next(pace.last_request, pace.rps, Instant::now())).await;
+    pace.last_request = Some(Instant::now());
+    let resp = http()
+        .get(format!("{}/search/parents", API_BASE))
+        .query(&[("q", title), ("limit", "10")])
+        .header("X-API-Key", key)
+        .header("Accept", "application/json")
+        .send()
+        .await;
+    match resp {
+        Ok(r) if r.status().is_success() => r.json::<Value>().await.map(|body| search_rows(&body)).unwrap_or_default(),
+        Ok(r) => {
+            push_log("WARN", &format!("iiDB: recherche '{}' refusée (HTTP {})", title, r.status().as_u16()));
+            Vec::new()
+        }
+        Err(e) => {
+            push_log("WARN", &format!("iiDB: recherche '{}' échouée ({})", title, e));
+            Vec::new()
+        }
+    }
+}
+
+/// Most title searches one batch may add (one request each, at the user's rate).
+const MAX_SEARCHES_PER_BATCH: usize = 10;
+
 async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
     while let Some(first) = rx.recv().await {
         let mut jobs = vec![first];
@@ -547,11 +711,29 @@ async fn worker(mut rx: mpsc::UnboundedReceiver<Job>) {
         let mut outcomes: std::collections::BTreeMap<String, usize> = Default::default();
         // (job, parent id, log label when found)
         let mut chosen: Vec<(usize, i64, &str)> = remembered.iter().map(|&(i, id)| (i, id, "ton choix")).collect();
+        let mut searches = 0;
         for &i in &to_resolve {
             let result = results[i].as_ref();
-            urls[i] = result.and_then(|r| pick_boxart(r, &jobs[i].console));
-            if let Some(id) = result.and_then(|r| choose_candidate(r, jobs[i].lookup["title"].as_str().unwrap_or(""))) {
+            let title = jobs[i].lookup["title"].as_str().unwrap_or("").to_string();
+            let console = jobs[i].console.clone();
+            // Matched a game of another console: look for the same title on the ROM's.
+            if searches < MAX_SEARCHES_PER_BATCH && result.is_some_and(|r| matched_elsewhere(r, &console)) {
+                searches += 1;
+                if let Some(id) = pick_on_console(&search_parents(&title, &key).await, &title, &console) {
+                    chosen.push((i, id, "trouvé sur la bonne console"));
+                    continue;
+                }
+            }
+            urls[i] = result.and_then(|r| pick_boxart(r, &console));
+            let by_name = result.and_then(|r| choose_candidate(r, &title));
+            // iiDB hesitates: the only candidate on the ROM's console that is this game.
+            let on_console = || result
+                .filter(|r| r["match"]["status"].as_str() == Some("needs_choice"))
+                .and_then(|r| pick_on_console(&candidate_rows(r), &title, &console));
+            if let Some(id) = by_name {
                 chosen.push((i, id, "choisi (nom exact)"));
+            } else if let Some(id) = on_console() {
+                chosen.push((i, id, "choisi (bonne console)"));
             } else {
                 *outcomes.entry(outcome(result)).or_default() += 1;
             }
@@ -620,6 +802,26 @@ pub fn with_remembered_first(
     games
 }
 
+/// Games offered in the picker: iiDB's match and the games it lists for the
+/// title, without doubles, the ROM's console first.
+pub fn picker_order(matched: Vec<GameRow>, listed: Vec<GameRow>, console: &str) -> Vec<GameRow> {
+    let mut games: Vec<GameRow> = Vec::new();
+    for game in matched.into_iter().chain(listed) {
+        match games.iter_mut().find(|g| g.0 == game.0) {
+            // The search knows the platforms and the year the match may lack.
+            Some(known) => {
+                known.2 = known.2.take().or(game.2);
+                known.3 = known.3.or(game.3);
+            }
+            None => games.push(game),
+        }
+    }
+    // Stable: iiDB's order is kept inside each group.
+    games.sort_by_key(|g| on_rom_console(g.2.as_deref(), console) != Some(true));
+    games.truncate(PICKER_GAMES);
+    games
+}
+
 /// `/resolve` lookup for the picker: the match and its alternatives, no art.
 pub fn picker_lookup(rom_name: &str, console: &str) -> Option<Value> {
     let full = build_lookup(rom_name, console)?;
@@ -673,8 +875,13 @@ pub async fn iidb_cover_choices(game_name: String, console: String) -> Result<Ve
     let key = api_key().ok_or("no_key")?;
     let Some(lookup) = picker_lookup(&game_name, &console) else { return Ok(Vec::new()) };
     let region = preferred_region(&game_name);
-    let resolved = post_batch("/resolve/batch", &json!({ "lookups": [lookup] }), &key).await.ok_or("unavailable")?;
-    let games = with_remembered_first(resolved.first().map(picker_games).unwrap_or_default(), remembered_parent(&game_name, &console));
+    let resolved = post_batch("/resolve/batch", &json!({ "lookups": [lookup.clone()] }), &key).await.ok_or("unavailable")?;
+    // iiDB's own match, plus every game it lists under that title: a remake
+    // or another console's version is one click away instead of hidden.
+    let title = lookup["title"].as_str().unwrap_or("").to_string();
+    let listed = search_parents(&title, &key).await;
+    let games = picker_order(resolved.first().map(picker_games).unwrap_or_default(), listed, &console);
+    let games = with_remembered_first(games, remembered_parent(&game_name, &console));
     if games.is_empty() {
         push_log("INFO", &format!("iiDB: aucun jeu trouvé pour '{}'", game_name));
         return Ok(Vec::new());
@@ -703,6 +910,77 @@ pub async fn iidb_cover_choices(game_name: String, console: String) -> Result<Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Shapes below are iiDB's real answers of 2026-11-13.
+    #[test]
+    fn a_title_shared_with_an_older_game_goes_to_the_roms_console() {
+        let n64 = json!({"match": {"status": "matched", "parent": {
+            "id": 96136, "name": "The Legend of Zelda: Ocarina of Time",
+            "platform_summary": "Nintendo 64, Wii, Wii U, iQue", "primary_platform": "Nintendo 64", "year": 1998}}});
+        assert!(matched_elsewhere(&n64, "Nintendo Switch 2"));
+        assert!(!matched_elsewhere(&n64, "Nintendo 64"));
+        assert!(!matched_elsewhere(&n64, "N64"), "short console names of a library");
+        // No platform in the answer, or a console without iiDB name: keep iiDB's match.
+        assert!(!matched_elsewhere(&json!({"match": {"status": "matched", "parent": {"id": 1, "name": "X"}}}), "Nintendo Switch 2"));
+        assert!(!matched_elsewhere(&n64, "Multi-System"));
+        assert!(!matched_elsewhere(&json!({"match": {"status": "needs_choice"}}), "Nintendo Switch 2"));
+
+        let listed = search_rows(&json!({"results": [
+            {"parent_id": 96136, "name": "The Legend of Zelda: Ocarina of Time", "platform_list": "Nintendo 64, Wii, Wii U, iQue", "primary_platform": "Nintendo 64", "initial_release_year": 1998},
+            {"parent_id": 91416, "name": "The Legend of Zelda: Ocarina of Time 3D", "platform_list": "Nintendo 3DS", "primary_platform": "Nintendo 3DS", "initial_release_year": 2011},
+            {"parent_id": 195471, "name": "The Legend of Zelda: Ocarina of Time (2026)", "platform_list": "Switch 2", "primary_platform": "Switch 2", "initial_release_year": 2026}
+        ]}));
+        assert_eq!(pick_on_console(&listed, "The Legend of Zelda Ocarina of Time", "Nintendo Switch 2"), Some(195471));
+        assert_eq!(pick_on_console(&listed, "The Legend of Zelda Ocarina of Time", "Nintendo 64"), Some(96136));
+        assert_eq!(pick_on_console(&listed, "The Legend of Zelda Ocarina of Time", "Wii U"), Some(96136));
+        assert_eq!(pick_on_console(&listed, "The Legend of Zelda Ocarina of Time", "PlayStation 2"), None);
+    }
+
+    #[test]
+    fn a_hesitation_is_settled_by_the_roms_console() {
+        // "Nintendo Switch Sports Resorts" (typo in the file name): 16 fuzzy candidates.
+        let result = json!({"match": {"status": "needs_choice"}, "candidates": [
+            {"id": 195468, "name": "Nintendo Switch Sports Resort", "platform_summary": "Switch 2", "primary_platform": "Switch 2", "reason": "fuzzy", "year": 2026},
+            {"id": 171665, "name": "Disney Speedstorm", "platform_summary": "Nintendo Switch, PC, PlayStation 4, PlayStation 5, Switch 2", "primary_platform": "Nintendo Switch", "reason": "fuzzy", "year": 2023},
+            {"id": 65453, "name": "Minecraft", "platform_summary": "PC, Switch 2", "primary_platform": "PC", "reason": "fuzzy", "year": 2011}
+        ]});
+        assert_eq!(choose_candidate(&result, "Nintendo Switch Sports Resorts"), None, "not the exact name");
+        assert_eq!(pick_on_console(&candidate_rows(&result), "Nintendo Switch Sports Resorts", "Nintendo Switch 2"), Some(195468));
+        assert_eq!(pick_on_console(&candidate_rows(&result), "Nintendo Switch Sports Resorts", "Nintendo Switch"), None);
+    }
+
+    #[test]
+    fn tells_the_same_game_from_a_sequel_or_another_game() {
+        assert!(same_game_title("The Legend of Zelda Ocarina of Time", "The Legend of Zelda: Ocarina of Time (2026)"));
+        assert!(same_game_title("Nintendo Switch Sports Resorts", "Nintendo Switch Sports Resort"));
+        assert!(same_game_title(
+            "Super Mario Bros Wonder Switch 2 Edition",
+            "Super Mario Bros. Wonder – Nintendo Switch 2 Edition + Meetup in Bellabel Park"));
+        assert!(!same_game_title("The Legend of Zelda Ocarina of Time", "The Legend of Zelda: Ocarina of Time 3D"));
+        assert!(!same_game_title("Super Mario Galaxy 2", "Super Mario Galaxy"), "a sequel is not a typo");
+        assert!(!same_game_title("Final Fantasy VI", "Final Fantasy V"));
+        assert!(!same_game_title("Mario Kart 7", "Mario Kart 8"));
+        assert!(!same_game_title("Splatoon Raider", "Splatoon Raiders 2"));
+        assert!(same_game_title("Splatoon Raider", "Splatoon Raiders"));
+        assert!(!same_game_title("Super Mario Bros Wonder", "Super Mario Bros. Wonder – Nintendo Switch 2 Edition + Meetup in Bellabel Park"));
+        assert!(!same_game_title("Mario Kart World", "Mario Kart 8"));
+        assert!(!same_game_title("", "Anything"));
+    }
+
+    #[test]
+    fn picker_lists_every_game_of_the_title_the_roms_console_first() {
+        let n64: GameRow = (96136, "The Legend of Zelda: Ocarina of Time".into(), Some("Nintendo 64".into()), Some(1998));
+        let listed = vec![
+            n64.clone(),
+            (91416, "The Legend of Zelda: Ocarina of Time 3D".into(), Some("Nintendo 3DS".into()), Some(2011)),
+            (195471, "The Legend of Zelda: Ocarina of Time (2026)".into(), Some("Switch 2".into()), Some(2026)),
+        ];
+        // iiDB's match comes without its platform: the search fills it in.
+        let matched: GameRow = (96136, "The Legend of Zelda: Ocarina of Time".into(), None, Some(1998));
+        let games = picker_order(vec![matched], listed, "Nintendo Switch 2");
+        assert_eq!(games.iter().map(|g| g.0).collect::<Vec<_>>(), [195471, 96136, 91416]);
+        assert_eq!(games[1], n64);
+    }
 
     #[test]
     fn every_catalog_console_has_iidb_console_keys() {
