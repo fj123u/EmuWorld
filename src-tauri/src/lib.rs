@@ -1676,6 +1676,28 @@ fn orphan_session_seconds(session: &serde_json::Value) -> u64 {
     (last_seen - start).min(86_400)
 }
 
+/// Whether a Wikipedia article can be the game's: at least half of the title's
+/// meaningful words are in the article's name. Wikipedia's search always
+/// answers something — "Mario Tennis Fever ROM" got the picture of "History of
+/// video games" as its cover.
+fn wiki_article_is_about(game_title: &str, article: &str) -> bool {
+    const FILLER: [&str; 12] = ["the", "and", "les", "des", "une", "for", "video", "game", "games", "version", "edition", "rom"];
+    let words = |text: &str| -> Vec<String> {
+        text.to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .map(iidb::normalize_title)
+            .filter(|w| w.len() >= 3 && !FILLER.contains(&w.as_str()))
+            .collect()
+    };
+    let wanted = words(game_title);
+    if wanted.is_empty() {
+        return true;
+    }
+    let found = words(article);
+    let shared = wanted.iter().filter(|w| found.contains(w)).count();
+    shared * 2 >= wanted.len()
+}
+
 /// Flag some emulators want before the game's path.
 fn game_path_flag(emulator_id: &str) -> Option<&'static str> {
     match emulator_id {
@@ -1900,10 +1922,23 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
                     if let Some((console, emu_id)) = matched {
                         let name = e.path().file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
 
-                        // Filter out updates and DLCs
-                        if is_update_or_dlc(&name, &ext_str) {
+                        // Filter out updates and DLCs. A .nup holds the base game with
+                        // its updates in one file: its "[v131072]" is not an update.
+                        if ext_str != "nup" && is_update_or_dlc(&name, &ext_str) {
                             continue;
                         }
+
+                        // Switch 2 games also come as .nsp / .xci, the Switch formats:
+                        // their title id (04…) or their folder tells them apart.
+                        let top_folder = e.path().strip_prefix(&dir).ok()
+                            .and_then(|rel| rel.components().next())
+                            .map(|c| c.as_os_str().to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let (console, emu_id) = if console == "Nintendo Switch" && is_switch2_game(&name, &top_folder) {
+                            ("Nintendo Switch 2".to_string(), "lichii".to_string())
+                        } else {
+                            (console, emu_id)
+                        };
 
                         roms.push(RomFile {
                             name,
@@ -1971,6 +2006,27 @@ fn normalize_console_folder(folder: &str) -> String {
 }
 
 /// Detect if a ROM file is a game update or DLC (should be hidden from the library)
+/// A Switch-format file (.nsp / .xci) that is a Switch 2 game: Switch 2 title
+/// ids start with 04 (Switch: 01), or the file sits in a "Switch 2" folder
+/// ("jeux switch 2", "NS2", "Nintendo Switch2"…).
+fn is_switch2_game(name: &str, top_folder: &str) -> bool {
+    if let Some(id) = title_id_in(name) {
+        return id.starts_with("04");
+    }
+    let folder: String = top_folder.to_lowercase().split_whitespace().collect();
+    folder.contains("switch2") || folder == "ns2"
+}
+
+/// The 16-digit title id written in brackets in a file name, wherever the
+/// brackets are ("[Game] Pokopia (v2.0.1)[0400A3A01EE4C000]").
+fn title_id_in(name: &str) -> Option<String> {
+    name.split('[')
+        .skip(1)
+        .filter_map(|part| part.split(']').next())
+        .find(|inner| inner.len() == 16 && inner.chars().all(|c| c.is_ascii_hexdigit()))
+        .map(|id| id.to_uppercase())
+}
+
 fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
     let lower = name.to_lowercase();
 
@@ -1986,7 +2042,8 @@ fn is_update_or_dlc(name: &str, _ext: &str) -> bool {
     // Base game IDs MUST end in 000.
     // Updates end in 800, DLCs end in 001-7FF.
     if let Some(id) = extract_title_id(name) {
-        if id.starts_with("010") && !id.ends_with("000") {
+        // Same layout on Switch 2, whose ids start with 04.
+        if (id.starts_with("010") || id.starts_with("040")) && !id.ends_with("000") {
             return true;
         }
         // Wii U check: Base=00050000, Update=0005000E, DLC=0005000C
@@ -2742,6 +2799,10 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
                             write_to_boxart_log(&format!("Wikipedia Skip Series Page: {}", title));
                             continue;
                         }
+                        if !wiki_article_is_about(&search_name, title) {
+                            write_to_boxart_log(&format!("Wikipedia Skip Unrelated Page: {}", title));
+                            continue;
+                        }
                         // Get the image
                         let img_query_url = format!("https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=pageimages&format=json&pithumbsize=1000", urlencoding::encode(title));
                         if let Ok(img_resp) = client.get(&img_query_url).send().await {
@@ -2984,6 +3045,10 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
                         write_to_boxart_log(&format!("Wikipedia Skip Series Page: {}", title));
                         continue;
                     }
+                    if !wiki_article_is_about(&search_name, title) {
+                        write_to_boxart_log(&format!("Wikipedia Skip Unrelated Page: {}", title));
+                        continue;
+                    }
                     if let Some(reason) = check_mismatch(&game_name, title) {
                         write_to_boxart_log(&format!("Wikipedia Title Reject: {} - Reason: {}", title, reason));
                         continue;
@@ -3035,7 +3100,7 @@ fn clean_game_name(name: &str) -> String {
     let mut cleaned = name.to_string();
     
     // Remove extensions first
-    let extensions = vec![".xiso.iso", ".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64", ".3ds", ".cci", ".cxi", ".cia", ".3dsx", ".app", ".xiso", ".xbe", ".xex"];
+    let extensions = vec![".xiso.iso", ".iso", ".chd", ".rvz", ".wbfs", ".nca", ".nsp", ".nup", ".xci", ".zip", ".7z", ".gz", ".wud", ".wux", ".rpx", ".nes", ".sfc", ".smc", ".gba", ".gbc", ".gb", ".nds", ".n64", ".z64", ".3ds", ".cci", ".cxi", ".cia", ".3dsx", ".app", ".xiso", ".xbe", ".xex"];
     for ext in extensions {
         if cleaned.to_lowercase().ends_with(ext) {
             cleaned = cleaned[..cleaned.len()-ext.len()].to_string();
@@ -3049,6 +3114,9 @@ fn clean_game_name(name: &str) -> String {
     // Preserve alphanumeric + spaces, strip brackets/parens content (tags)
     let re_tags = Regex::new(r"\[.*?\]|\(.*?\)").unwrap();
     cleaned = re_tags.replace_all(&cleaned, "").to_string();
+
+    // "Donkey Kong Bananza ROM": the word some dump sites append to the title.
+    cleaned = iidb::without_dump_words(&cleaned);
 
     // Strip catalog number prefix (e.g. "3DS0762 - ", "NDS1234 - ", "0123 - ")
     let re_catalog = Regex::new(r"^[A-Za-z0-9]{2,6}\d{2,5}\s*-\s*").unwrap();
@@ -7679,6 +7747,71 @@ mod tests {
         assert!(trusted_update_archive("shadps4", "https://github.com/shadps4-emu/shadPS4/releases/download/../../../evil/a.zip").is_none());
         assert!(trusted_update_archive("retroarch-nes", ok).is_none());
         assert!(trusted_update_archive("shadps4", "").is_none());
+    }
+
+    // A real "jeux switch 2" folder: games as .nsp were filed under Switch (Ryubing),
+    // and a .nup with a version tag was hidden as if it were an update.
+    #[test]
+    fn scan_finds_every_switch2_game_whatever_its_format() {
+        let root = fake_library("ns2all", &[
+            "jeux switch 2/Mario Kart World [0400C3F00006E000].nsp",
+            "jeux switch 2/Splatoon Raider ROM [0400380020056000].nsp",
+            "jeux switch 2/The Legend of Zelda Ocarina of Time [0400486024DEC000][v131072].nup",
+            "jeux switch 2/[Game] Pokemon Pokopia (v2.0.1)[0400A3A01EE4C000].nup",
+            "jeux switch 2/No Id Game.xci",
+            "jeux switch 2/Mario Kart World [0400C3F00006E800][v65536].nsp",
+            "jeux switch/Celeste [01002B30028F6000][v0].nsp",
+            "jeux switch/Celeste [01002B30028F6800][v65536].nsp",
+        ]);
+        let roms = scan_roms(root.to_string_lossy().to_string());
+        let mut found: Vec<(String, String, String)> = roms.iter()
+            .map(|r| (r.console.clone(), r.name.clone(), r.emulator_id.clone()))
+            .collect();
+        found.sort();
+        let ns2 = |name: &str| ("Nintendo Switch 2".to_string(), name.to_string(), "lichii".to_string());
+        assert_eq!(found, [
+            ("Nintendo Switch".to_string(), "Celeste [01002B30028F6000][v0]".to_string(), "ryubing".to_string()),
+            ns2("Mario Kart World [0400C3F00006E000]"),
+            ns2("No Id Game"),
+            ns2("Splatoon Raider ROM [0400380020056000]"),
+            ns2("The Legend of Zelda Ocarina of Time [0400486024DEC000][v131072]"),
+            ns2("[Game] Pokemon Pokopia (v2.0.1)[0400A3A01EE4C000]"),
+        ], "updates of both consoles stay hidden");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn switch2_games_are_told_apart_by_title_id_then_by_folder() {
+        assert!(is_switch2_game("Mario Kart World [0400C3F00006E000]", "jeux switch"));
+        assert!(!is_switch2_game("Celeste [01002B30028F6000][v0]", "jeux switch 2"), "a Switch game misplaced in the Switch 2 folder");
+        assert!(is_switch2_game("No Id Game", "jeux switch 2"));
+        assert!(is_switch2_game("No Id Game", "Nintendo Switch2"));
+        assert!(is_switch2_game("No Id Game", "NS2"));
+        assert!(!is_switch2_game("No Id Game", "jeux switch"));
+        assert_eq!(title_id_in("[Game] Pokopia (v2.0.1)[0400a3a01ee4c000]").as_deref(), Some("0400A3A01EE4C000"));
+        assert_eq!(title_id_in("Hyrule_Warriors_Age_of_Imprisonment"), None);
+    }
+
+    #[test]
+    fn cover_search_ignores_the_words_dump_sites_add() {
+        assert_eq!(clean_game_name("Donkey Kong Bananza ROM [040074A01BF12000]"), "Donkey Kong Bananza");
+        assert_eq!(clean_game_name("Mario Tennis Fever  ROM [0400D4201C6EA000]"), "Mario Tennis Fever");
+        assert_eq!(clean_game_name("[Game] Pokemon Pokopia (v2.0.1)[0400A3A01EE4C000]"), "Pokemon Pokopia");
+        assert_eq!(clean_game_name("Hyrule_Warriors_Age_of_Imprisonment.nup"), "Hyrule Warriors Age of Imprisonment");
+        // Only the appended word: a title is left alone.
+        assert_eq!(clean_game_name("ROM Check Fail"), "ROM Check Fail");
+        assert_eq!(clean_game_name("Rome Total War"), "Rome Total War");
+    }
+
+    #[test]
+    fn wikipedia_cover_must_come_from_an_article_about_the_game() {
+        assert!(!wiki_article_is_about("Mario Tennis Fever", "History of video games"));
+        assert!(!wiki_article_is_about("Donkey Kong Bananza", "Rikers Island"));
+        assert!(wiki_article_is_about("Mario Tennis Fever", "Mario Tennis Fever"));
+        assert!(wiki_article_is_about("Wind Waker", "The Legend of Zelda: The Wind Waker"));
+        assert!(wiki_article_is_about("Luigi's Mansion", "Luigi's Mansion (video game)"));
+        assert!(wiki_article_is_about("pokemon lune", "Pokémon Sun and Moon"), "half of the words is enough for a translated title");
+        assert!(wiki_article_is_about("Pokémon Écarlate", "Pokemon Scarlet and Violet"));
     }
 
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {

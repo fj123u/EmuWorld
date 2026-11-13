@@ -7439,3 +7439,5 @@ img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }
 .activity-feed__more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 /* Pad focus in the top bar: a clear ring (Big Picture button, profile) */
 .v3-topbar .gamepad-focused { outline: 3px solid var(--accent) !important; outline-offset: 3px; }
+/* Pad in use: no mouse pointer over the app (padCursor.ts brings it back when the mouse moves) */
+html.pad-input, html.pad-input * { cursor: none !important; }

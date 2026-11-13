@@ -46,6 +46,9 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🛟 Mettre à jour un émulateur ne supprime plus ce qu'il range dans son dossier : sauvegardes, réglages, clés et firmware sont repris dans la nouvelle version, et l'ancienne est remise en place si l'installation échoue",
     "⬆️ Les mises à jour d'émulateurs installent vraiment la dernière version : avant, l'app réinstallait la version de son catalogue en notant la nouvelle comme installée. Une mise à jour sans fichier Windows reconnu n'est plus proposée",
     "🏷️ PlayStation 4, PlayStation 5 et Nintendo Switch 2 ont leur logo, comme les autres consoles",
+    "🎮 Switch 2 : tous les jeux sont détectés, y compris ceux en .nsp / .xci (reconnus à leur Title ID 04… ou à leur dossier « switch 2 ») et les .nup qui portent un numéro de version",
+    "🖼️ Jaquettes : le mot « ROM » ajouté au nom d'un fichier ne fausse plus la recherche, et une image Wikipedia n'est gardée que si l'article parle bien du jeu",
+    "🖱️ Le pointeur de la souris disparaît dès que tu utilises la manette, et revient quand tu bouges la souris",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

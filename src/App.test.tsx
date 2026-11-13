@@ -727,6 +727,27 @@ describe("gamepad in the v3 navigation", () => {
   });
 });
 
+describe("mouse pointer and the pad", () => {
+  it("hides the pointer at the first pad input and shows it again when the mouse moves", async () => {
+    await renderApp();
+    const hidden = () => document.documentElement.classList.contains("pad-input");
+    // A pad that is only plugged in does not take the pointer away.
+    await act(async () => {
+      await emit("gamepad-state", { connected: true, name: "Pad", buttons: Array(16).fill(false), axes: [0, 0, 0, 0] });
+    });
+    expect(hidden()).toBe(false);
+    const buttons = Array(16).fill(false);
+    buttons[13] = true; // D-pad down
+    await act(async () => {
+      await emit("gamepad-state", { connected: true, name: "Pad", buttons, axes: [0, 0, 0, 0] });
+    });
+    expect(hidden()).toBe(true);
+    fireEvent.mouseMove(window, { screenX: 100, screenY: 100 });
+    fireEvent.mouseMove(window, { screenX: 160, screenY: 100 });
+    expect(hidden()).toBe(false);
+  });
+});
+
 describe("gamepad in the library", () => {
   it("Y toggles the favorite of the focused game", async () => {
     const r = await renderApp();

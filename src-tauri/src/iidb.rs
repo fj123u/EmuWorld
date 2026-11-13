@@ -87,6 +87,17 @@ fn re(cell: &'static OnceLock<Regex>, pattern: &str) -> &'static Regex {
     cell.get_or_init(|| Regex::new(pattern).expect("valid regex"))
 }
 
+/// Drops what some dump sites add around a title: a trailing "ROM"
+/// ("Donkey Kong Bananza ROM"). Only as the last word, in capitals: a game
+/// called "ROM Check Fail" keeps its name.
+pub fn without_dump_words(title: &str) -> String {
+    let trimmed = title.trim_end();
+    match trimmed.strip_suffix("ROM") {
+        Some(rest) if rest.ends_with(char::is_whitespace) && !rest.trim().is_empty() => rest.trim_end().to_string(),
+        _ => title.to_string(),
+    }
+}
+
 /// Human title of a ROM file name: drops region/language/version tags,
 /// Switch title ids, leftover inner extensions, and fixes "X, The" titles.
 /// Unlike `clean_game_name` (used for fuzzy web searches) it never cuts a
@@ -96,9 +107,9 @@ pub fn title_from_rom_name(rom_name: &str) -> String {
     static EXT: OnceLock<Regex> = OnceLock::new();
     static THE: OnceLock<Regex> = OnceLock::new();
     let mut t = rom_name.replace('_', " ");
-    t = re(&EXT, r"(?i)\.(xiso|nkit|iso|dec|trim|nsp|xci|nsz|wud|wux|rvz|wbfs|cia|3ds)$").replace(&t, "").to_string();
+    t = re(&EXT, r"(?i)\.(xiso|nkit|iso|dec|trim|nsp|nup|xci|nsz|wud|wux|rvz|wbfs|cia|3ds)$").replace(&t, "").to_string();
     t = re(&TAGS, r"\([^)]*\)|\[[^\]]*\]").replace_all(&t, " ").to_string();
-    let t = t.split_whitespace().collect::<Vec<_>>().join(" ");
+    let t = without_dump_words(&t.split_whitespace().collect::<Vec<_>>().join(" "));
     // No-Intro / Redump put the article last: "Legend of Zelda, The - Ocarina of Time".
     re(&THE, r"(?i)^(.+?), (the|a|an)\b(.*)$")
         .replace(&t, "$2 $1$3")
@@ -321,6 +332,11 @@ mod tests {
         assert_eq!(title_from_rom_name("Pokemon Sword [0100ABF008968000][v0] (Incl. 2 DLCs)"), "Pokemon Sword");
         assert_eq!(title_from_rom_name("pac man et l'aventure des fantômes "), "pac man et l'aventure des fantômes");
         assert_eq!(title_from_rom_name("Mario_Kart_8"), "Mario Kart 8");
+        // Switch 2 dumps: "ROM" appended, a leading "[Game]" tag, a version in parentheses.
+        assert_eq!(title_from_rom_name("Donkey Kong Bananza ROM [040074A01BF12000]"), "Donkey Kong Bananza");
+        assert_eq!(title_from_rom_name("Mario Tennis Fever  ROM [0400D4201C6EA000]"), "Mario Tennis Fever");
+        assert_eq!(title_from_rom_name("[Game] Pokemon Pokopia (v2.0.1)[0400A3A01EE4C000]"), "Pokemon Pokopia");
+        assert_eq!(title_from_rom_name("ROM Check Fail"), "ROM Check Fail");
     }
 
     #[test]

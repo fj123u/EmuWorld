@@ -26,6 +26,7 @@ import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { clearCoverCache, loadCover, useLazyCover } from "./coverCache";
 import { pushBoxartLog, useBoxartLogs, type BoxartLog } from "./boxartLogs";
+import { hideCursorForPad, padIsUsed, showCursorOnMouseUse } from "./padCursor";
 import { boxOf, moveFocus, spatialNext, type Direction } from "./gamepadSpatial";
 import { oauthRedirectUrl, parseAuthCallback } from "./authCallback";
 import { findLobbyRom, isLobbyOpen, isValidHostCode, needsHostCode, parseNetplayCode, pickLobbyEmulator, shouldAutoJoin, startHostNetplay, type NetplayLaunch, type RelaySession } from "./netplay";
@@ -3115,6 +3116,19 @@ export default function App() {
   ];
   const VIRTUAL_KB_COLS = 10;
   const gamepadStateRef = useRef<{ buttons: boolean[]; axes: number[] }>({ buttons: [], axes: [] });
+
+  // The mouse pointer leaves the screen while the pad drives the app, and
+  // comes back when the mouse is used (padCursor.ts).
+  useEffect(() => {
+    const stopWatchingMouse = showCursorOnMouseUse();
+    const unlisten = listen<{ connected: boolean; buttons: boolean[]; axes: number[] }>("gamepad-state", (event) => {
+      if (event.payload.connected && padIsUsed(event.payload.buttons, event.payload.axes)) hideCursorForPad();
+    });
+    return () => {
+      stopWatchingMouse();
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   useEffect(() => {
     let navCooldown = 0;
