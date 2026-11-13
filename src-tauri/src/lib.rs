@@ -2413,7 +2413,33 @@ fn set_cover_from_file(game_name: String, console: String, path: String) -> Resu
 #[tauri::command]
 async fn fetch_boxart(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
     let key = format!("{}|{}", cover_key(&game_name, &console), force_refresh.unwrap_or(false));
-    cover_requests().run(key, fetch_boxart_once(app_handle, game_name, console, force_refresh)).await
+    let found = cover_requests().run(key, fetch_boxart_once(app_handle.clone(), game_name.clone(), console.clone(), force_refresh)).await;
+    if found.is_ok() {
+        return found;
+    }
+    // "Super Mario Bros. Wonder – Nintendo Switch 2 Edition" is the Switch game
+    // with an upgrade: no source lists it under that name, its Switch box is the game's.
+    if let Some(switch_title) = switch2_edition_base(&game_name, &console) {
+        push_log("INFO", &format!("Cover: '{}' cherchée comme le jeu Switch '{}'", game_name, switch_title));
+        let switch = "Nintendo Switch".to_string();
+        let key = format!("{}|{}", cover_key(&switch_title, &switch), force_refresh.unwrap_or(false));
+        if let Ok(cover) = cover_requests().run(key, fetch_boxart_once(app_handle, switch_title, switch, force_refresh)).await {
+            return Ok(cover);
+        }
+    }
+    found
+}
+
+/// For a "… Nintendo Switch 2 Edition" game of the Switch 2 library: the title
+/// of the Switch game it upgrades.
+fn switch2_edition_base(game_name: &str, console: &str) -> Option<String> {
+    if console != "Nintendo Switch 2" {
+        return None;
+    }
+    let title = iidb::title_from_rom_name(game_name);
+    let re = Regex::new(r"(?i)^(.+?)[\s\-–:+]*\b(?:nintendo\s+)?switch\s*2\s+edition\b").ok()?;
+    let base = re.captures(&title)?.get(1)?.as_str().trim().to_string();
+    (base.chars().count() >= 2).then_some(base)
 }
 
 async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, console: String, force_refresh: Option<bool>) -> Result<String, String> {
@@ -7812,6 +7838,18 @@ mod tests {
         assert!(wiki_article_is_about("Luigi's Mansion", "Luigi's Mansion (video game)"));
         assert!(wiki_article_is_about("pokemon lune", "Pokémon Sun and Moon"), "half of the words is enough for a translated title");
         assert!(wiki_article_is_about("Pokémon Écarlate", "Pokemon Scarlet and Violet"));
+    }
+
+    #[test]
+    fn a_switch2_edition_is_looked_up_as_its_switch_game() {
+        let ns2 = "Nintendo Switch 2";
+        assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition [010015100B514000]", ns2).as_deref(), Some("Super Mario Bros Wonder"));
+        assert_eq!(switch2_edition_base("Kirby and the Forgotten Land - Nintendo Switch 2 Edition + Star-Crossed World", ns2).as_deref(), Some("Kirby and the Forgotten Land"));
+        assert_eq!(switch2_edition_base("Zelda_Tears_of_the_Kingdom_Nintendo_Switch2_Edition.nup", ns2).as_deref(), Some("Zelda Tears of the Kingdom"));
+        // A plain Switch 2 game, or another console: nothing to fall back to.
+        assert_eq!(switch2_edition_base("Mario Kart World [0400C3F00006E000]", ns2), None);
+        assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition", "Nintendo Switch"), None);
+        assert_eq!(switch2_edition_base("Switch 2 Edition", ns2), None);
     }
 
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {

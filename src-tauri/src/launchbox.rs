@@ -117,6 +117,25 @@ pub fn parse_box_fronts(html: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The full-size picture behind a thumbnail of a game page.
+///
+/// The page shows ~170 px thumbnails (blurry once stretched on a card). Its
+/// embedded data lists, right after each thumbnail's file name, the file of
+/// the original image: `"<thumb>.jpg","Box - Front",11,171,281,"Europe","<full>.jpg",…`.
+pub fn full_size_image(page: &str, thumbnail_url: &str) -> Option<String> {
+    let file = thumbnail_url.rsplit('/').next()?;
+    let quoted = format!("\"{}\"", file);
+    let after = &page[page.find(&quoted)? + quoted.len()..];
+    let window = &after[..after.len().min(600)];
+    window.split('"').find_map(|token| {
+        let (stem, ext) = token.rsplit_once('.')?;
+        let is_image_file = matches!(ext, "jpg" | "jpeg" | "png" | "webp")
+            && stem.len() == 36
+            && stem.chars().all(|c| c.is_ascii_hexdigit() || c == '-');
+        (is_image_file && token != file).then(|| format!("{}{}", IMAGE_HOST, token))
+    })
+}
+
 /// LaunchBox regions to prefer for a ROM, from its tags.
 fn preferred_regions(rom_name: &str) -> &'static [&'static str] {
     let lower = rom_name.to_lowercase();
@@ -209,7 +228,8 @@ pub async fn find_box_url(client: &reqwest::Client, rom_name: &str, console: &st
         .text()
         .await
         .map_err(|e| e.to_string())?;
-    let url = pick_box_front(&parse_box_fronts(&page), rom_name);
+    let url = pick_box_front(&parse_box_fronts(&page), rom_name)
+        .map(|thumbnail| full_size_image(&page, &thumbnail).unwrap_or(thumbnail));
     if url.is_some() {
         push_log("INFO", &format!("LaunchBox: '{}' ({}) → '{}'", rom_name, console, hit.title));
     }
@@ -263,6 +283,22 @@ mod tests {
         assert_eq!(pick_box_front(&fronts, "Duck Tales (Europe)").as_deref(), Some("https://images.launchbox-app.com/f11f58f7-f0d8.png"));
         assert_eq!(pick_box_front(&fronts, "Duck Tales (USA)").as_deref(), Some("https://images.launchbox-app.com/776785ad-c738.jpg"));
         assert_eq!(pick_box_front(&fronts, "Duck Tales (Japan)").as_deref(), Some("https://images.launchbox-app.com/776785ad-c738.jpg"), "falls back to any box");
+    }
+
+    #[test]
+    fn takes_the_full_size_image_behind_a_thumbnail() {
+        // Shape of a real game page (Nintendo Switch Sports Resort, 11/2026).
+        let page = r#"<img src="https://images.launchbox-app.com//ae45ebae-291d-4827-86ac-359079f2fd9a.jpg" alt="Nintendo Switch Sports Resort - Box - Front (Europe) - 1162x1904">
+            …{"imageFileName":75,"fullGameImageFileName":81},"ae45ebae-291d-4827-86ac-359079f2fd9a.jpg","Box - Front",11,171,281,"Europe","25107e31-c930-45eb-a52b-f31caedc5e35.jpg",20332969,1162,1904,{"x":1}"#;
+        assert_eq!(
+            full_size_image(page, "https://images.launchbox-app.com/ae45ebae-291d-4827-86ac-359079f2fd9a.jpg").as_deref(),
+            Some("https://images.launchbox-app.com/25107e31-c930-45eb-a52b-f31caedc5e35.jpg"));
+        // Unknown thumbnail, or a page without the embedded data: keep the thumbnail.
+        assert_eq!(full_size_image(page, "https://images.launchbox-app.com/00000000-0000-0000-0000-000000000000.jpg"), None);
+        assert_eq!(full_size_image("<img src=\"x\">", "https://images.launchbox-app.com/ae45ebae-291d-4827-86ac-359079f2fd9a.jpg"), None);
+        // Nothing but an image file name of that host is ever taken from the page.
+        let odd = r#""ae45ebae-291d-4827-86ac-359079f2fd9a.jpg","https://evil.example/x.jpg","../../etc/passwd.png",1"#;
+        assert_eq!(full_size_image(odd, "https://images.launchbox-app.com/ae45ebae-291d-4827-86ac-359079f2fd9a.jpg"), None);
     }
 
     #[test]

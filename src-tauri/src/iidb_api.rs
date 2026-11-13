@@ -160,11 +160,24 @@ pub fn pick_from_artwork(result: &Value, console: &str) -> Option<String> {
         .filter(|(url, _)| url.starts_with(ASSET_HOST))
         .collect();
     let on_console = |c: Option<&str>| c.is_some_and(|c| keys.iter().any(|k| k.eq_ignore_ascii_case(c)));
+    // Without a cover for the ROM's console, one whose console iiDB names
+    // differently (or not at all) still beats no cover. But not the box of a
+    // console we know to be another one: "Ocarina of Time" on Switch 2 is a
+    // new game, it must not get the Nintendo 64 box.
     assets
         .iter()
         .find(|(_, c)| on_console(*c))
-        .or_else(|| assets.first())
+        .or_else(|| assets.iter().find(|(_, c)| !is_another_console(*c, keys)))
         .map(|(url, _)| url.to_string())
+}
+
+/// Whether an asset's console id is one of ours for a console other than the ROM's.
+fn is_another_console(asset_console: Option<&str>, rom_console_keys: &[&str]) -> bool {
+    let Some(id) = asset_console else { return false };
+    crate::emulators::get_catalog().iter().any(|emu| {
+        let keys = console_keys(&emu.console);
+        keys != rom_console_keys && keys.iter().any(|k| k.eq_ignore_ascii_case(id))
+    })
 }
 
 /// For a `needs_choice` answer, the one candidate EmuWorld can stand behind:
@@ -739,6 +752,17 @@ mod tests {
         ]}});
         assert_eq!(pick_boxart(&other_console, "Nintendo Switch").as_deref(), Some("https://assets.iisu.network/only.png"),
             "the game matched: its box art beats no cover");
+        // A remake on a newer console: the old console's box is another game's.
+        let old_console = json!({"match": {"status": "matched"}, "artwork": {"boxart": [
+            {"url": "https://assets.iisu.network/n64.png", "console_id": "n64"}
+        ]}});
+        assert_eq!(pick_boxart(&old_console, "Nintendo Switch 2"), None, "the Nintendo 64 box is not the Switch 2 game's");
+        assert_eq!(pick_boxart(&old_console, "Nintendo 64").as_deref(), Some("https://assets.iisu.network/n64.png"));
+        let no_console = json!({"match": {"status": "matched"}, "artwork": {"boxart": [
+            {"url": "https://assets.iisu.network/n64.png", "console_id": "n64"},
+            {"url": "https://assets.iisu.network/free.png"}
+        ]}});
+        assert_eq!(pick_boxart(&no_console, "Nintendo Switch 2").as_deref(), Some("https://assets.iisu.network/free.png"));
         let choice = json!({"match": {"status": "needs_choice"}, "artwork": {"boxart": [{"url": "https://assets.iisu.network/c.png"}]}});
         assert_eq!(pick_boxart(&choice, "NES"), None, "never guess between candidates");
         let error = json!({"status": 422, "errors": []});
