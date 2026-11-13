@@ -107,7 +107,15 @@ fn clean_title(raw: &str) -> Option<String> {
 /// `CUSA00900-UPDATE`…): the emulator merges them itself, they are not games.
 fn is_patch_folder(name: &str) -> bool {
     let lower = name.to_lowercase();
-    ["-patch", "-update", "-dlc", "_patch", "_update"].iter().any(|suffix| lower.ends_with(suffix))
+    // "backport (4.xx to 10.xx)": a patched executable for older console firmware.
+    lower.starts_with("backport")
+        || ["-patch", "-update", "-dlc", "_patch", "_update"].iter().any(|suffix| lower.ends_with(suffix))
+}
+
+/// Whether a game folder carries its own metadata (title, id, version).
+fn has_metadata(dir: &Path, console: &str) -> bool {
+    let file = if console == PS5 { "param.json" } else { "param.sfo" };
+    dir.join("sce_sys").join(file).is_file()
 }
 
 fn game_in(dir: &Path, console: &str) -> Option<FolderGame> {
@@ -149,8 +157,13 @@ pub fn scan_console_dir(console_dir: &Path, console: &str) -> Vec<FolderGame> {
             games.push(game);
             continue;
         }
-        for inner in subdirs(&dir) {
-            if is_patch(&inner) {
+        // One level deeper: `PPSA27950/PPSA27950-app` next to patch folders.
+        // When one of them is a complete dump (it has its metadata), the
+        // others with an eboot.bin are its patches, not more games.
+        let inner: Vec<PathBuf> = subdirs(&dir).into_iter().filter(|p| !is_patch(p)).collect();
+        let complete = inner.iter().any(|p| p.join("eboot.bin").is_file() && has_metadata(p, console));
+        for inner in inner {
+            if complete && !has_metadata(&inner, console) {
                 continue;
             }
             if let Some(game) = game_in(&inner, console) {
@@ -285,6 +298,29 @@ mod tests {
         assert!(is_folder_game_path(&root.join("PS3").join("Game").join("PS3_GAME").join("USRDIR").join("EBOOT.BIN")));
         assert!(is_folder_game_path(&root.join("PS4").join("CUSA00900")), "a PS5-style entry is the folder itself");
         assert!(!is_folder_game_path(&root.join("NES").join("Mario.nes")));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    // A real PS5 dump: the game and a firmware backport side by side in the id's folder.
+    #[test]
+    fn a_dump_with_its_backport_folder_is_one_game() {
+        let root = library("backport");
+        let game = root.join("PS5").join("PPSA27950");
+        write(&game.join("PPSA27950-app").join("eboot.bin"), b"elf");
+        write(
+            &game.join("PPSA27950-app").join("sce_sys").join("param.json"),
+            br#"{"localizedParameters":{"defaultLanguage":"en-US","en-US":{"titleName":"Golfing Over It with Alva Majo"}}}"#,
+        );
+        write(&game.join("backport (4.xx to 10.xx)").join("eboot.bin"), b"elf");
+        write(&game.join("backport (4.xx to 10.xx)").join("sce_sys").join("about").join("right.sprx"), b"x");
+        // Another patch folder with an executable and no metadata, under a neutral name.
+        write(&game.join("fw9 fix").join("eboot.bin"), b"elf");
+
+        let games = scan_console_dir(&root.join("PS5"), PS5);
+        assert_eq!(games, [FolderGame {
+            name: "Golfing Over It with Alva Majo".to_string(),
+            launch_path: game.join("PPSA27950-app"),
+        }]);
         let _ = fs::remove_dir_all(&root);
     }
 
