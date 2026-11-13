@@ -8,7 +8,7 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
-  { version: "3.0.0", date: "2026-11-11", changes: [
+  { version: "3.0.0", date: "2026-11-13", changes: [
     "🎨 Nouveau look v3 : thème clair par défaut (fond pointillé, panneaux blancs, couleurs douces, titres en Outfit) et thème sombre au choix dans les Réglages",
     "🎨 Les anciens thèmes (Midnight, OLED, Rétro, Sakura, Sunset) deviennent des variantes du thème sombre, à appliquer depuis la Marketplace ; un thème déjà choisi est gardé",
     "🎨 Boutons en pilule, champs arrondis, cartes en panneaux simples et jaquettes à double contour dans la couleur de leur console",
