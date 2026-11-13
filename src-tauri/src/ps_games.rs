@@ -136,6 +136,17 @@ fn game_in(dir: &Path, console: &str) -> Option<FolderGame> {
     })
 }
 
+/// The game's own icon, `sce_sys/icon0.png` (512×512, the art the publisher
+/// made for the console's menu), for the game listed as `name` in
+/// `console_dir`. Exact and offline, so it is the cover before any web search.
+pub fn icon_of(console_dir: &Path, console: &str, name: &str) -> Option<PathBuf> {
+    let game = scan_console_dir(console_dir, console).into_iter().find(|g| g.name == name)?;
+    // PS5 launches the folder, PS4 the eboot.bin inside it.
+    let dir = if game.launch_path.is_dir() { game.launch_path } else { game.launch_path.parent()?.to_path_buf() };
+    let icon = dir.join("sce_sys").join("icon0.png");
+    icon.is_file().then_some(icon)
+}
+
 /// Games of a console folder (`<library>/PS4`, `<library>/PlayStation 5`…).
 /// A game may sit one level deeper (`PS4/Bloodborne/CUSA00900/eboot.bin`).
 pub fn scan_console_dir(console_dir: &Path, console: &str) -> Vec<FolderGame> {
@@ -286,6 +297,34 @@ mod tests {
         let games = scan_console_dir(&ps5, PS5);
         assert_eq!(games, [FolderGame { name: "Astro Bot".to_string(), launch_path: ps5.join("PPSA01234") }]);
         assert!(scan_console_dir(&root.join("missing"), PS5).is_empty());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn finds_the_icon_of_a_game_in_its_own_folder() {
+        let root = library("icon");
+        let ps4 = root.join("PS4");
+        write(&ps4.join("CUSA00900").join("eboot.bin"), b"elf");
+        write(&ps4.join("CUSA00900").join("sce_sys").join("param.sfo"), &sfo(&[("TITLE", "Bloodborne")]));
+        write(&ps4.join("CUSA00900").join("sce_sys").join("icon0.png"), b"png");
+        write(&ps4.join("CUSA00470").join("eboot.bin"), b"elf");
+        // PS5, one level deeper, next to a backport folder.
+        let ps5 = root.join("PS5");
+        write(&ps5.join("PPSA27950").join("PPSA27950-app").join("eboot.bin"), b"elf");
+        write(
+            &ps5.join("PPSA27950").join("PPSA27950-app").join("sce_sys").join("param.json"),
+            br#"{"localizedParameters":{"defaultLanguage":"en-US","en-US":{"titleName":"Golfing Over It"}}}"#,
+        );
+        write(&ps5.join("PPSA27950").join("PPSA27950-app").join("sce_sys").join("icon0.png"), b"png");
+
+        assert_eq!(icon_of(&ps4, PS4, "Bloodborne"), Some(ps4.join("CUSA00900").join("sce_sys").join("icon0.png")));
+        assert_eq!(
+            icon_of(&ps5, PS5, "Golfing Over It"),
+            Some(ps5.join("PPSA27950").join("PPSA27950-app").join("sce_sys").join("icon0.png")),
+        );
+        // A dump without its icon, and a game that is not there.
+        assert_eq!(icon_of(&ps4, PS4, "CUSA00470"), None);
+        assert_eq!(icon_of(&ps4, PS4, "Journey"), None);
         let _ = fs::remove_dir_all(&root);
     }
 

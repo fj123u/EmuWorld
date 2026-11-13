@@ -1956,6 +1956,18 @@ fn scan_roms(directory: String) -> Vec<RomFile> {
     roms
 }
 
+/// Icon of a PS4 / PS5 folder game (`sce_sys/icon0.png`), looked up in the
+/// library's console folders ("PS4", "PlayStation 4"…). None for other consoles.
+fn folder_game_icon(roms_dir: &std::path::Path, console: &str, game_name: &str) -> Option<PathBuf> {
+    ps_games::emulator_for(console)?;
+    fs::read_dir(roms_dir).ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .filter(|p| p.file_name().map(|n| normalize_console_folder(&n.to_string_lossy()) == console).unwrap_or(false))
+        .find_map(|dir| ps_games::icon_of(&dir, console, game_name))
+}
+
 fn normalize_console_folder(folder: &str) -> String {
     match folder.to_lowercase().as_str() {
         "psp" | "playstation portable" => "PlayStation Portable".to_string(),
@@ -2616,6 +2628,21 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
             }
         }
     }
+    }
+
+    // PS4 / PS5: the game's own icon in its folder, before any web search.
+    if let Some(icon) = folder_game_icon(std::path::Path::new(&config.roms_directory), &console, &game_name) {
+        match std::fs::read(&icon) {
+            Ok(bytes) => {
+                if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                    push_log("INFO", &format!("Cover {}: icône du jeu '{}' ({})", console, game_name, icon.display()));
+                    log_event("sce_sys/icon0.png", "Local Success", None);
+                    return Ok(data_url);
+                }
+                push_log("WARN", &format!("Icône illisible pour '{}': {}", game_name, icon.display()));
+            }
+            Err(e) => push_log("WARN", &format!("Icône de '{}' non lue: {}", game_name, e)),
+        }
     }
 
     // Searched a moment ago and found nowhere: don't run every source again.
@@ -7850,6 +7877,30 @@ mod tests {
         assert_eq!(switch2_edition_base("Mario Kart World [0400C3F00006E000]", ns2), None);
         assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition", "Nintendo Switch"), None);
         assert_eq!(switch2_edition_base("Switch 2 Edition", ns2), None);
+    }
+
+    #[test]
+    fn a_ps4_or_ps5_cover_is_the_icon_in_the_game_folder() {
+        let root = fake_library("psicon", &[
+            "PlayStation 4/CUSA00900/eboot.bin",
+            "PlayStation 4/CUSA00900/sce_sys/icon0.png",
+            "PS5/PPSA01234/eboot.bin",
+            "PS5/PPSA01234/sce_sys/icon0.png",
+            "NES/CUSA00900/sce_sys/icon0.png",
+        ]);
+        // No param.sfo / param.json: the folder name is the game's name.
+        assert_eq!(
+            folder_game_icon(&root, "PlayStation 4", "CUSA00900"),
+            Some(root.join("PlayStation 4").join("CUSA00900").join("sce_sys").join("icon0.png")),
+        );
+        assert_eq!(
+            folder_game_icon(&root, "PlayStation 5", "PPSA01234"),
+            Some(root.join("PS5").join("PPSA01234").join("sce_sys").join("icon0.png")),
+        );
+        // Other consoles never use it, and an unknown game has none.
+        assert_eq!(folder_game_icon(&root, "NES", "CUSA00900"), None);
+        assert_eq!(folder_game_icon(&root, "PlayStation 4", "Bloodborne"), None);
+        let _ = fs::remove_dir_all(&root);
     }
 
     fn fake_library(tag: &str, files: &[&str]) -> PathBuf {

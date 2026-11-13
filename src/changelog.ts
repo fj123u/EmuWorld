@@ -42,6 +42,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🪟 Manette : dans une fenêtre ouverte (profil, connexion, notes, profil d'un ami, chat…), on se déplace dedans, A clique, B la ferme, et la page derrière ne bouge plus",
     "⚡ Bibliothèque bien plus légère à l'ouverture d'une console : les jaquettes ne se chargent que quand elles arrivent à l'écran, restent en mémoire d'une visite à l'autre, et l'app ne se redessine plus en entier à chaque jaquette",
     "🎮 PlayStation 4 et PlayStation 5 : shadPS4 et KytyPS5 (expérimental) s'installent depuis le catalogue ; les jeux en dossiers (CUSA…, PPSA…) rangés dans un dossier « PS4 » ou « PS5 » apparaissent avec leur vrai titre",
+    "🖼️ Jeux PS4 et PS5 : leur cover est l'icône officielle du jeu, lue dans son propre dossier (sce_sys/icon0.png) — exacte, instantanée et sans Internet ; les sources en ligne restent en secours",
     "🎮 Nintendo Switch 2 : l'émulateur Lichii (très expérimental) s'installe depuis le catalogue et lance les jeux au format .nup ; tes jeux Switch restent sur Ryubing",
     "🛟 Mettre à jour un émulateur ne supprime plus ce qu'il range dans son dossier : sauvegardes, réglages, clés et firmware sont repris dans la nouvelle version, et l'ancienne est remise en place si l'installation échoue",
     "⬆️ Les mises à jour d'émulateurs installent vraiment la dernière version : avant, l'app réinstallait la version de son catalogue en notant la nouvelle comme installée. Une mise à jour sans fichier Windows reconnu n'est plus proposée",
