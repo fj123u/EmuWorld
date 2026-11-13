@@ -45,6 +45,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🎮 Nintendo Switch 2 : l'émulateur Lichii (très expérimental) s'installe depuis le catalogue et lance les jeux au format .nup ; tes jeux Switch restent sur Ryubing",
     "🛟 Mettre à jour un émulateur ne supprime plus ce qu'il range dans son dossier : sauvegardes, réglages, clés et firmware sont repris dans la nouvelle version, et l'ancienne est remise en place si l'installation échoue",
     "⬆️ Les mises à jour d'émulateurs installent vraiment la dernière version : avant, l'app réinstallait la version de son catalogue en notant la nouvelle comme installée. Une mise à jour sans fichier Windows reconnu n'est plus proposée",
+    "🏷️ PlayStation 4, PlayStation 5 et Nintendo Switch 2 ont leur logo, comme les autres consoles",
   ] },
   { version: "2.7.4", date: "2026-11-11", changes: [
     "🎮 Multijoueur en Big Picture, à la manette : Y crée un lobby pour le jeu sélectionné, Start passe dans le panneau du lobby (invitations, inviter un ami, prêt, lancer, rejoindre, chat), B revient aux jeux",

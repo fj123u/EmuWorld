@@ -19,6 +19,8 @@ import { ActivityFeed } from "./ActivityFeed";
 import { Dock, SectionTabs, adjacentSectionPage, adjacentTabInSection, type Page } from "./navigation";
 import { HomePage } from "./HomePage";
 import appIcon from "./assets/app-icon.svg";
+import ps5Logo from "./assets/consoles/ps5.svg";
+import switch2Logo from "./assets/consoles/switch2.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
@@ -738,6 +740,8 @@ const CONSOLE_CARBON_SLUG: Record<string, string> = {
   "PS2": "ps2",
   "PlayStation 3": "ps3",
   "PS3": "ps3",
+  "PlayStation 4": "ps4",
+  "PS4": "ps4",
   "PSP": "psp",
   "PlayStation Portable": "psp",
   "Mega Drive": "megadrive",
@@ -768,8 +772,20 @@ const CONSOLE_CARBON_SLUG: Record<string, string> = {
   "CDi": "cdi",
 };
 
+/* Wordmarks shipped with the app: consoles too recent for the logo set the
+   others come from (es-theme-carbon has no PS5 nor Switch 2). */
+const CONSOLE_LOCAL_LOGO: Record<string, string> = {
+  "PlayStation 5": ps5Logo,
+  "PS5": ps5Logo,
+  "Nintendo Switch 2": switch2Logo,
+  "Switch 2": switch2Logo,
+};
+
 export const ConsoleLogo = ({ name, size = 56 }: { name: string; size?: number }) => {
   if (LOGO_IMAGE[name]) return <LogoImage name={name} size={size} className="console-logo" emoji={CONSOLE_ICONS[name] || "🎮"} />;
+  if (CONSOLE_LOCAL_LOGO[name]) {
+    return <img className="console-logo" src={CONSOLE_LOCAL_LOGO[name]} alt={name} style={{ width: size * 1.6, height: size, objectFit: "contain" }} />;
+  }
   return <ConsoleWordmark name={name} size={size} />;
 };
 

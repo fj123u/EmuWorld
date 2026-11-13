@@ -843,6 +843,26 @@ describe("Settings opening", () => {
 });
 
 describe("console and manufacturer logos", () => {
+  // Added with their emulators but without a wordmark: PS4 showed a white
+  // pictogram, PS5 too, and Switch 2 an emoji, next to the other consoles' logos.
+  it("shows a wordmark for PlayStation 4, PlayStation 5 and Nintendo Switch 2", () => {
+    const { container } = render(<>
+      <ConsoleLogo name="PlayStation 4" size={40} />
+      <ConsoleLogo name="PlayStation 5" size={40} />
+      <ConsoleLogo name="Nintendo Switch 2" size={40} />
+    </>);
+    expect(container.querySelector(".console-logo--emoji")).toBeNull();
+    const srcs = [...container.querySelectorAll("img.console-logo")].map((img) => img.getAttribute("src") ?? "");
+    expect(srcs).toHaveLength(3);
+    expect(srcs[0]).toContain("es-theme-carbon/master/art/logos/ps4.svg");
+    // PS5 and Switch 2 ship with the app (inlined by the bundler): two different pictures.
+    expect(srcs[1]).toMatch(/svg/);
+    expect(srcs[2]).toMatch(/svg/);
+    expect(srcs[1]).not.toBe(srcs[2]);
+    for (const src of srcs) expect(src).not.toContain("undefined");
+    expect(srcs.slice(1).some((src) => src.includes("es-theme-carbon") || src.includes("retroarch-assets"))).toBe(false);
+  });
+
   it("shows RetroArch's logo for Multi-System (no console wordmark exists)", () => {
     const { container } = render(<><BrandLogo brand="Multi-System" size={40} /><ConsoleLogo name="Multi-System" size={40} /></>);
     const imgs = [...container.querySelectorAll("img")];
