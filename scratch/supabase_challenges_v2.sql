@@ -1,5 +1,6 @@
 -- EmuWorld — challenges v2 (steps 4 and 6 of scratch/defis-refonte.md)
--- Written 2026-11-22. NOT APPLIED: to run only after the user's explicit OK.
+-- Written 2026-11-22. Applied to the EmuWorld project on 2026-11-22 with the user's OK
+-- (migration challenges_v2).
 --
 -- 1. challenge_progress: each player's progress on the COMMON challenges of a
 --    period (personal ones are not ranked, they are never sent). Visible to the
@@ -35,7 +36,7 @@ alter table public.challenge_progress enable row level security;
 create or replace function public.challenge_period_start(key text)
 returns timestamptz
 language sql
-immutable
+stable
 set search_path = ''
 as $$
   select case left(key, 1)
@@ -121,7 +122,9 @@ declare
   me uuid := (select auth.uid());
   closing boolean := coalesce(current_setting('emuworld.closing', true), '') = 'on';
 begin
-  if closing then
+  -- close_versus(), or a change made from the dashboard (no signed-in user:
+  -- the app's requests always have one, RLS turns the others away).
+  if closing or me is null then
     return new;
   end if;
   -- Fixed once created.
