@@ -40,6 +40,7 @@ import { SpeedrunModal, SpeedrunWindow } from "./SpeedrunTimer";
 import { getVersion } from "@tauri-apps/api/app";
 import { versionInRange } from "./appVersion";
 import { IidbSettings } from "./IidbSettings";
+import { SgdbSettings } from "./SgdbSettings";
 import { CHANGELOG, type ChangelogEntry } from "./changelog";
 import { SMART_PLAYLISTS, isSmartPlaylist, matchesSmartPlaylist, type SmartPlaylist } from "./smartPlaylists";
 import {
@@ -3303,9 +3304,10 @@ export default function App() {
         const items = Array.from(document.querySelectorAll<HTMLElement>(".cover-picker .gamepad-nav-item"));
         const current = items.findIndex(el => el.classList.contains("gamepad-focused"));
         if (dir && items.length > 0) {
-          // First press: the first cover (or "From a file…"), not the close button.
+          // First press: the first cover (or "From a file…"), not the close
+          // button nor the source tabs (one move up from there).
           const firstCover = items.findIndex(el => el.classList.contains("cover-picker__cover"));
-          const start = firstCover >= 0 ? firstCover : Math.max(0, items.findIndex(el => !el.closest(".screenshot-gallery__header")));
+          const start = firstCover >= 0 ? firstCover : Math.max(0, items.findIndex(el => !el.closest(".screenshot-gallery__header") && !el.closest(".cover-picker__sources")));
           const next = current < 0
             ? start
             : spatialNext(items.map(el => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; }), current, dir);
@@ -7336,6 +7338,7 @@ export default function App() {
                   </div>
 
                   <IidbSettings t={t} />
+                  <SgdbSettings t={t} />
 
                   <div className="settings__group">
                     <div className="settings__group-title"><Gamepad2 size={16} /> {t("settings.retroarch")}</div>

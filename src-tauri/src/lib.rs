@@ -375,6 +375,7 @@ mod speedrun;
 mod libretro_index;
 mod launchbox;
 mod ps_games;
+mod steamgriddb;
 
 /// The cover-search trace is a debugging aid, not an archive: past this size it
 /// starts over (it had reached 12 MB on a real library).
@@ -2355,12 +2356,13 @@ fn replace_cached_cover(dir: &PathBuf, game_name: &str, image: &[u8]) -> Option<
     save_cover_as_webp(image, dir, &cover_safe_name(game_name))
 }
 
-/// "Choisir la cover": downloads the box art the user picked (iiDB's asset
-/// host only) and makes it the game's cached cover.
+/// "Choisir la cover": downloads the box art the user picked (iiDB's or
+/// SteamGridDB's image hosts only) and makes it the game's cached cover.
 #[tauri::command]
 async fn set_cover_from_url(game_name: String, console: String, url: String, parent_id: Option<i64>) -> Result<String, String> {
     push_log("INFO", &format!("Cover choisie pour '{}' ({})", game_name, console));
-    if !url.starts_with(iidb_api::ASSET_HOST) {
+    // iiDB's asset host or SteamGridDB's, nothing else.
+    if !url.starts_with(iidb_api::ASSET_HOST) && !steamgriddb::is_image_url(&url) {
         push_log("WARN", &format!("Cover refusée (hôte inattendu) pour '{}'", game_name));
         return Err("Adresse d'image inattendue".into());
     }
@@ -2812,6 +2814,28 @@ async fn fetch_boxart_once(app_handle: tauri::AppHandle, game_name: String, cons
         }
         Ok(None) => write_to_boxart_log("LaunchBox: no confident match"),
         Err(e) => push_log("WARN", &format!("LaunchBox indisponible pour '{}': {}", game_name, e)),
+    }
+
+    // 2.97 SteamGridDB, with the user's own key: community 600×900 grids of
+    // the game named exactly like the ROM (its search has no console filter),
+    // before the looser Wikipedia / GameTDB searches.
+    if let Some(url) = steamgriddb::find_cover(&game_name, &console).await {
+        write_to_boxart_log(&format!("Trying SteamGridDB: {}", url));
+        match client.get(&url).send().await {
+            Ok(resp) if resp.status().is_success() => {
+                if let Ok(bytes) = resp.bytes().await {
+                    if bytes.len() >= min_size {
+                        if let Some(data_url) = save_cover_as_webp(&bytes, &console_covers_dir, &safe_name) {
+                            push_log("INFO", &format!("Cover SteamGridDB trouvée: '{}' ({})", game_name, console));
+                            store_cover_url(&format!("{}::{}", console, game_name), &url);
+                            return Ok(data_url);
+                        }
+                    }
+                }
+            }
+            Ok(resp) => push_log("WARN", &format!("Cover SteamGridDB HTTP {} pour '{}'", resp.status(), game_name)),
+            Err(e) => push_log("WARN", &format!("Téléchargement cover SteamGridDB échoué ('{}'): {}", game_name, e)),
+        }
     }
 
     // 3. Try Title Searching FIRST (Libretro / Wikipedia) as requested
@@ -7194,6 +7218,10 @@ pub fn run() {
             iidb_api::get_iidb_status,
             iidb_api::clear_iidb_api_key,
             iidb_api::iidb_cover_choices,
+            steamgriddb::set_sgdb_api_key,
+            steamgriddb::get_sgdb_status,
+            steamgriddb::clear_sgdb_api_key,
+            steamgriddb::sgdb_cover_choices,
             set_cover_from_url,
             set_cover_from_file,
             savestates::rename_save_state,
@@ -7877,6 +7905,18 @@ mod tests {
         assert_eq!(switch2_edition_base("Mario Kart World [0400C3F00006E000]", ns2), None);
         assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition", "Nintendo Switch"), None);
         assert_eq!(switch2_edition_base("Switch 2 Edition", ns2), None);
+    }
+
+    #[test]
+    fn steamgriddb_is_a_fallback_after_the_exact_sources() {
+        let src = include_str!("lib.rs");
+        let body = &src[src.find("async fn fetch_boxart_once").unwrap()..];
+        let at = |needle: &str| body.find(needle).unwrap_or_else(|| panic!("{} not in fetch_boxart_once", needle));
+        let sgdb = at("steamgriddb::find_cover(");
+        assert!(at("folder_game_icon(") < sgdb, "PS4/PS5 game icon first");
+        assert!(at("iidb_api::find_boxart(") < sgdb);
+        assert!(at("launchbox::find_box_url(") < sgdb, "after LaunchBox");
+        assert!(sgdb < at("--- 3.2: Wikipedia ---"), "before Wikipedia");
     }
 
     #[test]

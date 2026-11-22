@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "3.1.0", date: "2026-11-22", changes: [
+    "🖼️ SteamGridDB, avec ta propre clé (gratuite, Réglages → Covers SteamGridDB) : ses visuels au format des cartes servent quand aucune jaquette officielle n'est trouvée, et ont leur onglet dans « Choisir la cover »",
+  ] },
   { version: "3.0.1", date: "2026-11-22", changes: [
     "🔑 Connexion et création de compte réparées dans la version installée : la 3.0.0 répondait « Invalid API key » (mauvaise clé Supabase dans le build), et chaque version vérifie désormais sa clé avant d'être publiée",
   ] },

@@ -7441,3 +7441,5 @@ img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }
 .v3-topbar .gamepad-focused { outline: 3px solid var(--accent) !important; outline-offset: 3px; }
 /* Pad in use: no mouse pointer over the app (padCursor.ts brings it back when the mouse moves) */
 html.pad-input, html.pad-input * { cursor: none !important; }
+/* Choisir la cover: one tab per source (iiDB, SteamGridDB) */
+.cover-picker__sources { margin: 4px 0 10px; }

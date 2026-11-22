@@ -1,13 +1,16 @@
 // "Choisir la cover": the box art iiDB has for a game (or, when iiDB hesitates
 // between several games, for each of them), to pick the one shown in the
-// library. Backend: iidb_cover_choices (iidb_api.rs) and set_cover_from_url
-// (lib.rs). Needs the user's own iiDB API key (Settings → Covers iiDB).
+// library. A second tab shows SteamGridDB's community grids. Backend:
+// iidb_cover_choices (iidb_api.rs), sgdb_cover_choices (steamgriddb.rs) and
+// set_cover_from_url (lib.rs). Each source needs the user's own API key
+// (Settings → Covers iiDB / SteamGridDB).
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Check, FolderOpen, Image as ImageIcon, X } from "lucide-react";
 import { IIDB_SITE } from "./IidbSettings";
+import { SGDB_SITE } from "./SgdbSettings";
 
 export interface CoverChoice {
   url: string;
@@ -60,18 +63,31 @@ interface Props {
   onNotify: (message: string, type?: "success" | "error" | "info") => void;
 }
 
+type Source = "iidb" | "sgdb";
+const CHOICES_COMMAND: Record<Source, string> = { iidb: "iidb_cover_choices", sgdb: "sgdb_cover_choices" };
+
+/** One source's answer: its games, or why there are none. */
+interface Answer { games: CoverGame[] | null; error: string | null }
+
 export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
-  const [games, setGames] = useState<CoverGame[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [source, setSource] = useState<Source>("iidb");
+  const [answers, setAnswers] = useState<Partial<Record<Source, Answer>>>({});
   const [applying, setApplying] = useState<string | null>(null);
 
+  // Each source is asked once, when its tab is first shown.
   useEffect(() => {
+    if (answers[source]) return;
     let alive = true;
-    invoke<CoverGame[]>("iidb_cover_choices", { gameName: rom.name, console: rom.console })
-      .then((g) => { if (alive) setGames(g); })
-      .catch((e) => { if (alive) setError(String(e)); });
+    setAnswers((a) => ({ ...a, [source]: { games: null, error: null } }));
+    invoke<CoverGame[]>(CHOICES_COMMAND[source], { gameName: rom.name, console: rom.console })
+      .then((g) => { if (alive) setAnswers((a) => ({ ...a, [source]: { games: g, error: null } })); })
+      .catch((e) => { if (alive) setAnswers((a) => ({ ...a, [source]: { games: [], error: String(e) } })); });
     return () => { alive = false; };
-  }, [rom.name, rom.console]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, rom.name, rom.console]);
+  const { games, error } = answers[source] ?? { games: null, error: null };
+  // Texts of the shown source (coverPicker.* for iiDB, coverPicker.sgdb.* for SteamGridDB).
+  const st = (key: string) => t(source === "iidb" ? `coverPicker.${key}` : `coverPicker.sgdb.${key}`);
 
   const applyWith = async (marker: string, command: string, args: Record<string, string | number>) => {
     setApplying(marker);
@@ -86,9 +102,10 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
     }
   };
 
-  // The game is remembered: later cover searches use it without asking iiDB again.
+  // An iiDB game is remembered: later cover searches use it without asking
+  // iiDB again. SteamGridDB ids are not iiDB's: nothing to remember.
   const apply = (cover: CoverChoice, game: CoverGame) =>
-    applyWith(cover.url, "set_cover_from_url", { url: cover.url, parentId: game.parent_id });
+    applyWith(cover.url, "set_cover_from_url", source === "iidb" ? { url: cover.url, parentId: game.parent_id } : { url: cover.url });
 
   const fromFile = async () => {
     const picked = await openFileDialog({
@@ -101,10 +118,10 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
   const open = (url: string) => { openUrl(url).catch(() => window.open(url, "_blank")); };
 
   let body;
-  if (error === "no_key") body = <p className="cover-picker__empty">{t("coverPicker.noKey")}</p>;
-  else if (error) body = <p className="cover-picker__empty">{t("coverPicker.unavailable")}</p>;
-  else if (games === null) body = <p className="cover-picker__empty">{t("coverPicker.loading")}</p>;
-  else if (games.length === 0) body = <p className="cover-picker__empty">{t("coverPicker.none")}</p>;
+  if (error === "no_key") body = <p className="cover-picker__empty">{st("noKey")}</p>;
+  else if (error) body = <p className="cover-picker__empty">{st("unavailable")}</p>;
+  else if (games === null) body = <p className="cover-picker__empty">{st("loading")}</p>;
+  else if (games.length === 0) body = <p className="cover-picker__empty">{st("none")}</p>;
   else body = games.map((game) => (
     <section key={game.parent_id} className="cover-picker__game">
       <h4 className="cover-picker__game-title">
@@ -113,13 +130,13 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
         {game.remembered && <span className="cover-picker__chosen">{t("coverPicker.yourChoice")}</span>}
       </h4>
       <div className="cover-picker__grid">
-        {game.covers.map((cover) => (
+        {game.covers.map((cover, i) => (
           <button
             key={cover.url}
             className="cover-picker__cover gamepad-nav-item"
             disabled={applying !== null}
             onClick={() => apply(cover, game)}
-            aria-label={t("coverPicker.use", { region: cover.region ?? "?" })}
+            aria-label={source === "iidb" ? t("coverPicker.use", { region: cover.region ?? "?" }) : t("coverPicker.sgdb.use", { n: i + 1, game: game.name })}
           >
             <img src={cover.thumbnail ?? cover.url} alt="" loading="lazy" />
             {cover.region && <span className="cover-picker__region">{cover.region}</span>}
@@ -137,16 +154,31 @@ export function CoverPicker({ rom, t, onClose, onNotify }: Props) {
           <h3><ImageIcon size={16} /> {t("coverPicker.title")} · {rom.name}</h3>
           <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={onClose} aria-label={t("coverPicker.close")}><X size={14} /></button>
         </div>
+        <div className="v3-tabs cover-picker__sources" role="tablist" aria-label={t("coverPicker.sources")}>
+          {(["iidb", "sgdb"] as const).map((s) => (
+            <button
+              key={s}
+              role="tab"
+              aria-selected={source === s}
+              className={`v3-tabs__item gamepad-nav-item${source === s ? " active" : ""}`}
+              onClick={() => setSource(s)}
+            >
+              {s === "iidb" ? "iiDB" : "SteamGridDB"}
+            </button>
+          ))}
+        </div>
         <div className="cover-picker__actions">
           <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={fromFile} disabled={applying !== null}>
             <FolderOpen size={14} /> {t("coverPicker.fromFile")}
           </button>
         </div>
-        {games && games.length > 1 && <p className="cover-picker__hint">{t("coverPicker.severalGames")}</p>}
+        {source === "iidb" && games && games.length > 1 && <p className="cover-picker__hint">{t("coverPicker.severalGames")}</p>}
         <div className="cover-picker__body">{body}</div>
         <p className="cover-picker__credit">
-          {t("coverPicker.creditBefore")}{" "}
-          <button type="button" className="iidb-settings__link gamepad-nav-item" onClick={() => open(IIDB_SITE)}>iiDB</button>
+          {st("creditBefore")}{" "}
+          {source === "iidb"
+            ? <button type="button" className="iidb-settings__link gamepad-nav-item" onClick={() => open(IIDB_SITE)}>iiDB</button>
+            : <button type="button" className="iidb-settings__link gamepad-nav-item" onClick={() => open(SGDB_SITE)}>SteamGridDB</button>}
         </p>
       </div>
     </div>

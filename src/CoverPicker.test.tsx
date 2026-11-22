@@ -108,3 +108,46 @@ describe("cover picker", () => {
     await waitFor(() => expect(backend.calls.some((c) => c.cmd === "plugin:opener|open_url" && JSON.stringify(c.args).includes("https://iidb.iisu.network"))).toBe(true));
   });
 });
+
+describe("cover picker, SteamGridDB tab", () => {
+  const grids: CoverGame[] = [
+    { parent_id: 13136, name: "Tomb Raider", platform: null, year: 1996, covers: [
+      { url: "https://cdn2.steamgriddb.com/grid/a.png", thumbnail: "https://cdn2.steamgriddb.com/thumb/a.jpg", region: null, console_id: null },
+      { url: "https://cdn2.steamgriddb.com/grid/b.png", thumbnail: null, region: null, console_id: null },
+    ] },
+  ];
+
+  it("asks SteamGridDB only when its tab is opened, and applies a grid without an iiDB game", async () => {
+    const backend = mockBackend({ iidb_cover_choices: () => games, sgdb_cover_choices: () => grids });
+    render(<CoverPicker rom={rom} t={t} onClose={() => {}} onNotify={() => {}} />);
+    await screen.findByText(/PlayStation, 1996/);
+    expect(backend.count("sgdb_cover_choices")).toBe(0);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "SteamGridDB" }));
+    });
+    const second = await screen.findByRole("button", { name: "Utiliser le visuel 2 de Tomb Raider" });
+    expect(backend.calls.find((c) => c.cmd === "sgdb_cover_choices")?.args).toEqual({ gameName: rom.name, console: rom.console });
+    expect(screen.queryByText(/iiDB hésite/)).toBeNull();
+    await act(async () => {
+      fireEvent.click(second);
+    });
+    // No parentId: a SteamGridDB id is not an iiDB game to remember.
+    expect(backend.calls.find((c) => c.cmd === "set_cover_from_url")?.args).toEqual({ gameName: rom.name, console: rom.console, url: "https://cdn2.steamgriddb.com/grid/b.png" });
+    // Back to iiDB: its answer is kept, not asked again.
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "iiDB" }));
+    });
+    expect(backend.count("iidb_cover_choices")).toBe(1);
+  });
+
+  it("explains that the SteamGridDB key is needed, and credits SteamGridDB", async () => {
+    const backend = mockBackend({ sgdb_cover_choices: () => { throw "no_key"; } });
+    render(<CoverPicker rom={rom} t={t} onClose={() => {}} onNotify={() => {}} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("tab", { name: "SteamGridDB" }));
+    });
+    expect(await screen.findByText(/Ajoute ta clé API SteamGridDB/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "SteamGridDB" }));
+    await waitFor(() => expect(backend.calls.some((c) => c.cmd === "plugin:opener|open_url" && JSON.stringify(c.args).includes("https://www.steamgriddb.com"))).toBe(true));
+  });
+});
