@@ -6470,6 +6470,8 @@ export default function App() {
                                 {downloading.includes(game.id) ? (
                                   downloadProgress[game.id]?.status === "extracting" ? (
                                     <><RefreshCw size={12} className="animate-spin" /> {t("store.extracting")}</>
+                                  ) : downloadProgress[game.id]?.status === "human_check" ? (
+                                    <><ShieldCheck size={12} /> {t("store.vimmWindowWaiting")}</>
                                   ) : downloadProgress[game.id]?.status === "done" ? (
                                     <><Check size={12} /> {t("store.done")}</>
                                   ) : (
@@ -9123,6 +9125,7 @@ export default function App() {
                   return `${Math.floor(s / 60)}m${s % 60}s`;
                 };
                 const statusLabel = stats?.status === "extracting" ? t("store.extracting")
+                  : stats?.status === "human_check" ? t("store.vimmWindowHint")
                   : stats?.status === "done" ? t("store.done")
                   : `${progress}%${speed > 0 ? ` · ${formatBytes(speed)}/s` : ''}${eta > 0 ? ` · ${formatEta(eta)}` : ''}`;
                 return (

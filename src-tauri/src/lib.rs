@@ -5456,7 +5456,14 @@ async fn download_vimm_rom(
     };
     // Every failure path below used to return silently: the log showed the
     // download starting and then nothing at all. Log the outcome here once.
-    let result = download_vimm_rom_inner(&app_handle, &game_id, &game_name, &console).await;
+    let mut result = download_vimm_rom_inner(&app_handle, &game_id, &game_name, &console).await;
+    if matches!(&result, Err(e) if e == VIMM_HUMAN_CHECK) {
+        // The user passes Vimm's check themselves in a window of the app; we
+        // only catch the file they download there. If that window cannot be
+        // opened, VIMM_HUMAN_CHECK goes back to the UI, which opens the page
+        // in the user's browser instead.
+        result = download_vimm_in_window(&app_handle, &game_id, &game_name, &console).await;
+    }
     if let Err(e) = &result {
         if e != DOWNLOAD_CANCELLED {
             push_log("ERROR", &format!("Download Vimm échoué: {} ({}) — {}", game_name, game_id, e));
@@ -5469,8 +5476,9 @@ const DOWNLOAD_CANCELLED: &str = "Download cancelled by user";
 
 /// Error code returned when Vimm serves its "Checking if you are human"
 /// Cloudflare Turnstile page instead of the game page (since 11/2026 for any
-/// automated request). We never try to get around it: the UI opens the page
-/// in the user's browser so they can pass the check and download there.
+/// automated request). We never try to get around it: the user passes it in
+/// the Vimm window (`download_vimm_in_window`), or in their browser if that
+/// window cannot open.
 const VIMM_HUMAN_CHECK: &str = "VIMM_HUMAN_CHECK";
 
 /// Extracts (mediaId, download host) from a Vimm vault page.
@@ -5485,7 +5493,8 @@ fn parse_vimm_game_page(page_html: &str) -> Result<(String, String), String> {
         }
         return Err("Could not find mediaId on Vimm page".to_string());
     };
-    let form_sel = Selector::parse(r#"form#dl_form"#).map_err(|_| "selector error")?;
+    // Renamed from dl_form to dl-form in 11/2026.
+    let form_sel = Selector::parse(r#"form#dl-form, form#dl_form"#).map_err(|_| "selector error")?;
     let host = doc.select(&form_sel).next()
         .and_then(|el| el.value().attr("action"))
         .unwrap_or("//dl3.vimm.net/")
@@ -5495,12 +5504,8 @@ fn parse_vimm_game_page(page_html: &str) -> Result<(String, String), String> {
     Ok((mid.to_string(), host))
 }
 
-async fn download_vimm_rom_inner(
-    app_handle: &tauri::AppHandle,
-    game_id: &str,
-    game_name: &str,
-    console: &str,
-) -> Result<String, String> {
+/// The ROMs sub-folder a Vimm download for `console` goes to (created).
+fn vimm_dest_dir(console: &str) -> Result<PathBuf, String> {
     let config = get_config();
     let roms_dir = std::path::PathBuf::from(&config.roms_directory);
     let safe_console = console.replace("..", "").replace('/', "").replace('\\', "");
@@ -5511,6 +5516,246 @@ async fn download_vimm_rom_inner(
     if !dest_dir.exists() {
         fs::create_dir_all(&dest_dir).map_err(|e| format!("Failed to create dir: {}", e))?;
     }
+    Ok(dest_dir)
+}
+
+/// Pages the Vimm download window may show: Vimm, its download servers and
+/// Cloudflare's check. Anything else (ads, other sites) is refused.
+fn vimm_window_allows(url: &tauri::Url) -> bool {
+    if url.as_str() == "about:blank" {
+        return true;
+    }
+    if url.scheme() != "https" {
+        return false;
+    }
+    match url.host_str() {
+        Some(h) => h == "vimm.net" || h.ends_with(".vimm.net") || h == "challenges.cloudflare.com",
+        None => false,
+    }
+}
+
+/// Where a file downloaded in the Vimm window is saved: the console's ROMs
+/// folder, under the name the browser suggested made safe — never elsewhere.
+fn vimm_window_destination(dest_dir: &std::path::Path, suggested: &std::path::Path, game_name: &str, game_id: &str) -> PathBuf {
+    let name = suggested.file_name()
+        .and_then(|n| n.to_str())
+        .and_then(safe_file_name)
+        .or_else(|| {
+            let base = game_name.replace(|c: char| !c.is_alphanumeric() && c != ' ', "").trim().replace(' ', "_");
+            safe_file_name(&format!("{}.zip", base))
+        })
+        .unwrap_or_else(|| format!("vimm_{}.zip", game_id));
+    dest_dir.join(name)
+}
+
+/// Bytes written so far for a browser download to `target`: the file itself
+/// or the `.crdownload` file Chromium writes next to it until it is done.
+fn browser_download_bytes(target: &std::path::Path) -> u64 {
+    let mut total = fs::metadata(target).map(|m| m.len()).unwrap_or(0);
+    if total == 0 {
+        if let Some(dir) = target.parent() {
+            if let Ok(entries) = fs::read_dir(dir) {
+                total = entries.flatten()
+                    .filter(|e| e.file_name().to_string_lossy().ends_with(".crdownload"))
+                    .filter_map(|e| e.metadata().ok())
+                    .map(|m| m.len())
+                    .sum();
+            }
+        }
+    }
+    total
+}
+
+/// Run in the Vimm window when the game page has loaded: presses the
+/// Download button of `#dl-form` (`#dl_form` before 11/2026) once (sessionStorage survives the reloads of
+/// that tab). Does nothing on the "are you human" page, which has no form.
+const VIMM_AUTO_DOWNLOAD_JS: &str = r#"(() => {
+  const form = document.getElementById('dl-form') || document.getElementById('dl_form');
+  if (!form) return;
+  try { if (sessionStorage.getItem('emuworld_dl')) return; sessionStorage.setItem('emuworld_dl', '1'); } catch (_) {}
+  const button = form.querySelector('button[type=submit], input[type=submit]');
+  if (button) button.click(); else form.submit();
+})();"#;
+
+enum VimmWindowEvent {
+    Started(PathBuf),
+    /// A pop-up / new tab to a Vimm page: shown in the same window instead.
+    OpenHere(tauri::Url),
+    Finished(bool, Option<PathBuf>),
+    Closed,
+}
+
+/// Vimm shows a Cloudflare "are you human" check to the app. Opens the game
+/// page in a window of the app: the user passes the check and clicks Vimm's
+/// Download button, and the file they download lands in the ROMs folder, then
+/// goes through the usual extraction. Nothing is automated on Vimm's side.
+async fn download_vimm_in_window(
+    app_handle: &tauri::AppHandle,
+    game_id: &str,
+    game_name: &str,
+    console: &str,
+) -> Result<String, String> {
+    use tauri::webview::{DownloadEvent, NewWindowResponse};
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+
+    push_log("INFO", &format!("Fenêtre Vimm ouverte pour la vérification: {} ({})", game_name, game_id));
+    let dest_dir = vimm_dest_dir(console)?;
+    let label = format!("vimm-dl-{}", game_id);
+    if let Some(old) = app_handle.get_webview_window(&label) {
+        let _ = old.destroy();
+    }
+    let page: tauri::Url = format!("https://vimm.net/vault/{}", game_id).parse()
+        .map_err(|e| format!("url: {}", e))?;
+
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<VimmWindowEvent>();
+    let dl_tx = tx.clone();
+    let popup_tx = tx.clone();
+    let page_path = format!("/vault/{}", game_id);
+    let (dir, name, id) = (dest_dir.clone(), game_name.to_string(), game_id.to_string());
+    let window = WebviewWindowBuilder::new(app_handle, &label, WebviewUrl::External(page))
+        .title(format!("Vimm's Lair — {}", game_name))
+        .inner_size(1000.0, 780.0)
+        .center()
+        .focused(true)
+        .on_navigation(|url| {
+            let ok = vimm_window_allows(url);
+            // Without the query: Vimm's download links carry a token.
+            push_log(if ok { "INFO" } else { "WARN" }, &format!("Fenêtre Vimm: navigation {} → {}{}", if ok { "acceptée" } else { "refusée" }, url.origin().ascii_serialization(), url.path()));
+            ok
+        })
+        .on_page_load(move |win, payload| {
+            // Once the user has passed the check, Vimm's game page shows its
+            // Download form: press it for them (once per window) — only on
+            // the page of the game they asked for.
+            if payload.event() == tauri::webview::PageLoadEvent::Finished
+                && payload.url().path().trim_end_matches('/') == page_path
+            {
+                let _ = win.eval(VIMM_AUTO_DOWNLOAD_JS);
+            }
+        })
+        .on_new_window(move |url, _| {
+            // Vimm's Download button may open a new tab: show it in this
+            // window (where downloads are caught) rather than drop it.
+            if vimm_window_allows(&url) && url.as_str() != "about:blank" {
+                push_log("INFO", &format!("Fenêtre Vimm: pop-up ouverte dans la même fenêtre → {}", url));
+                let _ = popup_tx.send(VimmWindowEvent::OpenHere(url));
+            } else {
+                push_log("WARN", &format!("Fenêtre Vimm: pop-up refusée → {}", url));
+            }
+            NewWindowResponse::Deny
+        })
+        .on_download(move |_webview, event| match event {
+            DownloadEvent::Requested { url, destination } => {
+                if !vimm_window_allows(&url) {
+                    push_log("WARN", &format!("Fenêtre Vimm: téléchargement refusé hors de Vimm: {}", url));
+                    return false;
+                }
+                let target = vimm_window_destination(&dir, destination, &name, &id);
+                *destination = target.clone();
+                let _ = dl_tx.send(VimmWindowEvent::Started(target));
+                true
+            }
+            DownloadEvent::Finished { path, success, .. } => {
+                let _ = dl_tx.send(VimmWindowEvent::Finished(success, path));
+                true
+            }
+            #[allow(unreachable_patterns)]
+            _ => true,
+        })
+        .build();
+    let window = match window {
+        Ok(w) => w,
+        Err(e) => {
+            push_log("ERROR", &format!("Fenêtre Vimm impossible à ouvrir: {}", e));
+            return Err(VIMM_HUMAN_CHECK.to_string());
+        }
+    };
+    let close_tx = tx.clone();
+    window.on_window_event(move |event| {
+        if let tauri::WindowEvent::Destroyed = event {
+            let _ = close_tx.send(VimmWindowEvent::Closed);
+        }
+    });
+    drop(tx);
+
+    let emit = |status: &str, downloaded: u64, speed: u64| {
+        let progress = (downloaded as f64 / (downloaded + 10_000_000) as f64 * 100.0).min(99.0) as u32;
+        let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
+            "game_id": game_id,
+            "status": status,
+            "progress": if status == "downloading" { progress } else { 0 },
+            "downloaded_bytes": downloaded,
+            "total_bytes": 0,
+            "speed_bps": speed,
+            "eta": 0
+        }));
+    };
+    emit("human_check", 0, 0);
+
+    let cancelled = || cancelled_downloads().lock().map(|s| s.contains(game_id)).unwrap_or(false);
+    let mut target: Option<(PathBuf, std::time::Instant)> = None;
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
+    let dest = loop {
+        tokio::select! {
+            event = rx.recv() => match event {
+                Some(VimmWindowEvent::OpenHere(url)) => {
+                    if let Err(e) = window.navigate(url) {
+                        push_log("WARN", &format!("Fenêtre Vimm: navigation impossible: {}", e));
+                    }
+                }
+                Some(VimmWindowEvent::Started(p)) => {
+                    push_log("INFO", &format!("Fenêtre Vimm: téléchargement lancé → {}", p.display()));
+                    target = Some((p, std::time::Instant::now()));
+                    // Nothing left to do in it: progress is shown in the Store.
+                    let _ = window.hide();
+                    emit("downloading", 0, 0);
+                }
+                Some(VimmWindowEvent::Finished(true, path)) => {
+                    let _ = window.destroy();
+                    match path.or_else(|| target.as_ref().map(|(p, _)| p.clone())) {
+                        Some(p) if p.exists() => break p,
+                        _ => return Err("Fichier téléchargé introuvable".to_string()),
+                    }
+                }
+                Some(VimmWindowEvent::Finished(false, _)) => {
+                    let _ = window.destroy();
+                    if cancelled() {
+                        emit("cancelled", 0, 0);
+                        return Err(DOWNLOAD_CANCELLED.to_string());
+                    }
+                    return Err("Le téléchargement depuis Vimm a échoué".to_string());
+                }
+                Some(VimmWindowEvent::Closed) | None => {
+                    push_log("INFO", &format!("Fenêtre Vimm fermée avant la fin: {} ({})", game_name, game_id));
+                    emit("cancelled", 0, 0);
+                    return Err(DOWNLOAD_CANCELLED.to_string());
+                }
+            },
+            _ = tick.tick() => {
+                if cancelled() {
+                    push_log("INFO", &format!("Download Vimm annulé: {} ({})", game_name, game_id));
+                    let _ = window.destroy();
+                    emit("cancelled", 0, 0);
+                    return Err(DOWNLOAD_CANCELLED.to_string());
+                }
+                if let Some((p, started)) = &target {
+                    let bytes = browser_download_bytes(p);
+                    let secs = started.elapsed().as_secs_f64();
+                    emit("downloading", bytes, if secs > 0.0 { (bytes as f64 / secs) as u64 } else { 0 });
+                }
+            }
+        }
+    };
+    finish_vimm_download(app_handle, game_id, &dest, &dest_dir).await
+}
+
+async fn download_vimm_rom_inner(
+    app_handle: &tauri::AppHandle,
+    game_id: &str,
+    game_name: &str,
+    console: &str,
+) -> Result<String, String> {
+    let dest_dir = vimm_dest_dir(console)?;
 
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -5540,7 +5785,7 @@ async fn download_vimm_rom_inner(
         Ok(v) => v,
         Err(e) => {
             if e == VIMM_HUMAN_CHECK {
-                push_log("WARN", &format!("Vimm demande une vérification humaine (Cloudflare Turnstile) pour {} — ouverture dans le navigateur", game_id));
+                push_log("WARN", &format!("Vimm demande une vérification humaine (Cloudflare Turnstile) pour {} — ouverture de la fenêtre Vimm", game_id));
             }
             return Err(e);
         }
@@ -5662,7 +5907,20 @@ async fn download_vimm_rom_inner(
         ));
     }
     partial.commit(&dest)?;
+    finish_vimm_download(app_handle, game_id, &dest, &dest_dir).await
+}
 
+/// After a Vimm download: extracts the archive into the console folder and
+/// reports the end to the UI.
+async fn finish_vimm_download(
+    app_handle: &tauri::AppHandle,
+    game_id: &str,
+    dest: &std::path::Path,
+    dest_dir: &std::path::Path,
+) -> Result<String, String> {
+    let dest = dest.to_path_buf();
+    let dest_dir = dest_dir.to_path_buf();
+    let file_name = dest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let lower = file_name.to_lowercase();
     if lower.ends_with(".zip") || lower.ends_with(".7z") {
         let _ = app_handle.emit("vimm-download-progress", serde_json::json!({
@@ -7381,9 +7639,68 @@ mod tests {
         let normal = r#"<form id="dl_form" action="//dl2.vimm.net/" method="POST">
             <input type="hidden" name="mediaId" value="98765"></form>"#;
         assert_eq!(super::parse_vimm_game_page(normal), Ok(("98765".to_string(), "dl2.vimm.net".to_string())));
+        // The form's current name (11/2026).
+        let renamed = r#"<form id="dl-form" action="//dl4.vimm.net/" method="POST">
+            <input type="hidden" name="mediaId" value="71334"></form>"#;
+        assert_eq!(super::parse_vimm_game_page(renamed), Ok(("71334".to_string(), "dl4.vimm.net".to_string())));
+        assert!(super::VIMM_AUTO_DOWNLOAD_JS.contains("'dl-form'"));
 
         assert_eq!(super::parse_vimm_game_page("<html></html>"),
             Err("Could not find mediaId on Vimm page".to_string()));
+    }
+
+    #[test]
+    fn vimm_window_only_shows_vimm_and_its_check() {
+        let ok = |u: &str| super::vimm_window_allows(&u.parse().unwrap());
+        assert!(ok("https://vimm.net/vault/64460"));
+        assert!(ok("https://dl3.vimm.net/?mediaId=1"));
+        assert!(ok("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x"));
+        assert!(ok("about:blank"));
+        assert!(!ok("http://vimm.net/vault/1"), "plain http");
+        assert!(!ok("https://vimm.net.evil.com/"));
+        assert!(!ok("https://notvimm.net/"));
+        assert!(!ok("https://ads.example.com/"));
+        assert!(!ok("file:///C:/Windows/win.ini"));
+    }
+
+    #[test]
+    fn vimm_window_downloads_stay_in_the_console_folder() {
+        let dir = std::path::Path::new("C:/ROMs/Wii");
+        let dest = |s: &str| super::vimm_window_destination(dir, std::path::Path::new(s), "Super Mario Galaxy", "64460");
+        assert_eq!(dest("C:/Users/x/Downloads/Super Mario Galaxy (USA).7z"), dir.join("Super Mario Galaxy (USA).7z"));
+        // No usable name: falls back to the game's name.
+        assert_eq!(dest(""), dir.join("Super_Mario_Galaxy.zip"));
+        assert_eq!(dest("C:/x/a:b*?.zip"), dir.join("ab.zip"));
+        assert!(dest("..\\..\\evil.exe").starts_with(dir));
+    }
+
+    #[test]
+    fn browser_download_bytes_counts_the_unfinished_file() {
+        let dir = std::env::temp_dir().join(format!("emuworld_crdl_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("game.7z");
+        assert_eq!(super::browser_download_bytes(&target), 0);
+        std::fs::write(dir.join("Unconfirmed 123.crdownload"), vec![0u8; 300]).unwrap();
+        assert_eq!(super::browser_download_bytes(&target), 300);
+        std::fs::write(&target, vec![0u8; 500]).unwrap();
+        assert_eq!(super::browser_download_bytes(&target), 500);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_vimm_window_gets_no_ipc_access() {
+        // It shows a remote site: no capability may cover its windows.
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities");
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            let caps: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(entry.path()).unwrap()).unwrap();
+            for w in caps["windows"].as_array().unwrap() {
+                let w = w.as_str().unwrap();
+                assert!(!w.contains('*') && !w.starts_with("vimm"), "{name}: window {w} would cover the Vimm window");
+            }
+            assert!(caps.get("remote").is_none(), "{name}: no remote URL may get IPC");
+        }
     }
 
     #[test]

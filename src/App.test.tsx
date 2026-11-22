@@ -246,6 +246,25 @@ describe("Vimm store download", () => {
       .toMatchObject({ url: "https://vimm.net/vault/12345" });
     expect(screen.queryByText(/Échec/)).toBeNull();
   });
+
+  it("tells the user to pass the check in the Vimm window", async () => {
+    let finish: (v: string) => void = () => {};
+    await openVimmResults({
+      download_vimm_rom: () => new Promise<string>((r) => { finish = r; }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Télécharger/ }));
+    await act(async () => {
+      await emit("vimm-download-progress", { game_id: "12345", status: "human_check", progress: 0 });
+    });
+    expect(await screen.findByRole("button", { name: /Vérification…/ })).toBeTruthy();
+    expect(screen.getByText(/Passe la vérification dans la fenêtre Vimm/)).toBeTruthy();
+    // Once the user clicked Download there, the usual progress comes back.
+    await act(async () => {
+      await emit("vimm-download-progress", { game_id: "12345", status: "downloading", progress: 40 });
+    });
+    expect(await screen.findByRole("button", { name: /40%/ })).toBeTruthy();
+    await act(async () => finish("ok"));
+  });
 });
 
 describe("smart playlists", () => {

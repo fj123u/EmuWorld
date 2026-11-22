@@ -17,7 +17,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     "🖼️ Changer une cover est mis en avant : bouton « Cover » sur chaque carte de jeu (toujours visible quand le jeu n'en a pas), « Choisir la cover » juste après « Jouer » dans le menu, et une étape du tutoriel",
     "🔑 Le tutoriel de démarrage propose de connecter iiDB et SteamGridDB (clés gratuites, facultatives) pour avoir plus de covers",
     "🖼️ SteamGridDB, avec ta propre clé (gratuite, Réglages → Covers SteamGridDB) : ses visuels au format des cartes servent quand aucune jaquette officielle n'est trouvée, et ont leur onglet dans « Choisir la cover »",
-    "🛡️ Store Vimm : Vimm demande maintenant une vérification « êtes-vous humain » ; au lieu de l'erreur « Could not find mediaId », la page du jeu s'ouvre dans ton navigateur pour le télécharger",
+    "🛡️ Store Vimm réparé : Vimm demande maintenant une vérification « êtes-vous humain ». Au lieu de l'erreur « Could not find mediaId », une fenêtre Vimm s'ouvre dans l'app : tu passes la vérification, le téléchargement démarre tout seul et la fenêtre se ferme, puis le jeu arrive dans ta bibliothèque (extrait comme avant)",
   ] },
   { version: "3.0.1", date: "2026-11-22", changes: [
     "🔑 Connexion et création de compte réparées dans la version installée : la 3.0.0 répondait « Invalid API key » (mauvaise clé Supabase dans le build), et chaque version vérifie désormais sa clé avant d'être publiée",

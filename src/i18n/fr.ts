@@ -188,6 +188,8 @@ const fr = {
     downloadSuccess: "{name} téléchargé avec succès !",
     downloadFailed: "Échec : {error}",
     vimmHumanCheck: "Vimm demande maintenant une vérification « êtes-vous humain » : la page du jeu s'ouvre dans ton navigateur pour le télécharger.",
+    vimmWindowWaiting: "Vérification…",
+    vimmWindowHint: "Passe la vérification dans la fenêtre Vimm : le téléchargement démarre ensuite tout seul et le jeu arrive dans ta bibliothèque",
   },
 
   // Friends
