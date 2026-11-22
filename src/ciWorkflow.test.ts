@@ -19,3 +19,20 @@ describe("CI workflow", () => {
     expect(ci).toMatch(/run: cargo test --manifest-path src-tauri\/Cargo\.toml/);
   });
 });
+
+// 3.0.0 shipped with a Supabase key the project refused: sign-up answered
+// "Invalid API key". The release must ask Supabase before building.
+const release = readFileSync(join(__dirname, "..", ".github", "workflows", "release.yml"), "utf8");
+
+describe("Release workflow", () => {
+  it("checks the Supabase key with Supabase before building the app", () => {
+    const check = release.indexOf("name: Check the Supabase key");
+    const build = release.indexOf("name: Build + bundle + sign");
+    expect(check).toBeGreaterThan(0);
+    expect(check).toBeLessThan(build);
+    const step = release.slice(check, build);
+    expect(step).toContain("/auth/v1/settings");
+    expect(step).toContain('apikey: $VITE_SUPABASE_ANON_KEY');
+    expect(step).toMatch(/exit 1/);
+  });
+});

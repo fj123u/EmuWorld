@@ -60,6 +60,22 @@ jobs:
           fi
           echo "Signing key present: OK"
 
+      # The app is built with these two secrets: a wrong key ships an app
+      # where sign-in, sign-up and every online feature answer
+      # "Invalid API key" (3.0.0). Ask Supabase before building.
+      - name: Check the Supabase key
+        shell: bash
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" -H "apikey: $VITE_SUPABASE_ANON_KEY" "${VITE_SUPABASE_URL%/}/auth/v1/settings")
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase refuses VITE_SUPABASE_ANON_KEY / VITE_SUPABASE_URL (HTTP $code): the app would say 'Invalid API key'"
+            exit 1
+          fi
+          echo "Supabase key accepted: OK"
+
       - name: Build + bundle + sign
         shell: bash
         env:

@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "3.0.1", date: "2026-11-22", changes: [
+    "🔑 Connexion et création de compte réparées dans la version installée : la 3.0.0 répondait « Invalid API key » (mauvaise clé Supabase dans le build), et chaque version vérifie désormais sa clé avant d'être publiée",
+  ] },
   { version: "3.0.0", date: "2026-11-13", changes: [
     "🎨 Nouveau look v3 : thème clair par défaut (fond pointillé, panneaux blancs, couleurs douces, titres en Outfit) et thème sombre au choix dans les Réglages",
     "🎨 Les anciens thèmes (Midnight, OLED, Rétro, Sakura, Sunset) deviennent des variantes du thème sombre, à appliquer depuis la Marketplace ; un thème déjà choisi est gardé",

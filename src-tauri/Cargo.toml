@@ -1,6 +1,6 @@
 [package]
 name = "emuworld"
-version = "3.0.0"
+version = "3.0.1"
 description = "EmuWorld - All-in-one emulator launcher"
 authors = ["EmuWorld Team"]
 edition = "2021"
