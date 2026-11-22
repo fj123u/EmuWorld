@@ -22,6 +22,9 @@ import appIcon from "./assets/app-icon.svg";
 import ps5Logo from "./assets/consoles/ps5.svg";
 import switch2Logo from "./assets/consoles/switch2.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
+import { describe as describeChallenge, drawChallenges, newCompletions, periodOf, progress, progressText as challengeProgressText, rewards as challengeRewardsOf, type History as ChallengeHistory, type Session } from "./challenges";
+import { drawnChallenges, readChallengeHistory, saveChallengeHistory } from "./challengeStore";
+import { ChallengesPage } from "./ChallengesPage";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { clearCoverCache, loadCover, useLazyCover } from "./coverCache";
@@ -3763,43 +3766,8 @@ export default function App() {
           setTimeout(() => setSessionRecap(null), 8000);
           scheduleCloudSync();
 
-          // Update challenge progress
-          if (user?.id) {
-            const activeChals = getActiveWeeklyChallenges();
-            const chalIds = activeChals.map(c => c.challenge_id);
-            const { data: myParts } = await supabase
-              .from("challenge_participants")
-              .select("*")
-              .eq("user_id", user.id)
-              .in("challenge_id", chalIds);
-            for (const part of (myParts || [])) {
-              if (part.completed) continue;
-              const chal = activeChals.find(c => c.challenge_id === part.challenge_id);
-              if (!chal) continue;
-              let newProgress = part.progress;
-              if (chal.goal_type === "any_playtime") {
-                newProgress += sessionSecs;
-              } else if (chal.goal_type === "launches") {
-                newProgress += 1;
-              } else if (chal.goal_type === "game_playtime" && chal.game_keywords) {
-                const nameL = gameName.toLowerCase();
-                if (chal.game_keywords.some(kw => nameL.includes(kw))) {
-                  newProgress += sessionSecs;
-                }
-              }
-              if (newProgress !== part.progress) {
-                const completed = newProgress >= chal.goal_value;
-                await supabase.from("challenge_participants").update({
-                  progress: newProgress,
-                  completed,
-                  completed_at: completed ? new Date().toISOString() : null,
-                }).eq("id", part.id);
-                if (completed) {
-                  showToast(tl("toast.challengeCompleted", { title: chal.title, badge: chal.badge_icon }), "success");
-                }
-              }
-            }
-          }
+          // Challenges move on from the session journal (src/challenges.ts).
+          loadSessionLogRef.current();
         }
         loadPlaytime();
         setCurrentPlayingGame(null);
@@ -4035,101 +4003,48 @@ export default function App() {
     handleOpenReviews(rom);
   }, [reviewsModal, user, showToast, handleOpenReviews]);
 
-  // --- Challenges (auto-rotating pool, no manual DB inserts needed) ---
-  const CHALLENGE_POOL: { id: string; title: string; description: string; goal_type: "any_playtime" | "launches" | "game_playtime"; goal_value: number; badge_icon: string; game_keywords?: string[] }[] = [
-    // Game-specific challenges
-    { id: "zelda_3h", title: "Héros d'Hyrule", description: "Joue 3 heures à un jeu Zelda cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "🗡️", game_keywords: ["zelda", "link"] },
-    { id: "mario_2h", title: "Marathon Mario", description: "Joue 2 heures à un jeu Mario cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🍄", game_keywords: ["mario", "luigi"] },
-    { id: "pokemon_4h", title: "Maître Pokémon", description: "Joue 4 heures à un jeu Pokémon cette semaine", goal_type: "game_playtime", goal_value: 14400, badge_icon: "⚡", game_keywords: ["pokemon", "pokémon"] },
-    { id: "sonic_1h", title: "Gotta Go Fast", description: "Joue 1 heure à un jeu Sonic cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🔵", game_keywords: ["sonic"] },
-    { id: "ff_3h", title: "Guerrier de la Lumière", description: "Joue 3 heures à un Final Fantasy cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "⚔️", game_keywords: ["final fantasy", "ff"] },
-    { id: "smash_2h", title: "Smash Time", description: "Joue 2 heures à Super Smash Bros cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "👊", game_keywords: ["smash"] },
-    { id: "metroid_2h", title: "Chasseuse de Primes", description: "Joue 2 heures à un Metroid cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🚀", game_keywords: ["metroid"] },
-    { id: "resident_evil_2h", title: "Survivant", description: "Joue 2 heures à un Resident Evil cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🧟", game_keywords: ["resident evil", "biohazard"] },
-    { id: "kirby_1h", title: "Rêve Étoilé", description: "Joue 1 heure à un jeu Kirby cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "⭐", game_keywords: ["kirby"] },
-    { id: "kart_2h", title: "Pole Position", description: "Joue 2 heures à Mario Kart cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🏎️", game_keywords: ["kart", "mario kart"] },
-    { id: "dk_1h", title: "Roi de la Jungle", description: "Joue 1 heure à un Donkey Kong cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🦍", game_keywords: ["donkey kong", "dk"] },
-    { id: "castlevania_2h", title: "Vampire Slayer", description: "Joue 2 heures à un Castlevania cette semaine", goal_type: "game_playtime", goal_value: 7200, badge_icon: "🧛", game_keywords: ["castlevania"] },
-    { id: "megaman_1h", title: "Blue Bomber", description: "Joue 1 heure à un Mega Man cette semaine", goal_type: "game_playtime", goal_value: 3600, badge_icon: "🤖", game_keywords: ["mega man", "megaman"] },
-    { id: "gta_3h", title: "Crime City", description: "Joue 3 heures à un GTA cette semaine", goal_type: "game_playtime", goal_value: 10800, badge_icon: "🔫", game_keywords: ["gta", "grand theft auto"] },
-    // Endurance challenges
-    { id: "no_life", title: "No Life", description: "Accumule 10 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 36000, badge_icon: "🌙" },
-    { id: "veteran", title: "Vétéran", description: "Accumule 5 heures de jeu cette semaine", goal_type: "any_playtime", goal_value: 18000, badge_icon: "🎖️" },
-    { id: "sprint_5", title: "Cinq d'un Coup", description: "Lance 5 jeux différents cette semaine", goal_type: "launches", goal_value: 5, badge_icon: "🎲" },
-    { id: "sprint_10", title: "Hyper Actif", description: "Lance 10 sessions de jeu cette semaine", goal_type: "launches", goal_value: 10, badge_icon: "🔥" },
-  ];
+  // --- Challenges v2 (src/challenges.ts): computed from the session journal ---
+  const [sessionLog, setSessionLog] = useState<Session[]>([]);
+  const loadSessionLog = useCallback(() => {
+    // The month, plus 30 days before it for the "comeback" challenges.
+    const since = new Date();
+    since.setDate(since.getDate() - 70);
+    invoke<Session[]>("get_sessions", { since: since.toISOString() })
+      .then((s) => setSessionLog(Array.isArray(s) ? s : []))
+      .catch(() => setSessionLog([]));
+  }, []);
+  const loadSessionLogRef = useRef(loadSessionLog);
+  useEffect(() => { loadSessionLog(); }, [loadSessionLog]);
 
-  const getWeekNumber = () => {
+  const challengeItems = useMemo(() => {
     const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 1);
-    const diff = now.getTime() - start.getTime();
-    return Math.floor(diff / (7 * 24 * 60 * 60 * 1000));
-  };
+    const lib = { games: roms.map((r) => ({ name: r.name, console: r.console })), playtime: playtime.games };
+    return (["day", "week", "month"] as const).flatMap((rhythm) => {
+      const period = periodOf(rhythm, now);
+      // Drawn once per period and kept: a new ROM must not swap a challenge mid-week.
+      const draw = () => drawChallenges(period, lib, user?.id ?? "local");
+      // Not before the library is known: the personal challenges come from it.
+      const list = roms.length > 0 ? drawnChallenges(period, draw) : draw();
+      return list.map((challenge) => ({ challenge, period, value: progress(challenge, period, sessionLog, lib) }));
+    });
+  }, [roms, playtime.games, sessionLog, user?.id]);
 
-  const seededRandom = (seed: number) => {
-    let s = seed;
-    return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 0xFFFFFFFF; };
-  };
-
-  const getActiveWeeklyChallenges = () => {
-    const now = new Date();
-    const week = getWeekNumber();
-    const seed = now.getFullYear() * 1000 + week;
-    const rng = seededRandom(seed);
-    const shuffled = [...CHALLENGE_POOL].sort(() => rng() - 0.5);
-    const c1 = shuffled[0];
-    const c2 = shuffled[1];
-    const dayOfWeek = now.getDay() || 7;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - dayOfWeek + 1);
-    monday.setHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
-    const weekId = `${now.getFullYear()}-W${String(week).padStart(2, "0")}`;
-    return [
-      { ...c1, challenge_id: `${weekId}_${c1.id}`, start: monday, end: sunday },
-      { ...c2, challenge_id: `${weekId}_${c2.id}`, start: monday, end: sunday },
-    ];
-  };
-
-  const [challenges, setChallenges] = useState<any[]>([]);
-  const [challengeParticipants, setChallengeParticipants] = useState<any[]>([]);
-
-  const loadChallenges = useCallback(async () => {
-    const active = getActiveWeeklyChallenges();
-    setChallenges(active);
-    const ids = active.map(c => c.challenge_id);
-    const { data: parts } = await supabase
-      .from("challenge_participants")
-      .select("*")
-      .in("challenge_id", ids)
-      .order("progress", { ascending: false });
-    if (parts && parts.length > 0) {
-      const uids = [...new Set(parts.map((p: any) => p.user_id))];
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", uids);
-      const pMap = new Map((profiles || []).map((p: any) => [p.id, p]));
-      setChallengeParticipants(parts.map((p: any) => ({ ...p, profile: pMap.get(p.user_id) || null })));
-    } else {
-      setChallengeParticipants([]);
+  const [challengeHistory, setChallengeHistory] = useState<ChallengeHistory>(() => readChallengeHistory());
+  const challengeRewards = useMemo(() => challengeRewardsOf(challengeHistory, new Date()), [challengeHistory]);
+  useEffect(() => {
+    const fresh = newCompletions(challengeHistory, challengeItems, new Date());
+    if (fresh.length === 0) return;
+    const next = { ...challengeHistory, ...Object.fromEntries(fresh.map((c) => [c.key, c])) };
+    setChallengeHistory(next);
+    saveChallengeHistory(next);
+    for (const done of fresh) {
+      invoke("log_event", { level: "INFO", message: `Défi réussi: ${done.key} (+${done.points})` }).catch(() => {});
+      const item = challengeItems.find((i) => i.challenge.key === done.key);
+      if (done.kind === "bonus") showToast(t("challenges2.weekBonus", { points: done.points }), "success");
+      else if (item) showToast(t("challenges2.completed", { title: describeChallenge(item.challenge, t, formatHomePlaytime).title, points: done.points }), "success");
     }
-  }, [user]);
-
-  const handleJoinChallenge = useCallback(async (challengeId: string) => {
-    if (!user?.id) { showToast(tl("toast.loginToJoin"), "error"); return; }
-    const { error } = await supabase.from("challenge_participants").upsert({
-      user_id: user.id,
-      challenge_id: challengeId,
-      progress: 0,
-      completed: false,
-    }, { onConflict: "user_id,challenge_id" });
-    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
-    showToast(tl("challenges.joined"), "success");
-    loadChallenges();
-  }, [user, showToast, loadChallenges]);
-
-  // Home page: the challenge of the week shows my progress.
-  useEffect(() => { if (page === "discover" && user) loadChallenges(); }, [page, user, loadChallenges]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challengeItems]);
 
   // --- Guides ---
   const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean; scraped?: { summary?: string; achievements?: { title: string; description: string; points: number; badge_url: string }[] } } | null>(null);
@@ -5739,17 +5654,16 @@ export default function App() {
         Date.now(),
       ).map(({ friend, playing }) => ({ ...friend, playing }))
     : null;
-  const homeChallengeDef = getActiveWeeklyChallenges()[0];
-  const homeChallengeMine = homeChallengeDef && challengeParticipants.find((c: any) => c.challenge_id === homeChallengeDef.challenge_id && c.user_id === user?.id);
-  const homeChallenge = homeChallengeDef
-    ? {
-        title: tOr(`challengePool.${homeChallengeDef.id}`, homeChallengeDef.title),
-        description: tOr(`challengePool.${homeChallengeDef.id}Desc`, homeChallengeDef.description),
-        progress: homeChallengeMine ? Number(homeChallengeMine.progress) || 0 : null,
-        goal: homeChallengeDef.goal_value,
-        goalType: homeChallengeDef.goal_type,
-      }
-    : null;
+  const homeChallenges = challengeItems
+    .filter((i) => i.challenge.rhythm !== "month")
+    .map(({ challenge, value }) => ({
+      key: challenge.key,
+      when: t(`challenges2.rhythm.${challenge.rhythm}`),
+      ...describeChallenge(challenge, t, formatHomePlaytime),
+      progressText: challengeProgressText(challenge, value, formatHomePlaytime),
+      value,
+      goal: challenge.goal,
+    }));
   /** Opens one console of the library (its manufacturer, then the console). */
   const openLibraryConsole = (name: string) => {
     const category = Object.entries(consolesByCategory).find(([, cons]) => cons.includes(name))?.[0] ?? null;
@@ -5831,7 +5745,7 @@ export default function App() {
       case "library": case "installed": setConsoleFilter(null); break;
       case "store": setStoreConsoleFilter(null); break;
       case "leaderboard": loadLeaderboard(); break;
-      case "challenges": loadChallenges(); break;
+      case "challenges": loadSessionLog(); break;
       case "friends": loadFriends(); break;
       case "lobby": loadLobbyInvites(); break;
       case "backup": invoke<typeof localSaves>("scan_local_saves").then(setLocalSaves).catch(() => {}); break;
@@ -6153,7 +6067,7 @@ export default function App() {
                     {page === "leaderboard" && t("subtitle.leaderboard")}
                     {page === "friends" && `${friends.length} ${t("nav.friends").toLowerCase()}`}
                     {page === "stats" && t("subtitle.stats")}
-                    {page === "challenges" && t(challenges.length === 1 ? "subtitle.challengesOne" : "subtitle.challengesMany", { count: challenges.length })}
+                    {page === "challenges" && t(challengeItems.length === 1 ? "subtitle.challengesOne" : "subtitle.challengesMany", { count: challengeItems.length })}
                     {page === "wrap" && t("subtitle.wrap")}
                     {page === "backup" && t("subtitle.backup")}
                     {page === "controller" && (gamepadActive ? t("subtitle.controllerConnected") : t("subtitle.controllerNone"))}
@@ -8264,73 +8178,7 @@ export default function App() {
               })()}
 
               {page === "challenges" && (
-                <div className="challenges-page">
-                  <div className="challenges-page__active">
-                    {challenges.length === 0 ? (
-                      <div className="challenges-page__empty">
-                        <Flame size={48} style={{ opacity: 0.3 }} />
-                        <p>{t("challenges.noneActive")}</p>
-                        <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>{t("statsUi.comeBackSoon")}</p>
-                      </div>
-                    ) : (
-                      challenges.map((ch: any) => {
-                        const myPart = challengeParticipants.find((p: any) => p.challenge_id === ch.challenge_id && p.user_id === user?.id);
-                        const allParts = challengeParticipants
-                          .filter((p: any) => p.challenge_id === ch.challenge_id)
-                          .sort((a: any, b: any) => b.progress - a.progress);
-                        const progress = myPart ? Math.min(100, Math.round((myPart.progress / ch.goal_value) * 100)) : 0;
-                        const daysLeft = Math.max(0, Math.ceil((ch.end.getTime() - Date.now()) / 86400000));
-                        const fmtProgress = (p: number, goalType: string, goalValue: number) => {
-                          if (goalType === "launches") return t("statsUi.sessions", { progress: p, goal: goalValue });
-                          const pMin = Math.floor(p / 60);
-                          const gMin = Math.floor(goalValue / 60);
-                          return pMin >= 60 ? `${Math.floor(pMin / 60)}h${String(pMin % 60).padStart(2, "0")}/${Math.floor(gMin / 60)}h${String(gMin % 60).padStart(2, "0")}` : `${pMin}/${gMin} min`;
-                        };
-                        return (
-                          <div key={ch.challenge_id} className="challenge-card gamepad-nav-item" tabIndex={0}>
-                            <div className="challenge-card__badge">{ch.badge_icon}</div>
-                            <div className="challenge-card__info">
-                              <h3 className="challenge-card__title">{tOr(`challengePool.${ch.id}`, ch.title)}</h3>
-                              <p className="challenge-card__desc">{tOr(`challengePool.${ch.id}Desc`, ch.description)}</p>
-                              <div className="challenge-card__meta">
-                                <span><Calendar size={12} /> {daysLeft}j restants</span>
-                                <span><Users size={12} /> {allParts.length} participants</span>
-                              </div>
-                              {myPart ? (
-                                <div className="challenge-card__progress">
-                                  <div className="challenge-card__progress-bar">
-                                    <div className="challenge-card__progress-fill" style={{ width: `${progress}%` }} />
-                                  </div>
-                                  <span className="challenge-card__progress-text">
-                                    {myPart.completed ? t("statsUi.done") : `${progress}% — ${fmtProgress(myPart.progress, ch.goal_type, ch.goal_value)}`}
-                                  </span>
-                                </div>
-                              ) : (
-                                <button className="btn btn--primary btn--sm" onClick={() => handleJoinChallenge(ch.challenge_id)}>
-                                  <Flame size={12} /> {t("statsUi.join")}
-                                </button>
-                              )}
-                              {allParts.length > 0 && (
-                                <div className="challenge-card__leaderboard">
-                                  <div className="challenge-card__leaderboard-title"><Trophy size={12} /> {t("statsUi.leaderboard")}</div>
-                                  {allParts.slice(0, 10).map((p: any, i: number) => (
-                                    <div key={p.id} className={`challenge-card__rank ${p.user_id === user?.id ? "challenge-card__rank--me" : ""}`}>
-                                      <span className="challenge-card__rank-pos">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
-                                      {p.profile?.avatar_url && <img src={p.profile.avatar_url} className="challenge-card__rank-avatar" alt="" />}
-                                      <span className="challenge-card__rank-name">{p.profile?.username || "???"}</span>
-                                      <span className="challenge-card__rank-progress">{fmtProgress(p.progress, ch.goal_type, ch.goal_value)}</span>
-                                      {p.completed && <span className="challenge-card__rank-done">✓</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
+                <ChallengesPage items={challengeItems} rewards={challengeRewards} now={new Date()} t={t} />
               )}
 
               {page === "wrap" && (() => {
@@ -8740,7 +8588,8 @@ export default function App() {
                     consoles={consoleTiles(roms)}
                     recent={homeRecent.slice(1)}
                     friends={homeFriends}
-                    challenge={homeChallenge}
+                    challenges={homeChallenges}
+                    streak={challengeRewards.streak}
                     month={monthSummary(playtime.games, achievements, new Date())}
                     canLobby={(rom) => !!user && lobbyEmulatorFor(rom.console) !== null}
                     onPlay={handleLaunch}

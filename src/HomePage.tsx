@@ -40,14 +40,17 @@ export interface HomeFriend {
   playing: string | null;
 }
 
+/** A challenge of the day or the week (src/challenges.ts), ready to show. */
 export interface HomeChallenge {
+  key: string;
+  /** "Aujourd'hui", "Cette semaine". */
+  when: string;
   title: string;
   description: string;
-  /** null: the player has not joined it. */
-  progress: number | null;
+  /** "1 h 20 / 3 h 00", "2 / 4". */
+  progressText: string;
+  value: number;
   goal: number;
-  /** "launches" counts sessions, the others are seconds. */
-  goalType: string;
 }
 
 export interface HomePageProps<R extends HomeRom> {
@@ -58,7 +61,10 @@ export interface HomePageProps<R extends HomeRom> {
   recent: { rom: R; seconds: number }[];
   /** null: signed out. */
   friends: HomeFriend[] | null;
-  challenge: HomeChallenge | null;
+  /** The challenges of the day and the week. */
+  challenges: HomeChallenge[];
+  /** Weeks in a row with a challenge done. */
+  streak: number;
   month: { seconds: number; activeDays: number; achievements: number };
   dateLocale: string;
   canLobby: (rom: R) => boolean;
@@ -87,8 +93,6 @@ function lastPlayedText(t: T, iso: string | null, dateLocale: string): string | 
 
 export function HomePage<R extends HomeRom>(p: HomePageProps<R>) {
   const { t } = p;
-  const challengeText = (c: HomeChallenge, value: number) =>
-    c.goalType === "launches" ? t("home.sessions", { count: value }) : formatPlaytime(value);
 
   return (
     <div className="home">
@@ -185,21 +189,24 @@ export function HomePage<R extends HomeRom>(p: HomePageProps<R>) {
           )}
         </section>
 
-        {p.challenge && (
-          <section className="v3-card home-card">
-            <span className="v3-pill">{t("home.weeklyChallenge")}</span>
-            <h3 className="home-card__title">{p.challenge.title}</h3>
-            <p className="home-card__muted">{p.challenge.description}</p>
-            {p.challenge.progress !== null ? (
-              <>
-                <div className="v3-progress" role="progressbar" aria-valuemin={0} aria-valuemax={p.challenge.goal} aria-valuenow={Math.min(p.challenge.progress, p.challenge.goal)}>
-                  <span style={{ width: `${Math.min(100, (p.challenge.progress / Math.max(1, p.challenge.goal)) * 100)}%` }} />
+        {p.challenges.length > 0 && (
+          <section className="v3-card home-card home-challenges">
+            <span className="v3-pill">{t("challenges2.homeTitle")}</span>
+            {p.challenges.map((c) => (
+              <div key={c.key} className="home-challenge">
+                <div className="home-challenge__head">
+                  <span className="home-challenge__title">{c.title}</span>
+                  <span className="home-card__muted">{c.when}</span>
                 </div>
-                <p className="home-card__muted">{t("home.progressOf", { done: challengeText(p.challenge, p.challenge.progress), goal: challengeText(p.challenge, p.challenge.goal) })}</p>
-              </>
-            ) : (
-              <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={p.onOpenChallenges}>{t("statsUi.join")}</button>
-            )}
+                <p className="home-card__muted">{c.description}</p>
+                <div className="v3-progress" role="progressbar" aria-label={c.title} aria-valuemin={0} aria-valuemax={c.goal} aria-valuenow={Math.min(c.value, c.goal)}>
+                  <span style={{ width: `${Math.min(100, (c.value / Math.max(1, c.goal)) * 100)}%` }} />
+                </div>
+                <p className="home-card__muted">{c.value >= c.goal ? t("challenges2.done") : c.progressText}</p>
+              </div>
+            ))}
+            <p className="home-card__muted home-challenges__streak">🔥 {p.streak > 0 ? t("challenges2.streak", { n: p.streak }) : t("challenges2.noStreak")}</p>
+            <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={p.onOpenChallenges}>{t("challenges2.seeAll")}</button>
           </section>
         )}
 

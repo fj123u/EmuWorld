@@ -376,6 +376,7 @@ mod libretro_index;
 mod launchbox;
 mod ps_games;
 mod steamgriddb;
+mod sessions;
 
 /// The cover-search trace is a debugging aid, not an archive: past this size it
 /// starts over (it had reached 12 MB on a real library).
@@ -1646,6 +1647,8 @@ async fn launch_emulator(
                 if let Err(e) = playtime::record_session(&console, &name, elapsed, &emulator_id_for_task) {
                     push_log("ERROR", &format!("Enregistrement de session échoué pour {}: {}", name, e));
                 }
+                // The journal the challenges are computed from.
+                sessions::record(&console, &name, elapsed, &emulator_id_for_task);
             }
             let _ = app_handle.emit("game-closed", serde_json::json!({
                 "console": console,
@@ -6152,6 +6155,8 @@ fn get_profile_stats() -> Result<playtime::ProfileStats, String> {
 /// inheriting the previous user's history.
 #[tauri::command]
 fn clear_playtime() -> Result<(), String> {
+    // The session journal is the same user's history.
+    sessions::clear();
     playtime::clear()
 }
 
@@ -7220,6 +7225,7 @@ pub fn run() {
                                         Ok(()) => push_log("INFO", &format!("Session orpheline récupérée : {} — {}s", game, elapsed)),
                                         Err(e) => push_log("ERROR", &format!("Session orpheline non enregistrée ({}): {}", game, e)),
                                     }
+                                    sessions::record_started(&console, &game, elapsed, &emulator, start_epoch);
                                 } else {
                                     push_log("WARN", &format!("Session orpheline ignorée (durée inconnue) : {}", game));
                                 }
@@ -7242,6 +7248,7 @@ pub fn run() {
             steamgriddb::get_sgdb_status,
             steamgriddb::clear_sgdb_api_key,
             steamgriddb::sgdb_cover_choices,
+            sessions::get_sessions,
             set_cover_from_url,
             set_cover_from_file,
             savestates::rename_save_state,

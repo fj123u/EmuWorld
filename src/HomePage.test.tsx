@@ -21,7 +21,8 @@ function props(over: Partial<HomePageProps<Rom>> = {}): HomePageProps<Rom> {
     consoles: [{ name: "Game Boy Advance", count: 31 }, { name: "NES", count: 1 }],
     recent: [{ rom: kart, seconds: 2880 }],
     friends: [],
-    challenge: null,
+    challenges: [],
+    streak: 0,
     month: { seconds: 33_120, activeDays: 6, achievements: 4 },
     canLobby: () => true,
     onPlay: vi.fn(), onLobby: vi.fn(), onOpenConsole: vi.fn(), onSeeAllGames: vi.fn(), onOpenStore: vi.fn(),
@@ -100,19 +101,21 @@ describe("home page", () => {
     expect(p.onSignIn).toHaveBeenCalled();
   });
 
-  it("shows the challenge of the week with my progress, or a way to join it", () => {
-    const challenge = { title: "Vétéran", description: "Accumule 5 heures", progress: 11_160, goal: 18_000, goalType: "any_playtime" };
-    const { p, rerender } = renderHome({ challenge });
-    expect(screen.getByText("3 h 06 sur 5 h 00")).toBeTruthy();
-    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("11160");
-    rerender(<HomePage {...p} challenge={{ ...challenge, progress: null }} />);
-    fireEvent.click(screen.getByRole("button", { name: "Participer" }));
+  it("shows the challenges of the day and the week, done or in progress, and the streak", () => {
+    const challenges = [
+      { key: "J:a", when: "Aujourd'hui", title: "Découverte", description: "Joue 20 min à un jeu que tu n'as jamais lancé", progressText: "20 min / 20 min", value: 1200, goal: 1200 },
+      { key: "S:b", when: "Cette semaine", title: "Marathon", description: "Joue 3 h 00 au total", progressText: "1 h 06 / 3 h 00", value: 3960, goal: 10800 },
+    ];
+    const { p } = renderHome({ challenges, streak: 3 });
+    expect(screen.getByText("Tes défis")).toBeTruthy();
+    expect(screen.getByText("Réussi !")).toBeTruthy();
+    expect(screen.getByText("1 h 06 / 3 h 00")).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: "Marathon" }).getAttribute("aria-valuenow")).toBe("3960");
+    expect(screen.getByText(/Série : 3 semaine/)).toBeTruthy();
+    // Nothing to join: the card only opens the challenges page.
+    expect(screen.queryByRole("button", { name: "Participer" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tous les défis" }));
     expect(p.onOpenChallenges).toHaveBeenCalled();
-  });
-
-  it("counts sessions for a launches challenge", () => {
-    renderHome({ challenge: { title: "Hyper Actif", description: "Lance 10 sessions", progress: 3, goal: 10, goalType: "launches" } });
-    expect(screen.getByText("3 sessions sur 10 sessions")).toBeTruthy();
   });
 
   it("sums up the month", () => {

@@ -107,6 +107,7 @@ export function defaultHandlers(): Record<string, Handler> {
     clear_iidb_api_key: () => null,
     iidb_cover_choices: () => [],
     get_sgdb_status: () => ({ configured: false }),
+    get_sessions: () => [],
     set_sgdb_api_key: () => ({ configured: true }),
     clear_sgdb_api_key: () => null,
     sgdb_cover_choices: () => [],

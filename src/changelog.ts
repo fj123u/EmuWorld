@@ -9,6 +9,9 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   { version: "3.1.0", date: "2026-11-22", changes: [
+    "🏆 Défis refaits de zéro : plus besoin de « Rejoindre », ils avancent tout seuls quand tu joues (même ce que tu as joué avant d'ouvrir la page compte)",
+    "📅 Un défi par jour, trois par semaine (du lundi au dimanche) et un par mois : les communs sont les mêmes pour tout le monde, les persos sont tirés de ta bibliothèque et toujours faisables (une console, une série, un jeu jamais lancé, un favori oublié…)",
+    "🔥 Points, série de semaines, badges bronze / argent / or et historique des défis réussis ; la carte « Tes défis » de l'Accueil montre ceux du jour et de la semaine",
     "🖼️ Changer une cover est mis en avant : bouton « Cover » sur chaque carte de jeu (toujours visible quand le jeu n'en a pas), « Choisir la cover » juste après « Jouer » dans le menu, et une étape du tutoriel",
     "🔑 Le tutoriel de démarrage propose de connecter iiDB et SteamGridDB (clés gratuites, facultatives) pour avoir plus de covers",
     "🖼️ SteamGridDB, avec ta propre clé (gratuite, Réglages → Covers SteamGridDB) : ses visuels au format des cartes servent quand aucune jaquette officielle n'est trouvée, et ont leur onglet dans « Choisir la cover »",

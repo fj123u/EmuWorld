@@ -810,6 +810,30 @@ describe("changing a cover", () => {
   });
 });
 
+describe("challenges", () => {
+  it("move forward from the session journal, with no joining, and reward what is done", async () => {
+    // A week of play: every game, every day of this week, 2 h each.
+    const monday = new Date();
+    monday.setHours(0, 0, 0, 0);
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const games = [["Super Mario Bros. 3 (Europe)", "NES"], ["Pokemon - Version Rubis (France)", "Game Boy Advance"], ["Halo", "Xbox"]];
+    const sessions = [0, 1, 2, 3, 4, 5, 6].flatMap((d) => games.map(([name, console], i) => ({
+      name, console, emulator: "x", seconds: 7200,
+      start: new Date(monday.getTime() + d * 86_400_000 + (8 + i * 3) * 3_600_000).toISOString(),
+    })));
+    const r = await renderApp({ get_sessions: () => sessions });
+    await waitFor(() => expect(r.backend.count("get_sessions")).toBeGreaterThan(0));
+    // Week challenges are about time, games, days or sessions: all done by this week.
+    expect((await screen.findAllByText(/Défi réussi/, {}, { timeout: 4000 })).length).toBeGreaterThan(0);
+    const history = JSON.parse(localStorage.getItem("emuworld_challenge_history") ?? "{}");
+    expect(Object.keys(history).some((k) => k.startsWith("S-"))).toBe(true);
+    navTo(r.container, "Challenges");
+    expect(await screen.findByRole("heading", { name: /Cette semaine/ }, { timeout: 4000 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Participer|Rejoindre/ })).toBeNull();
+    expect(screen.getAllByText("Réussi !").length).toBeGreaterThan(0);
+  });
+});
+
 describe("welcome wizard", () => {
   it("offers the iiDB and SteamGridDB keys before the end, and can be skipped past", async () => {
     localStorage.removeItem("emuworld_onboarding_done");
