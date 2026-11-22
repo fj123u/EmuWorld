@@ -769,6 +769,51 @@ describe("gamepad in the library", () => {
   });
 });
 
+describe("changing a cover", () => {
+  it("has a Cover button on each game card, and Choisir la cover right after Jouer in its menu", async () => {
+    const r = await renderApp();
+    navTo(r.container, "Roms");
+    fireEvent.change(await screen.findByRole("combobox", { name: "Playlists intelligentes" }), { target: { value: "long" } });
+    const card = await waitFor(() => {
+      const el = r.container.querySelector<HTMLElement>(".game-grid .game-card");
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const button = await waitFor(() => {
+      const b = card.querySelector<HTMLElement>(".game-card__cover-btn");
+      expect(b).not.toBeNull();
+      return b!;
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    const dialog = await screen.findByRole("dialog", { name: "Choisir la cover" });
+    // It opens the picker, it does not launch the game.
+    expect(r.backend.count("launch_emulator")).toBe(0);
+    fireEvent.click(dialog.querySelector<HTMLElement>("button[aria-label='Fermer']")!);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Choisir la cover" })).toBeNull());
+    fireEvent.contextMenu(card);
+    const items = [...document.querySelectorAll(".rom-context-menu .rom-context-menu__btn")].map((b) => b.textContent?.trim());
+    expect(items.slice(0, 2)).toEqual(["Jouer", "Choisir la cover"]);
+  });
+});
+
+describe("welcome wizard", () => {
+  it("offers the iiDB and SteamGridDB keys before the end, and can be skipped past", async () => {
+    localStorage.removeItem("emuworld_onboarding_done");
+    await renderApp();
+    fireEvent.click(await screen.findByRole("button", { name: "C'est parti" }));
+    fireEvent.click(screen.getByRole("button", { name: "Suivant" })); // ROMs folder
+    fireEvent.click(screen.getByRole("button", { name: "Suivant" })); // emulators folder
+    expect(screen.getByText("Des covers encore plus belles")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Colle ta clé API iiDB")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Colle ta clé API SteamGridDB")).toBeTruthy();
+    expect(screen.getByText(/Le bouton « Cover » sur la carte du jeu/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continuer" }));
+    expect(screen.getByText("C'est prêt !")).toBeTruthy();
+  });
+});
+
 describe("emulator updates", () => {
   it("installs every update found, one emulator after the other", async () => {
     const r = await renderApp({

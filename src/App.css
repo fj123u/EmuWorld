@@ -7443,3 +7443,22 @@ img.onboarding-modal__icon { width: 96px; height: 96px; margin: 0 auto 12px; }
 html.pad-input, html.pad-input * { cursor: none !important; }
 /* Choisir la cover: one tab per source (iiDB, SteamGridDB) */
 .cover-picker__sources { margin: 4px 0 10px; }
+
+/* "Changer la cover" on a game card: a labelled pill on the cover, shown on
+   hover / focus, and always when the game has no cover yet. */
+.game-card__cover-btn {
+  position: absolute; left: 8px; bottom: 8px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 5px;
+  min-height: 28px; padding: 0 11px; border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--panel) 88%, transparent); color: var(--ink);
+  font-size: 12px; font-weight: 800; box-shadow: var(--shadow-soft);
+  opacity: 0; transition: opacity 0.15s ease;
+}
+.game-card:hover .game-card__cover-btn, .game-card:focus-within .game-card__cover-btn,
+.game-card.gamepad-focused .game-card__cover-btn, .game-card__cover-btn--shown { opacity: 1; }
+.game-card__cover-btn:hover { background: var(--accent); color: var(--on-solid); }
+/* Welcome wizard: the iiDB / SteamGridDB key blocks */
+.onboarding-modal__keys { display: flex; flex-direction: column; gap: 12px; width: 100%; max-height: 46vh; overflow-y: auto; text-align: left; }
+.onboarding-modal__keys .settings__group { margin: 0; padding: 14px 16px; box-shadow: none; background: var(--soft); }
+.onboarding-modal__tip { display: flex; align-items: center; gap: 8px; margin: 4px 0 0; font-size: 13px; font-weight: 700; color: var(--mut); text-align: left; }
+.onboarding-modal:has(.onboarding-modal__step--covers) { width: 640px; }

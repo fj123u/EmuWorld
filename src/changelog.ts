@@ -9,6 +9,8 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   { version: "3.1.0", date: "2026-11-22", changes: [
+    "🖼️ Changer une cover est mis en avant : bouton « Cover » sur chaque carte de jeu (toujours visible quand le jeu n'en a pas), « Choisir la cover » juste après « Jouer » dans le menu, et une étape du tutoriel",
+    "🔑 Le tutoriel de démarrage propose de connecter iiDB et SteamGridDB (clés gratuites, facultatives) pour avoir plus de covers",
     "🖼️ SteamGridDB, avec ta propre clé (gratuite, Réglages → Covers SteamGridDB) : ses visuels au format des cartes servent quand aucune jaquette officielle n'est trouvée, et ont leur onglet dans « Choisir la cover »",
   ] },
   { version: "3.0.1", date: "2026-11-22", changes: [

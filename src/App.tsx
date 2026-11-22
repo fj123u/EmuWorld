@@ -993,7 +993,7 @@ export const BoxartLogList = () => {
 
 // Memoized: the library shows hundreds of these, and App re-renders often.
 // Every prop passed to it must keep its identity between renders.
-const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onRate, onNotes, onContextMenu }: {
+const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpenRA, onRate, onNotes, onContextMenu, onChooseCover }: {
   rom: RomFile,
   onLaunch: (rom: RomFile) => void,
   onDelete: (rom: RomFile) => void,
@@ -1003,6 +1003,7 @@ const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpe
   onRate?: (rom: RomFile, rating: number) => void,
   onNotes?: (rom: RomFile) => void,
   onContextMenu?: (rom: RomFile, x: number, y: number) => void,
+  onChooseCover?: (rom: RomFile) => void,
 }) => {
   const { t } = useTranslation();
   // The cover is only loaded once the card comes near the screen.
@@ -1040,6 +1041,17 @@ const GameCard = memo(({ rom, onLaunch, onDelete, entry, onToggleFavorite, onOpe
         <div className="game-card__overlay">
           <Play size={24} fill="currentColor" />
         </div>
+        {/* "Changer la cover": on the cover, always shown when there is none. */}
+        {onChooseCover && !loading && (
+          <button
+            className={`game-card__cover-btn gamepad-nav-item${cover ? "" : " game-card__cover-btn--shown"}`}
+            data-tour="cover"
+            onClick={(e) => { e.stopPropagation(); onChooseCover(rom); }}
+            title={t("coverPicker.menu")}
+          >
+            <ImagePlus size={13} /> {t(cover ? "card.changeCover" : "card.chooseCover")}
+          </button>
+        )}
       </div>
 
       {/* Favorite toggle */}
@@ -1614,6 +1626,7 @@ export default function App() {
   const launchFromCard = useCallback((rom: RomFile) => launchRef.current(rom), []);
   const deleteFromCard = useCallback((rom: RomFile) => deleteRef.current(rom), []);
   const openRomMenu = useCallback((rom: RomFile, x: number, y: number) => setRomContextMenu({ rom, x, y }), []);
+  const chooseCoverFromCard = useCallback((rom: RomFile) => setCoverPickerRom(rom), []);
   const [expandedLibraryCategories, setExpandedLibraryCategories] = useState<string[]>(["NINTENDO", "SONY", "SEGA", "MICROSOFT"]);
   const [installing, setInstalling] = useState<string[]>([]);
   const [installChoiceModal, setInstallChoiceModal] = useState<{ standalone: string; retroarch: string } | null>(null);
@@ -6263,6 +6276,7 @@ export default function App() {
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
+                                onChooseCover={chooseCoverFromCard}
                               />
                             )}
                             {recentWithoutFav.map(({ rom }) => (
@@ -6277,6 +6291,7 @@ export default function App() {
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
+                                onChooseCover={chooseCoverFromCard}
                               />
                             ))}
                           </div>
@@ -7009,6 +7024,7 @@ export default function App() {
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
+                                onChooseCover={chooseCoverFromCard}
                               />
                             ))}
                           </div>
@@ -7099,6 +7115,7 @@ export default function App() {
                                 onRate={handleSetRating}
                                 onNotes={handleOpenNotes}
                                 onContextMenu={openRomMenu}
+                                onChooseCover={chooseCoverFromCard}
                               />
                             ))}
                           </div>
@@ -9277,6 +9294,9 @@ export default function App() {
             <button className="rom-context-menu__btn" onClick={() => { handleLaunch(romContextMenu.rom); setRomContextMenu(null); }}>
               <Play size={14} /> {t("gameMenu.play")}
             </button>
+            <button className="rom-context-menu__btn" onClick={() => { setCoverPickerRom(romContextMenu.rom); setRomContextMenu(null); }}>
+              <ImagePlus size={14} /> {t("coverPicker.menu")}
+            </button>
             <button className="rom-context-menu__btn" onClick={() => { handleToggleFavorite(romContextMenu.rom); setRomContextMenu(null); }}>
               {playtime.games[`${romContextMenu.rom.console}::${romContextMenu.rom.name}`]?.favorite ? t("gameMenu.removeFavorite") : t("gameMenu.addFavorite")}
             </button>
@@ -9305,9 +9325,6 @@ export default function App() {
               setRomContextMenu(null);
             }}>
               <Camera size={14} /> {t("gameMenu.screenshots")}
-            </button>
-            <button className="rom-context-menu__btn" onClick={() => { setCoverPickerRom(romContextMenu.rom); setRomContextMenu(null); }}>
-              <ImagePlus size={14} /> {t("coverPicker.menu")}
             </button>
             <button className="rom-context-menu__btn" onClick={() => { setSaveStatesRom(romContextMenu.rom); setRomContextMenu(null); }}>
               <Save size={14} /> {t("saveStates.menu")}
@@ -10200,7 +10217,7 @@ export default function App() {
         <div className="onboarding-overlay">
           <div className="onboarding-modal">
             <div className="onboarding-modal__progress">
-              {[0, 1, 2, 3].map(i => (
+              {[0, 1, 2, 3, 4].map(i => (
                 <div key={i} className={`onboarding-modal__dot ${onboardingStep >= i ? "onboarding-modal__dot--active" : ""}`} />
               ))}
             </div>
@@ -10273,6 +10290,23 @@ export default function App() {
             )}
 
             {onboardingStep === 3 && (
+              <div className="onboarding-modal__step onboarding-modal__step--covers">
+                <div className="onboarding-modal__icon">🖼️</div>
+                <h1 className="onboarding-modal__title">{t("onboarding.coversTitle")}</h1>
+                <p className="onboarding-modal__desc">{t("onboarding.coversDesc")}</p>
+                <div className="onboarding-modal__keys">
+                  <IidbSettings t={t} />
+                  <SgdbSettings t={t} />
+                </div>
+                <p className="onboarding-modal__tip"><ImagePlus size={14} /> {t("onboarding.coversTip")}</p>
+                <div className="onboarding-modal__nav">
+                  <button className="btn btn--ghost" onClick={() => setOnboardingStep(2)}>{t("onboarding.back")}</button>
+                  <button className="btn btn--primary" onClick={() => setOnboardingStep(4)}>{t("onboarding.coversNext")}</button>
+                </div>
+              </div>
+            )}
+
+            {onboardingStep === 4 && (
               <div className="onboarding-modal__step">
                 <div className="onboarding-modal__icon">✨</div>
                 <h1 className="onboarding-modal__title">{t("onboarding.readyTitle")}</h1>
@@ -10306,6 +10340,7 @@ export default function App() {
           { selector: "[data-tour='store']", title: t("tour.storeTitle"), desc: t("tour.storeDesc"), position: "right" as const, page: "store" as Page },
           { selector: "[data-tour='emulators']", title: t("tour.emulatorsTitle"), desc: t("tour.emulatorsDesc"), position: "right" as const, page: "catalog" as Page },
           { selector: "[data-tour='library']", title: t("tour.libraryTitle"), desc: t("tour.libraryDesc"), position: "right" as const, page: "library" as Page },
+          { selector: "[data-tour='cover']", title: t("tour.coverTitle"), desc: t("tour.coverDesc"), position: "right" as const, page: "library" as Page },
           { selector: "[data-tour='play']", title: t("tour.playTitle"), desc: t("tour.playDesc"), position: "top" as const, page: "library" as Page },
           { selector: "[data-tour='friends']", title: t("tour.friendsTitle"), desc: t("tour.friendsDesc"), position: "right" as const, page: "friends" as Page },
         ];
