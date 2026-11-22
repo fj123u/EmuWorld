@@ -234,6 +234,18 @@ describe("Vimm store download", () => {
     await waitFor(() => expect(backend.count("download_vimm_rom")).toBe(2));
     expect(attempts).toBe(2);
   });
+
+  it("opens the game page in the browser when Vimm asks for a human check", async () => {
+    const { backend } = await openVimmResults({
+      download_vimm_rom: () => { throw "VIMM_HUMAN_CHECK"; },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Télécharger/ }));
+    await screen.findByText(/vérification « êtes-vous humain »/);
+    await waitFor(() => expect(backend.count("plugin:opener|open_url")).toBe(1));
+    expect(backend.calls.find((c) => c.cmd === "plugin:opener|open_url")?.args)
+      .toMatchObject({ url: "https://vimm.net/vault/12345" });
+    expect(screen.queryByText(/Échec/)).toBeNull();
+  });
 });
 
 describe("smart playlists", () => {

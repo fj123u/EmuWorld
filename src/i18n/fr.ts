@@ -187,6 +187,7 @@ const fr = {
     downloadStarted: "Téléchargement de {name}...",
     downloadSuccess: "{name} téléchargé avec succès !",
     downloadFailed: "Échec : {error}",
+    vimmHumanCheck: "Vimm demande maintenant une vérification « êtes-vous humain » : la page du jeu s'ouvre dans ton navigateur pour le télécharger.",
   },
 
   // Friends

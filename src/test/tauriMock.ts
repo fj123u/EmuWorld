@@ -131,6 +131,7 @@ export function defaultHandlers(): Record<string, Handler> {
     launch_emulator: () => "Launched",
     // Tauri plugins
     "plugin:app|version": () => "0.0.0-test",
+    "plugin:opener|open_url": () => null,
     "plugin:updater|check": () => null,
     "plugin:window|is_fullscreen": () => false,
     "plugin:window|is_maximized": () => false,

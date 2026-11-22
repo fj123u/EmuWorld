@@ -189,6 +189,7 @@ const en: Translations = {
     downloadStarted: "Downloading {name}...",
     downloadSuccess: "{name} downloaded successfully!",
     downloadFailed: "Failed: {error}",
+    vimmHumanCheck: "Vimm now asks for an \"are you human\" check: the game page opens in your browser so you can download it there.",
   },
 
   // Friends

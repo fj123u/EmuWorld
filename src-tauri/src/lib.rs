@@ -5464,6 +5464,34 @@ async fn download_vimm_rom(
 
 const DOWNLOAD_CANCELLED: &str = "Download cancelled by user";
 
+/// Error code returned when Vimm serves its "Checking if you are human"
+/// Cloudflare Turnstile page instead of the game page (since 11/2026 for any
+/// automated request). We never try to get around it: the UI opens the page
+/// in the user's browser so they can pass the check and download there.
+const VIMM_HUMAN_CHECK: &str = "VIMM_HUMAN_CHECK";
+
+/// Extracts (mediaId, download host) from a Vimm vault page.
+fn parse_vimm_game_page(page_html: &str) -> Result<(String, String), String> {
+    use scraper::{Html, Selector};
+    let doc = Html::parse_document(page_html);
+    let media_sel = Selector::parse(r#"input[name="mediaId"]"#).map_err(|_| "selector error")?;
+    let Some(mid) = doc.select(&media_sel).next().and_then(|el| el.value().attr("value")) else {
+        let turnstile = Selector::parse(r#"#turnstile-form, .cf-turnstile"#).map_err(|_| "selector error")?;
+        if doc.select(&turnstile).next().is_some() {
+            return Err(VIMM_HUMAN_CHECK.to_string());
+        }
+        return Err("Could not find mediaId on Vimm page".to_string());
+    };
+    let form_sel = Selector::parse(r#"form#dl_form"#).map_err(|_| "selector error")?;
+    let host = doc.select(&form_sel).next()
+        .and_then(|el| el.value().attr("action"))
+        .unwrap_or("//dl3.vimm.net/")
+        .trim_start_matches("//")
+        .trim_end_matches('/')
+        .to_string();
+    Ok((mid.to_string(), host))
+}
+
 async fn download_vimm_rom_inner(
     app_handle: &tauri::AppHandle,
     game_id: &str,
@@ -5505,22 +5533,14 @@ async fn download_vimm_rom_inner(
         .join("; ");
     let page_html = page_resp.text().await.map_err(|e| format!("page read: {}", e))?;
 
-    let (media_id, dl_host) = {
-        use scraper::{Html, Selector};
-        let doc = Html::parse_document(&page_html);
-        let media_sel = Selector::parse(r#"input[name="mediaId"]"#).map_err(|_| "selector error")?;
-        let mid = doc.select(&media_sel).next()
-            .and_then(|el| el.value().attr("value"))
-            .ok_or_else(|| "Could not find mediaId on Vimm page".to_string())?
-            .to_string();
-        let form_sel = Selector::parse(r#"form#dl_form"#).map_err(|_| "selector error")?;
-        let host = doc.select(&form_sel).next()
-            .and_then(|el| el.value().attr("action"))
-            .unwrap_or("//dl3.vimm.net/")
-            .trim_start_matches("//")
-            .trim_end_matches('/')
-            .to_string();
-        (mid, host)
+    let (media_id, dl_host) = match parse_vimm_game_page(&page_html) {
+        Ok(v) => v,
+        Err(e) => {
+            if e == VIMM_HUMAN_CHECK {
+                push_log("WARN", &format!("Vimm demande une vérification humaine (Cloudflare Turnstile) pour {} — ouverture dans le navigateur", game_id));
+            }
+            return Err(e);
+        }
     };
 
     println!("[Vimm] mediaId={} host={} for game {}", media_id, dl_host, game_name);
@@ -7341,6 +7361,24 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn vimm_page_reports_the_human_check_instead_of_a_missing_media_id() {
+        // What vimm.net/vault/<id> returns to automated requests since 11/2026.
+        let challenge = r#"<html><body><main>
+            <p id="turnstile-message">Checking if you are human.</p>
+            <form id="turnstile-form" action="/vault/64460" method="POST">
+              <div class="cf-turnstile" data-sitekey="x"></div>
+            </form></main></body></html>"#;
+        assert_eq!(super::parse_vimm_game_page(challenge), Err(super::VIMM_HUMAN_CHECK.to_string()));
+
+        let normal = r#"<form id="dl_form" action="//dl2.vimm.net/" method="POST">
+            <input type="hidden" name="mediaId" value="98765"></form>"#;
+        assert_eq!(super::parse_vimm_game_page(normal), Ok(("98765".to_string(), "dl2.vimm.net".to_string())));
+
+        assert_eq!(super::parse_vimm_game_page("<html></html>"),
+            Err("Could not find mediaId on Vimm page".to_string()));
+    }
+
     #[test]
     fn never_calls_iidb_outside_its_official_api() {
         // iiDB's terms (section 8): automated access only through the

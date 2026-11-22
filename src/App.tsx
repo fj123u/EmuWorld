@@ -5346,6 +5346,12 @@ export default function App() {
       const msg = String(err);
       if (msg === "Download cancelled by user") {
         showToast(t("store.cancelled"), "info");
+      } else if (msg === "VIMM_HUMAN_CHECK") {
+        // Vimm now shows a Cloudflare "are you human" check to the app: the
+        // user passes it and downloads in their own browser.
+        showToast(t("store.vimmHumanCheck"), "info");
+        const url = `https://vimm.net/vault/${game.id}`;
+        await openUrl(url).catch(() => window.open(url, "_blank"));
       } else {
         showToast(t("store.downloadFailed", { error: msg }), "error");
       }
