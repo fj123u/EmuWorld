@@ -3,6 +3,17 @@ import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
+// ---- Web Storage ------------------------------------------------------------
+// Node 25+ has its own localStorage / sessionStorage globals; without
+// --localstorage-file they are undefined and hide jsdom's, so every test
+// touching storage failed on a recent Node. Use jsdom's (CI runs Node 20).
+const dom = (globalThis as { jsdom?: { window: Window } }).jsdom;
+for (const name of ["localStorage", "sessionStorage"] as const) {
+  if (!globalThis[name] && dom) {
+    Object.defineProperty(globalThis, name, { value: dom.window[name], configurable: true, writable: true });
+  }
+}
+
 // ---- Browser APIs missing from jsdom -------------------------------------
 if (!window.matchMedia) {
   window.matchMedia = (query: string) =>
