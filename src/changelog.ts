@@ -9,6 +9,8 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   { version: "3.1.0", date: "2026-11-22", changes: [
+    "👥 Classement entre amis sur les défis communs de la semaine et du mois (disponible dès la mise à jour du serveur)",
+    "⚔️ Versus revus : le score de chacun vient de ses vraies parties, le temps restant s'affiche, le gagnant est désigné à la fin (égalité possible) et un bouton « Revanche » relance le même défi",
     "🏆 Défis refaits de zéro : plus besoin de « Rejoindre », ils avancent tout seuls quand tu joues (même ce que tu as joué avant d'ouvrir la page compte)",
     "📅 Un défi par jour, trois par semaine (du lundi au dimanche) et un par mois : les communs sont les mêmes pour tout le monde, les persos sont tirés de ta bibliothèque et toujours faisables (une console, une série, un jeu jamais lancé, un favori oublié…)",
     "🔥 Points, série de semaines, badges bronze / argent / or et historique des défis réussis ; la carte « Tes défis » de l'Accueil montre ceux du jour et de la semaine",

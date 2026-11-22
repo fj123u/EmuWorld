@@ -5,6 +5,7 @@
 import { Award, Calendar, Flame, Trophy } from "lucide-react";
 import { describe, progressText, type Challenge, type Period, type Rewards, type Rhythm } from "./challenges";
 import { formatPlaytime } from "./home";
+import type { RankEntry } from "./challengeSync";
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 
@@ -24,7 +25,20 @@ export function timeLeft(period: Period, now: Date, t: T): string {
   return hours > 24 ? t("challenges2.leftDays", { n: Math.ceil(hours / 24) }) : t("challenges2.leftHours", { n: hours });
 }
 
-export function ChallengesPage({ items, rewards, now, t }: { items: ChallengeItem[]; rewards: Rewards; now: Date; t: T }) {
+/** "on": ranked with friends; "signedOut"; "unavailable": the server tables are not there yet. */
+export type RankingState = "on" | "signedOut" | "unavailable";
+
+interface Props {
+  items: ChallengeItem[];
+  rewards: Rewards;
+  now: Date;
+  t: T;
+  /** Friends ranking of each common challenge, by challenge key. */
+  ranks?: Record<string, RankEntry[]>;
+  rankingState?: RankingState;
+}
+
+export function ChallengesPage({ items, rewards, now, t, ranks = {}, rankingState = "signedOut" }: Props) {
   const titleOf = (c: Challenge) => describe(c, t, formatPlaytime);
   return (
     <div className="challenges-v2">
@@ -60,6 +74,24 @@ export function ChallengesPage({ items, rewards, now, t }: { items: ChallengeIte
                       <span>{done ? t("challenges2.done") : progressText(c, value, formatPlaytime)}</span>
                       <span className="challenge-v2__family">{t(c.family === "common" ? "challenges2.common" : "challenges2.personal")}</span>
                     </div>
+                    {rankingState === "on" && c.family === "common" && c.rhythm !== "day" && (
+                      <div className="challenge-v2__ranking">
+                        <span className="challenge-v2__ranking-title"><Trophy size={12} /> {t("challenges2.rankingTitle")}</span>
+                        {(ranks[c.key] ?? []).length <= 1 ? (
+                          <span className="home-card__muted">{t("challenges2.rankingEmpty")}</span>
+                        ) : (
+                          <ol>
+                            {(ranks[c.key] ?? []).slice(0, 5).map((r, i) => (
+                              <li key={r.userId} className={r.me ? "challenge-v2__rank--me" : undefined}>
+                                <span>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</span>
+                                <span className="challenge-v2__rank-name">{r.name}</span>
+                                <span>{r.done ? "✓" : progressText(c, r.progress, formatPlaytime)}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -96,7 +128,9 @@ export function ChallengesPage({ items, rewards, now, t }: { items: ChallengeIte
             ))}
           </ul>
         )}
-        <p className="home-card__muted">{t("challenges2.leaderboardSoon")}</p>
+        {rankingState !== "on" && (
+          <p className="home-card__muted">{t(rankingState === "signedOut" ? "challenges2.rankingSignedOut" : "challenges2.rankingUnavailable")}</p>
+        )}
       </section>
     </div>
   );

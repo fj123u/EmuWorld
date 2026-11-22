@@ -637,6 +637,15 @@ const en: Translations = {
   },
 
   // Challenges
+  versusV2: {
+    kind: { time: "Play time", distinct: "Different games", days: "Days played", sessions: "Sessions" },
+    draw: "It's a draw!",
+    youWon: "You won! 🏆",
+    theyWon: "{name} won",
+    waiting: "Waiting for {name}",
+    closing: "Over, result coming…",
+    rematch: "Rematch",
+  },
   challenges2: {
     title: {
       time: "Marathon",
@@ -687,7 +696,10 @@ const en: Translations = {
     },
     tier: { bronze: "Bronze", silver: "Silver", gold: "Gold" },
     badgeCount: "{n} done",
-    leaderboardSoon: "The friends leaderboard is coming soon.",
+    rankingTitle: "With friends",
+    rankingEmpty: "No friend on this challenge yet.",
+    rankingSignedOut: "Sign in to compare with your friends on the common challenges.",
+    rankingUnavailable: "The friends ranking will be available after the server update.",
   },
   challenges: {
     title: "Challenges",

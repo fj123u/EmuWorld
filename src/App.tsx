@@ -24,7 +24,9 @@ import switch2Logo from "./assets/consoles/switch2.svg";
 import { consoleTiles, formatPlaytime as formatHomePlaytime, friendsOnline, monthSummary, recentGames } from "./home";
 import { describe as describeChallenge, drawChallenges, newCompletions, periodOf, progress, progressText as challengeProgressText, rewards as challengeRewardsOf, type History as ChallengeHistory, type Session } from "./challenges";
 import { drawnChallenges, readChallengeHistory, saveChallengeHistory } from "./challengeStore";
-import { ChallengesPage } from "./ChallengesPage";
+import { ChallengesPage, type RankingState } from "./ChallengesPage";
+import { commonProgressRows, insertVersus, loadFriendsProgress, pushProgress, ranking as challengeRanking, syncVersus, type Client as SyncClient, type FriendProgress, type VersusKind } from "./challengeSync";
+import { VersusCard, type VersusView } from "./VersusCard";
 import { SaveStatesModal } from "./SaveStatesModal";
 import { CoverPicker, useCoverChanges } from "./CoverPicker";
 import { clearCoverCache, loadCover, useLazyCover } from "./coverCache";
@@ -4046,6 +4048,49 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challengeItems]);
 
+  // Common challenges with friends: my progress goes to challenge_progress,
+  // the ranking reads my friends' (scratch/supabase_challenges_v2.sql).
+  const [challengeCloud, setChallengeCloud] = useState<"on" | "missing">("on");
+  const lastPushedRef = useRef("");
+  useEffect(() => {
+    if (!user?.id || challengeCloud === "missing") return;
+    const rows = commonProgressRows(user.id, challengeItems);
+    const signature = JSON.stringify(rows);
+    if (signature === lastPushedRef.current) return;
+    lastPushedRef.current = signature;
+    pushProgress(supabase as unknown as SyncClient, rows).then((result) => {
+      if (result === "missing") {
+        setChallengeCloud("missing");
+        invoke("log_event", { level: "WARN", message: "Défis: table challenge_progress absente (supabase_challenges_v2.sql non appliqué)" }).catch(() => {});
+      } else if (result === "error") {
+        invoke("log_event", { level: "WARN", message: "Défis: progression non envoyée" }).catch(() => {});
+      }
+    }).catch(() => {});
+  }, [challengeItems, user?.id, challengeCloud]);
+
+  const [friendsProgress, setFriendsProgress] = useState<FriendProgress[]>([]);
+  const [rankProfiles, setRankProfiles] = useState<Map<string, { username: string | null; avatar_url: string | null }>>(new Map());
+  const loadChallengeRanking = useCallback(async () => {
+    if (!user?.id) return;
+    const ids = [user.id, ...friends.filter((f) => f.status === "accepted").map((f) => (f.requester_id === user.id ? f.addressee_id : f.requester_id))];
+    const keys = [...new Set(challengeItems.map((i) => i.period.key))];
+    const rows = await loadFriendsProgress(supabase as unknown as SyncClient, keys, ids);
+    if (rows === "missing") {
+      setChallengeCloud("missing");
+      return;
+    }
+    setFriendsProgress(rows);
+    const { data } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
+    setRankProfiles(new Map((data || []).map((p: { id: string; username: string | null; avatar_url: string | null }) => [p.id, p])));
+  }, [user?.id, friends, challengeItems]);
+  useEffect(() => { if (page === "challenges") loadChallengeRanking(); }, [page, loadChallengeRanking]);
+  const challengeRanks = useMemo(() => Object.fromEntries(
+    challengeItems
+      .filter((i) => i.challenge.family === "common" && i.challenge.rhythm !== "day")
+      .map((i) => [i.challenge.key, challengeRanking(friendsProgress, i.challenge, i.period.key, rankProfiles, user?.id ?? "")]),
+  ), [challengeItems, friendsProgress, rankProfiles, user?.id]);
+  const rankingState: RankingState = !user ? "signedOut" : challengeCloud === "missing" ? "unavailable" : "on";
+
   // --- Guides ---
   const [guideModal, setGuideModal] = useState<{ rom: RomFile; guides: any[]; loading: boolean; tab: "presentation" | "tips" | "achievements" | "secrets"; writing: boolean; scraped?: { summary?: string; achievements?: { title: string; description: string; points: number; badge_url: string }[] } } | null>(null);
   const [guideDraft, setGuideDraft] = useState<{ title: string; content: string }>({ title: "", content: "" });
@@ -4125,14 +4170,14 @@ export default function App() {
   }, [user, guideModal, showToast, handleOpenGuide]);
 
   // ─── Versus Mode ───
-  interface VersusChallenge { id: string; challenger_id: string; opponent_id: string; game_name: string | null; game_console: string | null; challenge_type: string; goal_description: string; duration_days: number; challenger_progress: number; opponent_progress: number; winner_id: string | null; status: string; created_at: string; ends_at: string | null; challenger_profile?: { username: string; avatar_url: string }; opponent_profile?: { username: string; avatar_url: string } }
+  type VersusChallenge = VersusView;
   const [versusChallenges, setVersusChallenges] = useState<VersusChallenge[]>([]);
   const [versusModal, setVersusModal] = useState<{ friendId: string; friendName: string } | null>(null);
   const [versusForm, setVersusForm] = useState({ type: "playtime" as string, game: "", console: "", days: 7, description: "" });
 
   const loadVersusChallenges = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase.from("versus_challenges").select("*").or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`).in("status", ["pending", "active"]).order("created_at", { ascending: false });
+    const { data } = await supabase.from("versus_challenges").select("*").or(`challenger_id.eq.${user.id},opponent_id.eq.${user.id}`).in("status", ["pending", "active", "completed"]).order("created_at", { ascending: false }).limit(20);
     if (data) {
       const userIds = [...new Set(data.flatMap((v: any) => [v.challenger_id, v.opponent_id]))];
       const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
@@ -4145,7 +4190,9 @@ export default function App() {
     if (!user || !versusModal) return;
     const desc = versusForm.description || (versusForm.type === "playtime" ? (versusForm.game ? t("versus.descPlaytimeGame", { game: versusForm.game, days: versusForm.days }) : t("versus.descPlaytime", { days: versusForm.days })) : versusForm.type === "launches" ? t("versus.descLaunches", { days: versusForm.days }) : t("versus.descStreak"));
     const endsAt = new Date(Date.now() + versusForm.days * 86400000).toISOString();
-    const { error } = await supabase.from("versus_challenges").insert({
+    // The rules the challenges engine scores it with (challengeSync.ts).
+    const kind: VersusKind = versusForm.type === "launches" ? "sessions" : versusForm.type === "streak" ? "days" : "time";
+    const error = await insertVersus(supabase as unknown as SyncClient, {
       challenger_id: user.id,
       opponent_id: versusModal.friendId,
       game_name: versusForm.game || null,
@@ -4154,8 +4201,9 @@ export default function App() {
       goal_description: desc,
       duration_days: versusForm.days,
       ends_at: endsAt,
+      rules: { kind, ...(versusForm.console ? { console: versusForm.console } : {}), ...(versusForm.game ? { game: versusForm.game } : {}) },
     });
-    if (error) { showToast(tl("toast.error", { error: error.message }), "error"); return; }
+    if (error) { showToast(tl("toast.error", { error: error.message ?? "" }), "error"); return; }
     showToast(tl("toast.versusSent", { name: versusModal.friendName }), "success");
     setVersusModal(null);
     setVersusForm({ type: "playtime", game: "", console: "", days: 7, description: "" });
@@ -4175,6 +4223,27 @@ export default function App() {
   }, [showToast, loadVersusChallenges]);
 
   useEffect(() => { if (user) loadVersusChallenges(); }, [user, loadVersusChallenges]);
+
+  /** "Revanche": the same versus again, against the same friend. */
+  const handleRematch = useCallback((v: VersusChallenge) => {
+    const other = v.challenger_id === user?.id ? v.opponent_id : v.challenger_id;
+    const name = (v.challenger_id === user?.id ? v.opponent_profile : v.challenger_profile)?.username || t("friendsUi.anonymous");
+    setVersusForm({ type: v.challenge_type, game: v.game_name ?? "", console: v.game_console ?? "", days: v.duration_days || 7, description: "" });
+    setVersusModal({ friendId: other, friendName: name });
+  }, [user?.id, t]);
+
+  // My score in each running versus comes from my session journal; a versus
+  // whose time is up is closed (close_versus, scratch/supabase_challenges_v2.sql).
+  useEffect(() => {
+    if (!user?.id || versusChallenges.length === 0) return;
+    const lib = { games: roms.map((r) => ({ name: r.name, console: r.console })), playtime: playtime.games };
+    syncVersus(supabase as unknown as SyncClient, user.id, versusChallenges, sessionLog, lib, new Date()).then(({ updated, closed }) => {
+      if (updated === 0 && closed === 0) return;
+      invoke("log_event", { level: "INFO", message: `Versus: ${updated} score(s) envoyé(s), ${closed} clôturé(s)` }).catch(() => {});
+      loadVersusChallenges();
+    }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLog, versusChallenges, user?.id]);
 
   // ─── Lobby / Multiplayer ───
   // Flow: the host launches first; for RetroArch EmuWorld finds the host's
@@ -7805,41 +7874,9 @@ export default function App() {
                         <div className="settings__group">
                           <div className="settings__group-title"><Swords size={16} /> {t("versus.title")}</div>
                           <div className="versus-list">
-                            {versusChallenges.map(v => {
-                              const isChallenger = v.challenger_id === user?.id;
-                              const myProgress = isChallenger ? v.challenger_progress : v.opponent_progress;
-                              const theirProgress = isChallenger ? v.opponent_progress : v.challenger_progress;
-                              const opponent = isChallenger ? v.opponent_profile : v.challenger_profile;
-                              const isPending = v.status === "pending" && v.opponent_id === user?.id;
-                              return (
-                                <div key={v.id} className="versus-card gamepad-nav-item" tabIndex={0}>
-                                  <div className="versus-card__header">
-                                    <Swords size={14} />
-                                    <span className="versus-card__type">{v.challenge_type === "playtime" ? t("friendsUi.typePlaytime") : v.challenge_type === "launches" ? t("friendsUi.typeLaunches") : t("friendsUi.typeStreak")}</span>
-                                    {v.game_name && <span className="versus-card__game">{v.game_name}</span>}
-                                  </div>
-                                  <p className="versus-card__desc">{v.goal_description}</p>
-                                  <div className="versus-card__scores">
-                                    <div className="versus-card__player">
-                                      <span>{t("friendsUi.you")}</span>
-                                      <strong>{v.challenge_type === "playtime" ? `${Math.floor(myProgress / 60)}h${myProgress % 60}m` : myProgress}</strong>
-                                    </div>
-                                    <span className="versus-card__vs">{t("friendsUi.vs")}</span>
-                                    <div className="versus-card__player">
-                                      <span>{opponent?.username || t("versusUi.opponent")}</span>
-                                      <strong>{v.challenge_type === "playtime" ? `${Math.floor(theirProgress / 60)}h${theirProgress % 60}m` : theirProgress}</strong>
-                                    </div>
-                                  </div>
-                                  {isPending && (
-                                    <div className="versus-card__actions">
-                                      <button className="btn btn--success btn--sm" onClick={() => handleAcceptVersus(v.id)}>{t("versus.accept")}</button>
-                                      <button className="btn btn--ghost btn--sm" onClick={() => handleDeclineVersus(v.id)}>{t("versus.decline")}</button>
-                                    </div>
-                                  )}
-                                  {v.ends_at && <div className="versus-card__timer">{t("versusUi.endsOn", { date: new Date(v.ends_at).toLocaleDateString(dateLocale) })}</div>}
-                                </div>
-                              );
-                            })}
+                            {versusChallenges.map(v => (
+                              <VersusCard key={v.id} v={v} me={user?.id} t={t} now={new Date()} onAccept={handleAcceptVersus} onDecline={handleDeclineVersus} onRematch={handleRematch} />
+                            ))}
                           </div>
                         </div>
                       )}
@@ -8178,7 +8215,7 @@ export default function App() {
               })()}
 
               {page === "challenges" && (
-                <ChallengesPage items={challengeItems} rewards={challengeRewards} now={new Date()} t={t} />
+                <ChallengesPage items={challengeItems} rewards={challengeRewards} now={new Date()} t={t} ranks={challengeRanks} rankingState={rankingState} />
               )}
 
               {page === "wrap" && (() => {

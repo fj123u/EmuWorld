@@ -53,6 +53,23 @@ describe("challenges page", () => {
     expect(screen.getByText("+30")).toBeTruthy();
   });
 
+  it("ranks friends on the common challenges, or says why it cannot", () => {
+    const ranks = {
+      "week:w1": [
+        { userId: "a", name: "Alice", avatar: null, progress: 10800, goal: 10800, done: true, me: false },
+        { userId: "me", name: "Moi", avatar: null, progress: 4800, goal: 10800, done: false, me: true },
+      ],
+    };
+    const { rerender } = render(<ChallengesPage items={items} rewards={rewards({}, now)} now={now} t={t} ranks={ranks} rankingState="on" />);
+    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(screen.getByText("✓")).toBeTruthy();
+    expect(screen.getAllByText("Aucun ami sur ce défi pour l'instant.").length).toBeGreaterThan(0); // w2, month: nobody yet
+    rerender(<ChallengesPage items={items} rewards={rewards({}, now)} now={now} t={t} rankingState="signedOut" />);
+    expect(screen.getByText(/Connecte-toi pour te comparer/)).toBeTruthy();
+    rerender(<ChallengesPage items={items} rewards={rewards({}, now)} now={now} t={t} rankingState="unavailable" />);
+    expect(screen.getByText(/après la mise à jour du serveur/)).toBeTruthy();
+  });
+
   it("says how long is left, in days or hours", () => {
     expect(timeLeft(week, now, t)).toBe("encore 5 j");
     expect(timeLeft(day, now, t)).toBe("encore 12 h");

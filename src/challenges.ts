@@ -47,6 +47,8 @@ export interface Challenge {
   minSeconds?: number;
   console?: string;
   series?: string;
+  /** One game, by name (versus on a game). */
+  game?: string;
   points: number;
 }
 
@@ -286,6 +288,7 @@ function overlap(s: Session, from: Date, to: Date): number {
 function matches(c: Challenge, s: Session): boolean {
   if (c.console && s.console !== c.console) return false;
   if (c.series && !seriesById(c.series)?.pattern.test(s.name)) return false;
+  if (c.game && s.name.toLowerCase() !== c.game.toLowerCase()) return false;
   return true;
 }
 

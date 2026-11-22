@@ -35,7 +35,7 @@ Kit de départ : `scratch/ui-v3/` — `GUIDE.md` (étapes, correspondance des va
 
 ### 👥 Social & profil
 
-- [~] **Refonte complète des défis** *(étapes 1 à 3 + récompenses en local faites le 22/11 : journal des sessions `sessions.rs`, moteur `src/challenges.ts`, page `ChallengesPage.tsx`, carte de l'Accueil ; restent avec accord Supabase : classement entre amis (étape 4) et versus (étape 6))*
+- [~] **Refonte complète des défis** *(étapes 1 à 3 + récompenses en local faites le 22/11 : journal des sessions `sessions.rs`, moteur `src/challenges.ts`, page `ChallengesPage.tsx`, carte de l'Accueil ; classement entre amis (étape 4) et versus (étape 6) codés le 22/11, prêts dès que `scratch/supabase_challenges_v2.sql` est appliqué)*
 - [ ] **Profil personnalisable** *(quick win)* — bannière, bio, jeu favori épinglé, badges mis en avant sur le profil public
 - [ ] **Système de parrainage** *(quick win)* — code d'invitation, badges quand un ami s'inscrit
 - [ ] **Galerie de screenshots améliorée** *(moyen)* — filtres, partage Discord/amis, comparaison, slideshow

@@ -635,6 +635,15 @@ const fr = {
   },
 
   // Challenges
+  versusV2: {
+    kind: { time: "Temps de jeu", distinct: "Jeux différents", days: "Jours joués", sessions: "Sessions" },
+    draw: "Égalité !",
+    youWon: "Tu as gagné ! 🏆",
+    theyWon: "{name} a gagné",
+    waiting: "En attente de {name}",
+    closing: "Terminé, résultat en cours…",
+    rematch: "Revanche",
+  },
   challenges2: {
     title: {
       time: "Marathon",
@@ -685,7 +694,10 @@ const fr = {
     },
     tier: { bronze: "Bronze", silver: "Argent", gold: "Or" },
     badgeCount: "{n} réussi(s)",
-    leaderboardSoon: "Le classement entre amis arrive bientôt.",
+    rankingTitle: "Entre amis",
+    rankingEmpty: "Aucun ami sur ce défi pour l'instant.",
+    rankingSignedOut: "Connecte-toi pour te comparer à tes amis sur les défis communs.",
+    rankingUnavailable: "Le classement entre amis sera disponible après la mise à jour du serveur.",
   },
   challenges: {
     title: "Challenges",

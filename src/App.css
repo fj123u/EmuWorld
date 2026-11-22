@@ -7491,3 +7491,13 @@ html.pad-input, html.pad-input * { cursor: none !important; }
 .home-challenge__head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .home-challenge__title { font-weight: 900; color: var(--ink); }
 .home-challenge .v3-progress { align-self: stretch; }
+
+.challenge-v2__ranking { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px solid var(--soft); font-size: 13px; }
+.challenge-v2__ranking-title { display: inline-flex; align-items: center; gap: 5px; font-weight: 900; color: var(--ink); }
+.challenge-v2__ranking ol { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+.challenge-v2__ranking li { display: flex; gap: 8px; align-items: center; font-weight: 700; color: var(--ink); }
+.challenge-v2__rank-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.challenge-v2__rank--me { color: var(--link); }
+.versus-card__player--ahead strong { color: var(--sec-trophy); }
+.versus-card--done { opacity: 0.85; }
+.versus-card__result { font-weight: 900; color: var(--ink); }
