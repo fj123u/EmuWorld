@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["deb", "appimage"],
+    "resources": [],
+    "category": "Game",
+    "shortDescription": "Emulator launcher: library, covers, playtime, netplay",
+    "linux": {
+      "deb": {
+        "depends": ["7zip | p7zip-full", "mame-tools"],
+        "recommends": ["libfuse2t64 | libfuse2"],
+        "section": "games"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    }
+  }
+}

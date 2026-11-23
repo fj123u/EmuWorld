@@ -1,0 +1,73 @@
+name: Linux bundle
+
+# Builds EmuWorld for Linux (.deb + AppImage, signed for the in-app
+# updater) and keeps them as the `linux-bundle` artifact. Called by
+# release.yml on a tag; can also be run by hand to try a Linux build
+# without publishing anything.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries (WebKitGTK, GTK, udev for the gamepad)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev libssl-dev
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-bundle-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Rust tests on Linux
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Build + bundle + sign (.deb, AppImage)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="$(echo "$TAURI_KEY_PASSWORD_B64" | base64 -d)"
+          npx @tauri-apps/cli build --verbose
+
+      - name: Collect the Linux files
+        run: |
+          set -e
+          BUNDLE_DIR="src-tauri/target/release/bundle"
+          ls -R "$BUNDLE_DIR/deb" "$BUNDLE_DIR/appimage" | grep -v "^$" | head -50
+          mkdir linux-bundle
+          cp "$BUNDLE_DIR"/deb/*.deb "$BUNDLE_DIR"/appimage/*.AppImage linux-bundle/
+          cp "$BUNDLE_DIR"/deb/*.deb.sig "$BUNDLE_DIR"/appimage/*.AppImage.sig linux-bundle/ 2>/dev/null || true
+          ls -la linux-bundle
+          # The updater needs the AppImage's signature at least.
+          ls linux-bundle/*.AppImage.sig
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: linux-bundle/
+          retention-days: 14

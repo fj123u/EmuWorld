@@ -43,3 +43,27 @@ describe("Release workflow", () => {
     expect(step).toMatch(/exit 1/);
   });
 });
+
+// 3.2.0: EmuWorld for Linux. The release adds the .deb and the AppImage and
+// their latest.json entries, without touching the Windows build.
+const linuxBundle = readFileSync(join(__dirname, "..", ".github", "workflows", "linux-bundle.yml"), "utf8");
+const linuxConf = JSON.parse(readFileSync(join(__dirname, "..", "src-tauri", "tauri.linux.conf.json"), "utf8"));
+
+describe("Linux release", () => {
+  it("builds a .deb and an AppImage without the Windows tools", () => {
+    expect(linuxConf.bundle.targets).toEqual(["deb", "appimage"]);
+    expect(linuxConf.bundle.resources).toEqual([]);
+    expect(linuxConf.bundle.linux.deb.depends).toEqual(expect.arrayContaining(["7zip | p7zip-full", "mame-tools"]));
+    expect(linuxConf.plugins).toBeUndefined(); // the updater key stays the main config's
+  });
+
+  it("signs the Linux files and the release adds them to latest.json", () => {
+    expect(linuxBundle).toMatch(/runs-on: ubuntu-22\.04/);
+    expect(linuxBundle).toContain("TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}");
+    expect(linuxBundle).toMatch(/run: cargo test --manifest-path src-tauri\/Cargo\.toml/);
+    expect(release).toContain("uses: ./.github/workflows/linux-bundle.yml");
+    expect(release).toMatch(/needs: \[release, linux\]/);
+    expect(release).toContain('.platforms["linux-x86_64"]');
+    expect(release).toContain('.platforms["linux-x86_64-deb"]');
+  });
+});
