@@ -611,13 +611,14 @@ mod tests {
         assert_eq!(StatesLayout::from_cfg(cfg), StatesLayout { by_core: true, by_content: false });
         assert_eq!(StatesLayout::from_cfg(""), StatesLayout::default());
 
-        let root = Path::new("C:\\RA\\states");
-        let rom = Path::new("D:\\Roms\\SNES\\Zelda.sfc");
+        // Built with join: valid paths on Windows and Linux alike.
+        let root = Path::new("RA").join("states");
+        let rom = Path::new("Roms").join("SNES").join("Zelda.sfc");
         let both = StatesLayout { by_core: true, by_content: true };
-        assert_eq!(both.dir_for(root, Some("Snes9x"), rom), root.join("Snes9x").join("SNES"));
-        assert_eq!(StatesLayout::default().dir_for(root, Some("Snes9x"), rom), root.to_path_buf());
+        assert_eq!(both.dir_for(&root, Some("Snes9x"), &rom), root.join("Snes9x").join("SNES"));
+        assert_eq!(StatesLayout::default().dir_for(&root, Some("Snes9x"), &rom), root.to_path_buf());
         // The core of a state made without core folders is unknown.
-        assert_eq!(both.dir_for(root, None, rom), root.join("SNES"));
+        assert_eq!(both.dir_for(&root, None, &rom), root.join("SNES"));
     }
 
     #[test]
