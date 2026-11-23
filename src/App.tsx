@@ -80,6 +80,7 @@ import {
   EyeOff,
   Camera,
   ShieldCheck,
+  CircleAlert,
   Link2,
   ShoppingBag,
   Check,
@@ -5262,6 +5263,8 @@ export default function App() {
       "vimm-download-progress",
       (event) => {
         const { game_id, status, progress, downloaded_bytes, total_bytes, speed_bps, eta } = event.payload;
+        // Vimm answered the Download button with a page, not a file.
+        if (status === "no_file") showToast(tl("store.vimmNoFile"), "error");
         // Keep every status, not only "downloading": the store button and the
         // download banner switch to "Extracting..." on status === "extracting".
         // Dropping it left the bar frozen at 99% during long extractions.
@@ -6472,6 +6475,8 @@ export default function App() {
                                     <><RefreshCw size={12} className="animate-spin" /> {t("store.extracting")}</>
                                   ) : downloadProgress[game.id]?.status === "human_check" ? (
                                     <><ShieldCheck size={12} /> {t("store.vimmWindowWaiting")}</>
+                                  ) : downloadProgress[game.id]?.status === "no_file" ? (
+                                    <><CircleAlert size={12} /> {t("store.vimmNoFileShort")}</>
                                   ) : downloadProgress[game.id]?.status === "done" ? (
                                     <><Check size={12} /> {t("store.done")}</>
                                   ) : (
@@ -9126,6 +9131,7 @@ export default function App() {
                 };
                 const statusLabel = stats?.status === "extracting" ? t("store.extracting")
                   : stats?.status === "human_check" ? t("store.vimmWindowHint")
+                  : stats?.status === "no_file" ? t("store.vimmNoFile")
                   : stats?.status === "done" ? t("store.done")
                   : `${progress}%${speed > 0 ? ` · ${formatBytes(speed)}/s` : ''}${eta > 0 ? ` · ${formatEta(eta)}` : ''}`;
                 return (

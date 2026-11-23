@@ -265,6 +265,19 @@ describe("Vimm store download", () => {
     expect(await screen.findByRole("button", { name: /40%/ })).toBeTruthy();
     await act(async () => finish("ok"));
   });
+  it("says when Vimm sends no file after its Download button (maintenance…)", async () => {
+    let finish: (v: string) => void = () => {};
+    await openVimmResults({
+      download_vimm_rom: () => new Promise<string>((r) => { finish = r; }),
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Télécharger/ }));
+    await act(async () => {
+      await emit("vimm-download-progress", { game_id: "12345", status: "no_file", progress: 0 });
+    });
+    expect(await screen.findByRole("button", { name: /Aucun fichier/ })).toBeTruthy();
+    expect(screen.getAllByText(/Vimm n'a envoyé aucun fichier/).length).toBeGreaterThan(0);
+    await act(async () => finish("ok"));
+  });
 });
 
 describe("smart playlists", () => {

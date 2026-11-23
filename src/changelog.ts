@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "3.1.1", date: "2026-11-23", changes: [
+    "🛡️ Store Vimm : si Vimm n'envoie aucun fichier après son bouton Download (une console en maintenance, une limite…), sa fenêtre reste au premier plan avec son message et le Store l'explique, au lieu d'attendre sans rien dire",
+  ] },
   { version: "3.1.0", date: "2026-11-22", changes: [
     "👥 Classement entre amis sur les défis communs de la semaine et du mois (disponible dès la mise à jour du serveur)",
     "⚔️ Versus revus : le score de chacun vient de ses vraies parties, le temps restant s'affiche, le gagnant est désigné à la fin (égalité possible) et un bouton « Revanche » relance le même défi",

@@ -190,6 +190,8 @@ const fr = {
     vimmHumanCheck: "Vimm demande maintenant une vérification « êtes-vous humain » : la page du jeu s'ouvre dans ton navigateur pour le télécharger.",
     vimmWindowWaiting: "Vérification…",
     vimmWindowHint: "Passe la vérification dans la fenêtre Vimm : le téléchargement démarre ensuite tout seul et le jeu arrive dans ta bibliothèque",
+    vimmNoFileShort: "Aucun fichier",
+    vimmNoFile: "Vimm n'a envoyé aucun fichier : lis son message dans la fenêtre Vimm (maintenance d'une console, limite…). Ferme-la pour annuler, puis réessaie plus tard.",
   },
 
   // Friends

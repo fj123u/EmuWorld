@@ -192,6 +192,8 @@ const en: Translations = {
     vimmHumanCheck: "Vimm now asks for an \"are you human\" check: the game page opens in your browser so you can download it there.",
     vimmWindowWaiting: "Checking…",
     vimmWindowHint: "Pass the check in the Vimm window: the download then starts on its own and the game goes into your library",
+    vimmNoFileShort: "No file",
+    vimmNoFile: "Vimm sent no file: read its message in the Vimm window (a console's vault under maintenance, a limit…). Close it to cancel, then try again later.",
   },
 
   // Friends

@@ -5534,6 +5534,22 @@ fn vimm_window_allows(url: &tauri::Url) -> bool {
     }
 }
 
+/// Vimm's download servers (dl2.vimm.net, dl3.vimm.net…): where the
+/// Download button leads, and where the file should come from.
+fn is_vimm_download_server(url: &tauri::Url) -> bool {
+    url.scheme() == "https"
+        && url.host_str().map(|h| h.starts_with("dl") && h.ends_with(".vimm.net")).unwrap_or(false)
+}
+
+/// How long after reaching Vimm's download server the file may take to start.
+const VIMM_NO_FILE_AFTER: std::time::Duration = std::time::Duration::from_secs(15);
+
+/// No file yet, that long after the window reached the download server:
+/// Vimm shows a message instead (maintenance of a vault, daily limit…).
+fn vimm_sent_no_file(reached_server: Option<std::time::Instant>, started: bool, now: std::time::Instant) -> bool {
+    !started && reached_server.map(|t| now.saturating_duration_since(t) >= VIMM_NO_FILE_AFTER).unwrap_or(false)
+}
+
 /// Where a file downloaded in the Vimm window is saved: the console's ROMs
 /// folder, under the name the browser suggested made safe — never elsewhere.
 fn vimm_window_destination(dest_dir: &std::path::Path, suggested: &std::path::Path, game_name: &str, game_id: &str) -> PathBuf {
@@ -5578,6 +5594,8 @@ const VIMM_AUTO_DOWNLOAD_JS: &str = r#"(() => {
 })();"#;
 
 enum VimmWindowEvent {
+    /// The window reached a download server (after the Download button).
+    ReachedServer,
     Started(PathBuf),
     /// A pop-up / new tab to a Vimm page: shown in the same window instead.
     OpenHere(tauri::Url),
@@ -5610,6 +5628,7 @@ async fn download_vimm_in_window(
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<VimmWindowEvent>();
     let dl_tx = tx.clone();
     let popup_tx = tx.clone();
+    let nav_tx = tx.clone();
     let page_path = format!("/vault/{}", game_id);
     let (dir, name, id) = (dest_dir.clone(), game_name.to_string(), game_id.to_string());
     let window = WebviewWindowBuilder::new(app_handle, &label, WebviewUrl::External(page))
@@ -5617,8 +5636,11 @@ async fn download_vimm_in_window(
         .inner_size(1000.0, 780.0)
         .center()
         .focused(true)
-        .on_navigation(|url| {
+        .on_navigation(move |url| {
             let ok = vimm_window_allows(url);
+            if ok && is_vimm_download_server(url) {
+                let _ = nav_tx.send(VimmWindowEvent::ReachedServer);
+            }
             // Without the query: Vimm's download links carry a token.
             push_log(if ok { "INFO" } else { "WARN" }, &format!("Fenêtre Vimm: navigation {} → {}{}", if ok { "acceptée" } else { "refusée" }, url.origin().ascii_serialization(), url.path()));
             ok
@@ -5694,10 +5716,15 @@ async fn download_vimm_in_window(
 
     let cancelled = || cancelled_downloads().lock().map(|s| s.contains(game_id)).unwrap_or(false);
     let mut target: Option<(PathBuf, std::time::Instant)> = None;
+    let mut reached_server: Option<std::time::Instant> = None;
+    let mut told_no_file = false;
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
     let dest = loop {
         tokio::select! {
             event = rx.recv() => match event {
+                Some(VimmWindowEvent::ReachedServer) => {
+                    reached_server.get_or_insert_with(std::time::Instant::now);
+                }
                 Some(VimmWindowEvent::OpenHere(url)) => {
                     if let Err(e) = window.navigate(url) {
                         push_log("WARN", &format!("Fenêtre Vimm: navigation impossible: {}", e));
@@ -5732,6 +5759,15 @@ async fn download_vimm_in_window(
                 }
             },
             _ = tick.tick() => {
+                if !told_no_file && vimm_sent_no_file(reached_server, target.is_some(), std::time::Instant::now()) {
+                    // Vimm answered with a page, not a file: keep its window in
+                    // front so its message can be read, and say so in the Store.
+                    told_no_file = true;
+                    push_log("WARN", &format!("Fenêtre Vimm: aucun fichier reçu {} s après le bouton Download pour {} ({}) — message de Vimm dans la fenêtre (maintenance ?)", VIMM_NO_FILE_AFTER.as_secs(), game_name, game_id));
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                    emit("no_file", 0, 0);
+                }
                 if cancelled() {
                     push_log("INFO", &format!("Download Vimm annulé: {} ({})", game_name, game_id));
                     let _ = window.destroy();
@@ -7661,6 +7697,23 @@ mod tests {
         assert!(!ok("https://notvimm.net/"));
         assert!(!ok("https://ads.example.com/"));
         assert!(!ok("file:///C:/Windows/win.ini"));
+    }
+
+    #[test]
+    fn vimm_window_tells_when_the_server_sends_no_file() {
+        let server = |u: &str| super::is_vimm_download_server(&u.parse().unwrap());
+        assert!(server("https://dl3.vimm.net/"));
+        assert!(server("https://dl2.vimm.net/?mediaId=1"));
+        assert!(!server("https://vimm.net/vault/86322"));
+        assert!(!server("https://dl3.vimm.net.evil.com/"));
+        assert!(!server("http://dl3.vimm.net/"));
+
+        let t0 = std::time::Instant::now();
+        let after = |s: u64| t0 + std::time::Duration::from_secs(s);
+        assert!(!super::vimm_sent_no_file(None, false, after(60)), "not on the server yet (human check)");
+        assert!(!super::vimm_sent_no_file(Some(t0), false, after(10)), "still waiting");
+        assert!(super::vimm_sent_no_file(Some(t0), false, after(15)));
+        assert!(!super::vimm_sent_no_file(Some(t0), true, after(60)), "the file is coming");
     }
 
     #[test]
