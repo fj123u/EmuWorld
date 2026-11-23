@@ -42,17 +42,33 @@ pub struct SaveState {
     pub label: Option<String>,
 }
 
-/// RetroArch's own folder (the one holding retroarch.exe) under the emulators directory.
+/// RetroArch's data folder (retroarch.cfg, states/…) under the emulators
+/// directory: next to retroarch.exe on Windows, the AppImage's portable home
+/// on Linux.
 pub fn retroarch_dir(emulators_directory: &Path) -> Option<PathBuf> {
     let base = emulators_directory.join("retroarch");
-    if base.join(crate::emulators::RETROARCH_EXE).exists() {
-        return Some(base);
+    let exe = base.join(crate::emulators::RETROARCH_EXE);
+    let exe = if exe.exists() {
+        exe
+    } else {
+        fs::read_dir(&base)
+            .ok()?
+            .flatten()
+            .map(|e| e.path().join(crate::emulators::RETROARCH_EXE))
+            .find(|p| p.exists())?
+    };
+    Some(crate::emulators::retroarch_data_dir(&exe))
+}
+
+/// The home RetroArch's `~` stands for: the portable home holding
+/// `.config/retroarch`, else the user's.
+fn ra_home(ra_dir: &Path) -> PathBuf {
+    if ra_dir.ends_with(Path::new(".config").join("retroarch")) {
+        if let Some(home) = ra_dir.parent().and_then(|p| p.parent()) {
+            return home.to_path_buf();
+        }
     }
-    fs::read_dir(&base)
-        .ok()?
-        .flatten()
-        .map(|e| e.path())
-        .find(|p| p.is_dir() && p.join(crate::emulators::RETROARCH_EXE).exists())
+    dirs::home_dir().unwrap_or_else(|| ra_dir.to_path_buf())
 }
 
 /// Resolves `savestate_directory` from retroarch.cfg (`:\states` is relative
@@ -65,6 +81,9 @@ pub fn states_dir(ra_dir: &Path, cfg: &str) -> PathBuf {
     match value.as_deref() {
         None | Some("") | Some("default") => ra_dir.join("states"),
         Some(v) if v.starts_with(":\\") || v.starts_with(":/") => ra_dir.join(&v[2..]),
+        // Linux: "~/.config/retroarch/states", where ~ is the AppImage's
+        // portable home when RetroArch runs from one.
+        Some(v) if v.starts_with("~/") => ra_home(ra_dir).join(&v[2..]),
         Some(v) => PathBuf::from(v),
     }
 }
@@ -511,6 +530,10 @@ mod tests {
         assert_eq!(states_dir(ra, "savestate_directory = \":\\states\""), ra.join("states"));
         assert_eq!(states_dir(ra, "savestate_directory = \"default\""), ra.join("states"));
         assert_eq!(states_dir(ra, ""), ra.join("states"));
+        // Linux AppImage: ~ is its portable home.
+        let home = Path::new("/e/retroarch/RA.AppImage.home");
+        let data = home.join(".config").join("retroarch");
+        assert_eq!(states_dir(&data, "savestate_directory = \"~/.config/retroarch/states\""), data.join("states"));
         assert_eq!(states_dir(ra, "savestate_directory = \"D:\\Saves\\RA\""), PathBuf::from("D:\\Saves\\RA"));
     }
 

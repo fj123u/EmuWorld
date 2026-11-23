@@ -551,7 +551,7 @@ fn get_installed_emulators() -> Vec<String> {
     let ra_dir = emu_dir.join("retroarch");
     if ra_dir.exists() {
         if let Some(ra_exe) = find_executable(&ra_dir, emulators::RETROARCH_EXE) {
-            let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
+            let cores_dir = emulators::retroarch_data_dir(&ra_exe).join("cores");
             let catalog = emulators::get_catalog();
             for emu in &catalog {
                 if emu.id.starts_with("retroarch-") && !installed.contains(&emu.id) {
@@ -687,6 +687,8 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         }
         if let Some(ra_exe) = find_executable(&install_dir, emulators::RETROARCH_EXE) {
             make_executable(&ra_exe).map_err(|e| format!("RetroArch: {}", e))?;
+            // Linux: the AppImage is portable only while its `.home` folder exists.
+            fs::create_dir_all(emulators::retroarch_data_dir(&ra_exe).join("cores")).map_err(|e| format!("RetroArch: {}", e))?;
         }
         push_log("INFO", "RetroArch base installé avec succès");
     }
@@ -835,8 +837,9 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         }));
 
         // Resolve setup file paths relative to the exe's parent dir (handles nested archive folders)
+        // (RetroArch: its data folder, where it looks for cores and BIOS files)
         let exe_base_dir = find_executable(&install_dir, &emu.executable_name)
-            .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+            .and_then(|p| if is_shared_retroarch || emu.id == "retroarch" { Some(emulators::retroarch_data_dir(&p)) } else { p.parent().map(|d| d.to_path_buf()) })
             .unwrap_or_else(|| install_dir.clone());
         push_log("INFO", &format!("Setup base dir: {}", exe_base_dir.display()));
 
@@ -897,7 +900,7 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         if emu.id == "rpcs3" {
             let fw_path = exe_base_dir.join("PS3UPDAT.PUP");
             if fw_path.exists() {
-                if let Some(rpcs3_exe) = find_executable(&install_dir, "rpcs3.exe") {
+                if let Some(rpcs3_exe) = find_executable(&install_dir, &emu.executable_name) {
                     println!("[Setup] Installing PS3 firmware via rpcs3 --installfw...");
                     let mut fw_cmd = Command::new(&rpcs3_exe);
                     fw_cmd.arg("--installfw").arg(&fw_path);
@@ -1009,8 +1012,27 @@ fn make_executable(_path: &std::path::Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A ROM path as the emulator gets it: Windows wants backslashes and no
+/// `\\?\` prefix; Linux paths are passed as they are.
+fn launch_path(rom: &str, os: &str) -> String {
+    if os == "windows" {
+        rom.replace(r"\\?\", "").replace('/', "\\")
+    } else {
+        rom.to_string()
+    }
+}
+
+/// MAME's chdman (CD-i games need CHD): shipped next to EmuWorld on
+/// Windows, from the mame-tools package on Linux.
+fn chdman_path() -> Option<PathBuf> {
+    if cfg!(windows) {
+        std::env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("binaries").join("chdman.exe")))
+    } else {
+        find_in_path("chdman")
+    }
+}
+
 /// `name` in one of the PATH folders.
-#[cfg_attr(windows, allow(dead_code))]
 fn find_in_path(name: &str) -> Option<PathBuf> {
     std::env::split_paths(&std::env::var_os("PATH")?)
         .map(|dir| dir.join(name))
@@ -1334,7 +1356,7 @@ fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
         if let Some(emu) = catalog.iter().find(|e| e.id == id_lower) {
             if let Some(core) = &emu.core_name {
                 if let Some(ra_exe) = find_executable(&ra_dir, emulators::RETROARCH_EXE) {
-                    let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
+                    let cores_dir = emulators::retroarch_data_dir(&ra_exe).join("cores");
                     let core_path = cores_dir.join(core);
                     if core_path.exists() {
                         fs::remove_file(&core_path).ok();
@@ -1429,7 +1451,7 @@ async fn launch_emulator(
         let ra_exe = find_executable(&ra_dir, emulators::RETROARCH_EXE);
         if let Some(exe) = ra_exe {
             println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
-            let effective_ra_dir = exe.parent().unwrap_or(&ra_dir).to_path_buf();
+            let effective_ra_dir = emulators::retroarch_data_dir(&exe);
             // Auto-download missing RA core if needed
             if let Some(core_name) = ra_core {
                 let cores_dir = effective_ra_dir.join("cores");
@@ -1473,10 +1495,10 @@ async fn launch_emulator(
         // For retroarch-* emulators, use the shared retroarch/ folder
         let dir = if emu.id.starts_with("retroarch-") {
             let shared_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-            if find_executable(&shared_dir, &emu.executable_name).is_some() {
+            if let Some(ra_exe) = find_executable(&shared_dir, &emu.executable_name) {
                 // Auto-download missing core for retroarch-* emulators (even without RA linked)
                 if let Some(core_name) = &emu.core_name {
-                    let cores_dir = shared_dir.join("cores");
+                    let cores_dir = emulators::retroarch_data_dir(&ra_exe).join("cores");
                     fs::create_dir_all(&cores_dir).ok();
                     if !cores_dir.join(core_name).exists() {
                         println!("[Launch] Core '{}' missing for {} — downloading...", core_name, emu.id);
@@ -1486,7 +1508,7 @@ async fn launch_emulator(
                             if let Ok(resp) = dl_client.get(&core_url).send().await {
                                 if resp.status().is_success() {
                                     if let Ok(data) = resp.bytes().await {
-                                        let tmp = shared_dir.join("_core_tmp.zip");
+                                        let tmp = cores_dir.join("_core_tmp.zip");
                                         if fs::write(&tmp, &data).is_ok() {
                                             let _ = extract_zip(&tmp, &cores_dir);
                                             fs::remove_file(&tmp).ok();
@@ -1514,14 +1536,14 @@ async fn launch_emulator(
     // KytyPS5 ships two programs: kyty_emulator.exe runs a game and only
     // prints its usage without one, so "open the emulator" starts its launcher.
     let exe_path = if effective_id == "kytyps5" && rom_path.is_none() {
-        find_executable(&install_dir, "kyty_launcher.exe").unwrap_or(exe_path)
+        find_executable(&install_dir, emulators::kyty_launcher_name()).unwrap_or(exe_path)
     } else {
         exe_path
     };
     let mut cmd = Command::new(&exe_path);
     cmd.current_dir(exe_path.parent().unwrap_or(&install_dir));
     if let Some(rom) = rom_path.clone() {
-        let mut final_path = rom.replace(r"\\?\", "").replace("/", "\\");
+        let mut final_path = launch_path(&rom, std::env::consts::OS);
 
         // CD-i: auto-convert .cue to .chd if needed (SAME CDi core only supports CHD)
         if emu.id == "retroarch-cdi" && final_path.to_lowercase().ends_with(".cue") {
@@ -1529,8 +1551,7 @@ async fn launch_emulator(
             if !PathBuf::from(&chd_path).exists() {
                 println!("[Launch] Converting CUE to CHD for CD-i: {}", final_path);
                 push_log("INFO", "Conversion CUE → CHD en cours...");
-                let chdman = std::env::current_exe().ok()
-                    .and_then(|p| p.parent().map(|d| d.join("binaries").join("chdman.exe")));
+                let chdman = chdman_path();
                 if let Some(chdman_path) = chdman {
                     if chdman_path.exists() {
                         let mut conv_cmd = Command::new(&chdman_path);
@@ -1558,7 +1579,7 @@ async fn launch_emulator(
             }
         }
         println!("[Launch] Running: {:?} with Arg: {:?}", exe_path, final_path);
-        push_log("INFO", &format!("Lancement: {} via {}", final_path.split('\\').last().unwrap_or(&final_path), effective_id));
+        push_log("INFO", &format!("Lancement: {} via {}", std::path::Path::new(&final_path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| final_path.clone()), effective_id));
 
         // Handle RetroArch cores — either from RA redirect or from retroarch-* emulators
         if use_retroarch {
@@ -1575,8 +1596,8 @@ async fn launch_emulator(
             }
         } else if effective_id.starts_with("retroarch") {
             if let Some(core) = &emu.core_name {
-                let exe_dir = exe_path.parent().unwrap_or(&install_dir).to_path_buf();
-                let core_search_path = if exe_dir.join("cores").exists() { exe_dir.clone() } else { install_dir.clone() };
+                let data_dir = emulators::retroarch_data_dir(&exe_path);
+                let core_search_path = if data_dir.join("cores").exists() { data_dir } else { install_dir.clone() };
                 if let Some(core_path) = find_executable(&core_search_path, core) {
                     println!("[Launch] Detected RetroArch core: {:?}", core_path);
                     cmd.arg("-L");
@@ -1608,8 +1629,7 @@ async fn launch_emulator(
     // Force borderless windowed fullscreen for RetroArch (no --fullscreen CLI flag,
     // as that triggers exclusive fullscreen which minimizes on focus loss)
     if effective_id == "retroarch" || effective_id.starts_with("retroarch-") {
-        let ra_dir = exe_path.parent().unwrap_or(&install_dir);
-        let cfg_path = ra_dir.join("retroarch.cfg");
+        let cfg_path = emulators::retroarch_data_dir(&exe_path).join("retroarch.cfg");
         let cfg = fs::read_to_string(&cfg_path).unwrap_or_default();
         let settings = retroarch_launch_settings(config.retroarch_rewind);
         if let Some(rewind) = config.retroarch_rewind {
@@ -6280,7 +6300,7 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
 
     // Find the actual RetroArch exe to determine the real base dir (handles nested folders)
     let effective_ra_dir = find_executable(&ra_dir, emulators::RETROARCH_EXE)
-        .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
+        .map(|exe| emulators::retroarch_data_dir(&exe))
         .unwrap_or_else(|| ra_dir.clone());
 
     let cores_dir = effective_ra_dir.join("cores");
@@ -7182,7 +7202,7 @@ fn diagnostic_report() -> String {
     push_log("INFO", "Rapport de diagnostic demandé");
     let header = logging::startup_lines(&startup_info());
     let today = fs::read_to_string(log_file_path()).unwrap_or_default();
-    let home = std::env::var("USERPROFILE").ok();
+    let home = std::env::var("USERPROFILE").ok().or_else(|| dirs::home_dir().map(|h| h.to_string_lossy().to_string())); // Linux: $HOME
     logging::diagnostic_report(&header, &logging::tail(&today, 400), home.as_deref())
 }
 
@@ -8702,6 +8722,12 @@ mod tests {
             assert_eq!(mode(&lost), 0o755);
         }
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rom_paths_keep_their_separators_off_windows() {
+        assert_eq!(launch_path(r"\\?\C:/Roms/SNES/Zelda.sfc", "windows"), r"C:\Roms\SNES\Zelda.sfc");
+        assert_eq!(launch_path("/home/me/Roms/SNES/Zelda.sfc", "linux"), "/home/me/Roms/SNES/Zelda.sfc");
     }
 
     #[test]

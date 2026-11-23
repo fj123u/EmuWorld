@@ -355,19 +355,20 @@ pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, toke
 }
 
 fn find_retroarch_cfg(base: &PathBuf) -> Option<PathBuf> {
-    // Try direct location first
+    // RetroArch's program here or one level deep: its cfg is in its data
+    // folder (next to retroarch.exe, or the Linux AppImage's portable home).
+    if base.join(crate::emulators::RETROARCH_EXE).exists() {
+        return Some(crate::emulators::retroarch_data_dir(&base.join(crate::emulators::RETROARCH_EXE)).join("retroarch.cfg"));
+    }
     let direct = base.join("retroarch.cfg");
-    if direct.exists() || base.join(crate::emulators::RETROARCH_EXE).exists() {
+    if direct.exists() {
         return Some(direct);
     }
-    // Search one level deep for retroarch.exe and put cfg next to it
     if let Ok(entries) = fs::read_dir(base) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                if path.join(crate::emulators::RETROARCH_EXE).exists() {
-                    return Some(path.join("retroarch.cfg"));
-                }
+            let exe = entry.path().join(crate::emulators::RETROARCH_EXE);
+            if exe.exists() {
+                return Some(crate::emulators::retroarch_data_dir(&exe).join("retroarch.cfg"));
             }
         }
     }

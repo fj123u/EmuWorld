@@ -289,12 +289,13 @@ async fn launch_inner(
     let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
     let ra_exe = crate::find_executable(&ra_dir, crate::emulators::RETROARCH_EXE).ok_or("RetroArch n'est pas installé (nécessaire pour le netplay)")?;
     let ra_root = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
+    let ra_data = crate::emulators::retroarch_data_dir(&ra_exe);
     let core_name = emu
         .core_name
         .clone()
         .or_else(|| crate::retroachievements::retroarch_core_for_emulator(&emu.id).map(crate::emulators::core_file))
         .ok_or("Pas de netplay pour cette console")?;
-    let core = ensure_core(&ra_root.join("cores"), &core_name).await?;
+    let core = ensure_core(&ra_data.join("cores"), &core_name).await?;
 
     let work = crate::emuworld_base_dir().join("netplay");
     let logs = crate::emuworld_base_dir().join("logs");
@@ -397,7 +398,7 @@ const PPSSPP_ADHOC_SERVER: &str = "socom.cc";
 
 fn launch_ppsspp(emus_dir: &Path, rom: &str, username: &str) -> Result<NetplayLaunch, String> {
     let dir = emus_dir.join("ppsspp");
-    let exe = crate::find_executable(&dir.to_path_buf(), "PPSSPPWindows64.exe").ok_or("PPSSPP n'est pas installé")?;
+    let exe = crate::find_executable(&dir.to_path_buf(), &crate::emulators::executable_of("ppsspp", "PPSSPPWindows64.exe")).ok_or("PPSSPP n'est pas installé")?;
     let exe_dir = exe.parent().unwrap_or(&dir).to_path_buf();
     let documents = dirs::document_dir().unwrap_or_else(|| exe_dir.clone());
     let ini_path = ppsspp_memstick(&exe_dir, &documents).join("PSP").join("SYSTEM").join("ppsspp.ini");
@@ -471,7 +472,7 @@ pub fn dolphin_netplay_ini(ini: &str, nick: &str, host_code: Option<&str>, rom_d
 
 fn launch_dolphin(emus_dir: &Path, rom: &str, username: &str, is_host: bool, host_code: Option<&str>) -> Result<NetplayLaunch, String> {
     let dir = emus_dir.join("dolphin");
-    let exe = crate::find_executable(&dir.to_path_buf(), "Dolphin.exe").ok_or("Dolphin n'est pas installé")?;
+    let exe = crate::find_executable(&dir.to_path_buf(), &crate::emulators::executable_of("dolphin", "Dolphin.exe")).ok_or("Dolphin n'est pas installé")?;
     let exe_dir = exe.parent().unwrap_or(&dir).to_path_buf();
     let code = if is_host {
         None

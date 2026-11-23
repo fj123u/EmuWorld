@@ -153,7 +153,8 @@ fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(Stri
     find_save_dirs_recursive(install_dir, &common_save_folders, 0, 3, &mut paths);
 
     // Also scan AppData/Roaming paths where emulators store saves externally
-    if let Some(roaming) = dirs::config_dir() {
+    // Windows: %APPDATA%, %LOCALAPPDATA% and Documents (Linux: below).
+    if let Some(roaming) = dirs::config_dir().filter(|_| cfg!(windows)) {
         let appdata_paths: Vec<(&str, PathBuf)> = match emulator_id {
             "ryubing" | "ryujinx" => vec![
                 ("bis/user/save", roaming.join("Ryujinx").join("bis").join("user").join("save")),
@@ -181,7 +182,7 @@ fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(Stri
     }
 
     // Also scan %LOCALAPPDATA% paths
-    if let Some(local) = dirs::data_local_dir() {
+    if let Some(local) = dirs::data_local_dir().filter(|_| cfg!(windows)) {
         let local_paths: Vec<(&str, PathBuf)> = match emulator_id {
             "mesen" => vec![
                 ("Saves", local.join("Mesen").join("Saves")),
@@ -216,7 +217,7 @@ fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(Stri
     }
 
     // Check Documents folder too (some emulators use this)
-    if let Some(docs) = dirs::document_dir() {
+    if let Some(docs) = dirs::document_dir().filter(|_| cfg!(windows)) {
         let doc_paths: Vec<(&str, PathBuf)> = match emulator_id {
             "dolphin" => vec![
                 ("GC", docs.join("Dolphin Emulator").join("GC")),
@@ -243,7 +244,53 @@ fn save_dirs_for_emulator(emulator_id: &str, install_dir: &PathBuf) -> Vec<(Stri
         }
     }
 
+    #[cfg(not(windows))]
+    if let (Some(config), Some(data)) = (dirs::config_dir(), dirs::data_dir()) {
+        for (label, path) in linux_save_dirs(emulator_id, &config, &data) {
+            if path.exists() {
+                paths.push((label.to_string(), path));
+            }
+        }
+    }
+
     paths
+}
+
+/// Where emulators keep their saves on Linux, outside their install folder:
+/// `config` is ~/.config, `data` ~/.local/share (XDG).
+#[cfg_attr(windows, allow(dead_code))]
+fn linux_save_dirs(emulator_id: &str, config: &std::path::Path, data: &std::path::Path) -> Vec<(&'static str, PathBuf)> {
+    let join = |base: &std::path::Path, parts: &[&str]| parts.iter().fold(base.to_path_buf(), |p, part| p.join(part));
+    match emulator_id {
+        "ryubing" | "ryujinx" => vec![
+            ("bis/user/save", join(config, &["Ryujinx", "bis", "user", "save"])),
+            ("bis/system/save", join(config, &["Ryujinx", "bis", "system", "save"])),
+        ],
+        "dolphin" => vec![
+            ("GC", join(data, &["dolphin-emu", "GC"])),
+            ("Wii", join(data, &["dolphin-emu", "Wii"])),
+            ("StateSaves", join(data, &["dolphin-emu", "StateSaves"])),
+        ],
+        "cemu" => vec![("save", join(data, &["Cemu", "mlc01", "usr", "save"]))],
+        "ppsspp" => vec![
+            ("SAVEDATA", join(config, &["ppsspp", "PSP", "SAVEDATA"])),
+            ("PPSSPP_STATE", join(config, &["ppsspp", "PSP", "PPSSPP_STATE"])),
+        ],
+        "duckstation" => vec![
+            ("memcards", join(data, &["duckstation", "memcards"])),
+            ("savestates", join(data, &["duckstation", "savestates"])),
+        ],
+        "pcsx2" => vec![
+            ("memcards", join(config, &["PCSX2", "memcards"])),
+            ("sstates", join(config, &["PCSX2", "sstates"])),
+        ],
+        "rpcs3" => vec![("savedata", join(config, &["rpcs3", "dev_hdd0", "home", "00000001", "savedata"]))],
+        "mesen" => vec![
+            ("Saves", join(config, &["Mesen2", "Saves"])),
+            ("SaveStates", join(config, &["Mesen2", "SaveStates"])),
+        ],
+        _ => vec![],
+    }
 }
 
 fn find_save_dirs_recursive(dir: &PathBuf, targets: &[&str], depth: u32, max_depth: u32, results: &mut Vec<(String, PathBuf)>) {
@@ -287,15 +334,18 @@ fn dir_has_save_files(dir: &PathBuf) -> bool {
     false
 }
 
+/// RetroArch's data folder (saves/, states/): next to retroarch.exe, or the
+/// Linux AppImage's portable home.
 fn find_retroarch_base(install_dir: &PathBuf) -> PathBuf {
-    if install_dir.join(crate::emulators::RETROARCH_EXE).exists() {
-        return install_dir.clone();
+    let exe = install_dir.join(crate::emulators::RETROARCH_EXE);
+    if exe.exists() {
+        return crate::emulators::retroarch_data_dir(&exe);
     }
     if let Ok(entries) = fs::read_dir(install_dir) {
         for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() && path.join(crate::emulators::RETROARCH_EXE).exists() {
-                return path;
+            let exe = entry.path().join(crate::emulators::RETROARCH_EXE);
+            if exe.exists() {
+                return crate::emulators::retroarch_data_dir(&exe);
             }
         }
     }
@@ -693,6 +743,18 @@ fn sha1_hash(data: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn linux_saves_are_found_in_the_xdg_folders() {
+        use std::path::Path;
+        let (config, data) = (Path::new("/home/me/.config"), Path::new("/home/me/.local/share"));
+        let dirs = |id: &str| super::linux_save_dirs(id, config, data).into_iter().map(|(label, p)| (label, p)).collect::<Vec<_>>();
+        assert_eq!(dirs("dolphin")[0], ("GC", data.join("dolphin-emu").join("GC")));
+        assert_eq!(dirs("ppsspp")[0], ("SAVEDATA", config.join("ppsspp").join("PSP").join("SAVEDATA")));
+        assert_eq!(dirs("duckstation")[0].1, data.join("duckstation").join("memcards"));
+        assert!(dirs("ryubing")[0].1.starts_with(config.join("Ryujinx")));
+        assert!(dirs("unknown").is_empty());
+    }
+
     use super::{load_config_from, parse_config};
     use std::fs;
     use std::path::PathBuf;

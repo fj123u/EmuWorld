@@ -77,6 +77,35 @@ pub const RETROARCH_EXE: &str = "retroarch.exe";
 #[cfg(not(windows))]
 pub const RETROARCH_EXE: &str = LINUX_RETROARCH_EXE;
 
+/// Where RetroArch keeps retroarch.cfg, cores, saves, states and BIOS
+/// files, from its program: next to retroarch.exe on Windows; on Linux the
+/// AppImage's portable home (`<AppImage>.home/.config/retroarch`, shipped in
+/// the buildbot archive: RetroArch then never touches ~/.config).
+pub fn retroarch_data_dir_for(exe: &std::path::Path, os: &str) -> std::path::PathBuf {
+    if os == "windows" {
+        return exe.parent().map(|p| p.to_path_buf()).unwrap_or_default();
+    }
+    let mut home = exe.as_os_str().to_owned();
+    home.push(".home");
+    std::path::PathBuf::from(home).join(".config").join("retroarch")
+}
+
+/// [`retroarch_data_dir_for`] on this OS.
+pub fn retroarch_data_dir(exe: &std::path::Path) -> std::path::PathBuf {
+    retroarch_data_dir_for(exe, std::env::consts::OS)
+}
+
+/// KytyPS5's launcher (the program to open without a game) on this OS.
+pub fn kyty_launcher_name() -> &'static str {
+    if cfg!(windows) { "kyty_launcher.exe" } else { "kyty_launcher" }
+}
+
+/// The executable of an emulator of this OS's catalog ("Dolphin.exe" or
+/// "Dolphin.AppImage"), or `fallback` when the id is unknown.
+pub fn executable_of(id: &str, fallback: &str) -> String {
+    get_catalog().into_iter().find(|e| e.id == id).map(|e| e.executable_name).unwrap_or_else(|| fallback.to_string())
+}
+
 /// The RetroArch archive for this OS.
 pub fn retroarch_url() -> &'static str {
     if cfg!(windows) { WINDOWS_RETROARCH_URL } else { LINUX_RETROARCH_URL }
@@ -1183,6 +1212,18 @@ mod tests {
         // The BIOS files stay the same.
         let segacd = |cat: &[EmulatorInfo]| cat.iter().find(|e| e.id == "retroarch-segacd").unwrap().setup_files.iter().skip(1).map(|s| s.url.clone()).collect::<Vec<_>>();
         assert_eq!(segacd(&linux), segacd(&windows));
+    }
+
+    #[test]
+    fn retroarch_keeps_its_files_in_its_portable_folder() {
+        use std::path::Path;
+        let win = Path::new("C:\\E").join("retroarch").join("RetroArch-Win64").join("retroarch.exe");
+        assert_eq!(retroarch_data_dir_for(&win, "windows"), Path::new("C:\\E").join("retroarch").join("RetroArch-Win64"));
+        let linux = Path::new("/e/retroarch/RetroArch-Linux-x86_64/RetroArch-Linux-x86_64.AppImage");
+        assert_eq!(
+            retroarch_data_dir_for(linux, "linux"),
+            Path::new("/e/retroarch/RetroArch-Linux-x86_64/RetroArch-Linux-x86_64.AppImage.home/.config/retroarch")
+        );
     }
 
     #[test]
