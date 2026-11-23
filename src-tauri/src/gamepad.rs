@@ -23,6 +23,13 @@ impl Default for GamepadState {
     }
 }
 
+/// Select + R3 held together opens or closes the in-game overlay (indices
+/// of the Web Gamepad layout below). Rare in games, and it works where the
+/// keyboard can't reach EmuWorld (Wayland, a game holding the keyboard).
+pub fn overlay_combo(buttons: &[bool]) -> bool {
+    buttons.get(8).copied().unwrap_or(false) && buttons.get(11).copied().unwrap_or(false)
+}
+
 pub fn start_gamepad_thread(app_handle: AppHandle) {
     thread::spawn(move || {
         let mut gilrs = match Gilrs::new() {
@@ -35,6 +42,7 @@ pub fn start_gamepad_thread(app_handle: AppHandle) {
 
         let mut state = GamepadState::default();
         let mut last_emitted = String::new();
+        let mut combo_held = false;
 
         loop {
             // Process events
@@ -104,6 +112,14 @@ pub fn start_gamepad_thread(app_handle: AppHandle) {
                 }
             }
 
+            // Overlay combo: once per press, not while held.
+            let combo = overlay_combo(&state.buttons);
+            if combo && !combo_held {
+                crate::push_log("INFO", "Overlay: Select + R3 détecté (manette)");
+                crate::toggle_overlay(&app_handle);
+            }
+            combo_held = combo;
+
             // Emit state to frontend (throttled — only if changed)
             let serialized = serde_json::to_string(&state).unwrap_or_default();
             if serialized != last_emitted {
@@ -114,4 +130,18 @@ pub fn start_gamepad_thread(app_handle: AppHandle) {
             thread::sleep(Duration::from_millis(16)); // ~60fps
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn select_and_r3_together_toggle_the_overlay() {
+        let mut buttons = vec![false; 17];
+        assert!(!super::overlay_combo(&buttons));
+        buttons[8] = true;
+        assert!(!super::overlay_combo(&buttons), "Select alone");
+        buttons[11] = true;
+        assert!(super::overlay_combo(&buttons));
+        assert!(!super::overlay_combo(&[]), "no gamepad");
+    }
 }

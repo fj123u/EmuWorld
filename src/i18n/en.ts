@@ -993,7 +993,7 @@ const en: Translations = {
     notesPlaceholder: "Notes, codes, tips, progress...",
     saved: "Saved!",
     save: "Save",
-    closeHint: "Shift+Tab or Esc to close",
+    closeHint: "Shift+Tab, Esc or Select + R3 (gamepad) to close",
   },
   chat: {
     tooLong: "Message too long (2000 characters max)",

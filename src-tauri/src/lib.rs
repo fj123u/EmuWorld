@@ -304,33 +304,10 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
                         }
                     }
                     if vk == VK_TAB && SHIFT_DOWN.load(Ordering::Relaxed) {
-                        println!("[Overlay] LOW-LEVEL HOOK: Shift+Tab detected!");
                         push_log("INFO", "Overlay: Shift+Tab détecté (hook)");
                         if let Ok(guard) = overlay_app_handle().lock() {
                             if let Some(ref handle) = *guard {
-                                use tauri::Manager;
-                                if let Some(overlay_win) = handle.get_webview_window("overlay") {
-                                    let _ = overlay_win.close();
-                                    println!("[Overlay] Closed overlay window");
-                                } else {
-                                    let handle_clone = handle.clone();
-                                    std::thread::spawn(move || {
-                                        use tauri::WebviewWindowBuilder;
-                                        let url = tauri::WebviewUrl::App("index.html?overlay=1".into());
-                                        let builder = WebviewWindowBuilder::new(&handle_clone, "overlay", url)
-                                            .title("EmuWorld Overlay")
-                                            .decorations(false)
-                                            .transparent(true)
-                                            .always_on_top(true)
-                                            .fullscreen(true)
-                                            .skip_taskbar(true)
-                                            .focused(true);
-                                        match builder.build() {
-                                            Ok(_) => println!("[Overlay] Window created"),
-                                            Err(e) => println!("[Overlay] Failed to create window: {}", e),
-                                        }
-                                    });
-                                }
+                                toggle_overlay(handle);
                             }
                         }
                     }
@@ -370,8 +347,60 @@ fn start_keyboard_hook(app_handle: tauri::AppHandle) {
     }
 }
 
+/// Opens the in-game overlay, or closes it when it is open (Shift+Tab, the
+/// gamepad combo).
+pub(crate) fn toggle_overlay(handle: &tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(overlay_win) = handle.get_webview_window("overlay") {
+        let _ = overlay_win.close();
+        push_log("INFO", "Overlay fermé");
+        return;
+    }
+    let handle_clone = handle.clone();
+    std::thread::spawn(move || {
+        use tauri::WebviewWindowBuilder;
+        let url = tauri::WebviewUrl::App("index.html?overlay=1".into());
+        let builder = WebviewWindowBuilder::new(&handle_clone, "overlay", url)
+            .title("EmuWorld Overlay")
+            .decorations(false)
+            .transparent(true)
+            .always_on_top(true)
+            .fullscreen(true)
+            .skip_taskbar(true)
+            .focused(true);
+        match builder.build() {
+            Ok(_) => push_log("INFO", "Overlay ouvert"),
+            Err(e) => push_log("ERROR", &format!("Overlay impossible à ouvrir: {}", e)),
+        }
+    });
+}
+
+/// Linux: no keyboard hook. Shift+Tab is a global shortcut (X11 grabs it:
+/// the game no longer receives it); Wayland gives no global shortcuts to
+/// apps, the gamepad combo opens the overlay there.
 #[cfg(not(target_os = "windows"))]
-fn start_keyboard_hook(_app_handle: tauri::AppHandle) {}
+fn start_keyboard_hook(app_handle: tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    if is_wayland_session(std::env::var("XDG_SESSION_TYPE").ok().as_deref(), std::env::var("WAYLAND_DISPLAY").ok().as_deref()) {
+        push_log("WARN", "Session Wayland : pas de raccourcis clavier globaux (Shift+Tab, Ctrl+F12, pavé numérique du chrono) ; l'overlay s'ouvre avec Select + R3 à la manette");
+    }
+    let handle = app_handle.clone();
+    let result = app_handle.global_shortcut().on_shortcut("shift+Tab", move |_app, _shortcut, event| {
+        if event.state == ShortcutState::Pressed {
+            push_log("INFO", "Overlay: Shift+Tab détecté (raccourci global)");
+            toggle_overlay(&handle);
+        }
+    });
+    if let Err(e) = result {
+        push_log("WARN", &format!("Overlay: Shift+Tab indisponible ({}) ; Select + R3 à la manette reste possible", e));
+    }
+}
+
+/// A Wayland session (no global keyboard shortcuts for apps).
+#[cfg_attr(windows, allow(dead_code))]
+fn is_wayland_session(session_type: Option<&str>, wayland_display: Option<&str>) -> bool {
+    session_type.map(|t| t.eq_ignore_ascii_case("wayland")).unwrap_or(false) || wayland_display.map(|d| !d.is_empty()).unwrap_or(false)
+}
 
 mod emulators;
 mod playtime;
@@ -8722,6 +8751,14 @@ mod tests {
             assert_eq!(mode(&lost), 0o755);
         }
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn wayland_sessions_are_recognised() {
+        assert!(is_wayland_session(Some("wayland"), None));
+        assert!(is_wayland_session(None, Some("wayland-0")));
+        assert!(!is_wayland_session(Some("x11"), None));
+        assert!(!is_wayland_session(None, None));
     }
 
     #[test]

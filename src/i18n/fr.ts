@@ -991,7 +991,7 @@ const fr = {
     notesPlaceholder: "Notes, codes, astuces, progression...",
     saved: "Sauvegardé !",
     save: "Sauvegarder",
-    closeHint: "Shift+Tab ou Échap pour fermer",
+    closeHint: "Shift+Tab, Échap ou Select + R3 (manette) pour fermer",
   },
   chat: {
     tooLong: "Message trop long (2000 caractères max)",

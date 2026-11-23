@@ -92,6 +92,44 @@ pub fn hotkey_action(vk: i32) -> Option<&'static str> {
     }
 }
 
+/// Linux: the same numpad keys as global shortcuts (key name, action),
+/// registered only while the timer is open — X11 grabs them, so the game
+/// does not receive them meanwhile.
+#[cfg_attr(windows, allow(dead_code))]
+pub const LINUX_HOTKEYS: [(&str, &str); 5] = [
+    ("Numpad1", "split"),
+    ("Numpad2", "skip"),
+    ("Numpad3", "reset"),
+    ("Numpad5", "pause"),
+    ("Numpad8", "undo"),
+];
+
+#[cfg(not(windows))]
+fn register_linux_hotkeys(app_handle: &tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    unregister_linux_hotkeys(app_handle);
+    for (key, action) in LINUX_HOTKEYS {
+        let handle = app_handle.clone();
+        let result = app_handle.global_shortcut().on_shortcut(key, move |_app, _shortcut, event| {
+            if event.state == ShortcutState::Pressed && handle.get_webview_window(WINDOW_LABEL).is_some() {
+                let _ = handle.emit_to(WINDOW_LABEL, "speedrun-hotkey", action);
+            }
+        });
+        if let Err(e) = result {
+            push_log("WARN", &format!("Speedrun: raccourci {} indisponible ({})", key, e));
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn unregister_linux_hotkeys(app_handle: &tauri::AppHandle) {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    for (key, _) in LINUX_HOTKEYS {
+        let _ = app_handle.global_shortcut().unregister(key);
+    }
+}
+
 #[tauri::command]
 pub fn get_speedrun(game_key: String) -> SpeedrunData {
     load_store(&store_path()).remove(&game_key).unwrap_or_default()
@@ -156,12 +194,16 @@ pub async fn open_speedrun_window(app_handle: tauri::AppHandle, game_key: String
             e.to_string()
         })?;
     let _ = win.set_ignore_cursor_events(true);
+    #[cfg(not(windows))]
+    register_linux_hotkeys(&app_handle);
     Ok(())
 }
 
 #[tauri::command]
 pub async fn close_speedrun_window(app_handle: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
+    #[cfg(not(windows))]
+    unregister_linux_hotkeys(&app_handle);
     if let Some(win) = app_handle.get_webview_window(WINDOW_LABEL) {
         win.close().map_err(|e| e.to_string())?;
         push_log("INFO", "Speedrun: chrono fermé");
@@ -172,6 +214,16 @@ pub async fn close_speedrun_window(app_handle: tauri::AppHandle) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linux_hotkeys_are_the_windows_numpad_keys() {
+        // Same keys and actions as the Windows hook (VK_NUMPAD0 = 0x60).
+        for (key, action) in LINUX_HOTKEYS {
+            let digit: i32 = key.strip_prefix("Numpad").unwrap().parse().unwrap();
+            assert_eq!(hotkey_action(0x60 + digit), Some(action), "{}", key);
+        }
+        assert_eq!((0x60..=0x69).filter(|vk| hotkey_action(*vk).is_some()).count(), LINUX_HOTKEYS.len());
+    }
 
     fn data(splits: &[&str], pb: Option<Vec<u64>>) -> SpeedrunData {
         SpeedrunData { splits: splits.iter().map(|s| s.to_string()).collect(), pb, ..Default::default() }
