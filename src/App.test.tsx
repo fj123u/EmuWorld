@@ -965,6 +965,31 @@ describe("page background", () => {
   });
 });
 
+describe("logs", () => {
+  it("writes once what the interface starts with", async () => {
+    const r = await renderApp();
+    await waitFor(() => expect(r.backend.calls.some((c) => c.cmd === "log_event" && String((c.args as { message: string }).message).startsWith("Interface prête:"))).toBe(true));
+    const line = r.backend.calls.find((c) => c.cmd === "log_event" && String((c.args as { message: string }).message).startsWith("Interface prête:"))!.args as { message: string };
+    expect(line.message).toMatch(/\d+ jeu\(x\) sur \d+ console\(s\), \d+ émulateur\(s\) installé\(s\)/);
+    expect(r.backend.calls.filter((c) => c.cmd === "log_event" && String((c.args as { message: string }).message).startsWith("Interface prête:"))).toHaveLength(1);
+  });
+
+  it("copies the diagnostic report from Settings", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const r = await renderApp();
+    navTo(r.container, "Réglages");
+    // The Settings page arrives after the page transition.
+    await new Promise((res) => setTimeout(res, 1500));
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: /Copier le rapport de diagnostic/ }, { timeout: 4000 }));
+    });
+    expect(r.backend.count("diagnostic_report")).toBe(1);
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("rapport de diagnostic"));
+    expect(await screen.findByText(/Rapport copié/)).toBeTruthy();
+  });
+});
+
 describe("Settings opening", () => {
   it("does not scroll the page to the cover logs at the bottom", () => {
     const spy = vi.spyOn(Element.prototype, "scrollIntoView");

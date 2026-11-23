@@ -81,6 +81,7 @@ import {
   Camera,
   ShieldCheck,
   CircleAlert,
+  ClipboardCopy,
   Link2,
   ShoppingBag,
   Check,
@@ -2231,7 +2232,9 @@ export default function App() {
     }
   };
 
-  // ---- Data loading ----
+  // ---- Data loading ----
+  /** The "Interface prête" log line is written once per launch. */
+  const uiReadyLoggedRef = useRef(false);
   const loadData = useCallback(async () => {
     try {
       const [cat, inst, cfg] = await Promise.all([
@@ -2243,18 +2246,30 @@ export default function App() {
       setInstalled(inst);
       setConfig(cfg);
 
+      let found: RomFile[] = [];
       if (cfg.roms_directory) {
         try {
-          const r = await invoke<RomFile[]>("scan_roms", {
+          found = await invoke<RomFile[]>("scan_roms", {
             directory: cfg.roms_directory,
           });
-          setRoms(r);
-        } catch {
+          setRoms(found);
+        } catch (err) {
           // ROMs dir might not exist yet
+          invoke("log_event", { level: "WARN", message: `Scan des ROMs impossible: ${String(err)}` }).catch(() => {});
         }
+      }
+      // Once per launch: what the interface starts with (next to the Rust header).
+      if (!uiReadyLoggedRef.current) {
+        uiReadyLoggedRef.current = true;
+        const consoles = new Set(found.map((r) => r.console)).size;
+        invoke("log_event", {
+          level: "INFO",
+          message: `Interface prête: langue ${localStorage.getItem("emuworld-locale") ?? "auto"}, thème ${localStorage.getItem("emuworld_theme") ?? "par défaut"}, fenêtre ${window.innerWidth}×${window.innerHeight}, ${found.length} jeu(x) sur ${consoles} console(s), ${inst.length} émulateur(s) installé(s)`,
+        }).catch(() => {});
       }
     } catch (err) {
       console.error("Failed to load data:", err);
+      invoke("log_event", { level: "ERROR", message: `Chargement initial échoué: ${String(err)}` }).catch(() => {});
     }
   }, []);
 
@@ -7489,6 +7504,17 @@ export default function App() {
                         invoke("open_path", { path });
                       }}>
                         <FileText size={12} /> {t("logs.openCurrent")}
+                      </button>
+                      <button className="btn btn--ghost btn--sm gamepad-nav-item" onClick={async () => {
+                        try {
+                          const report = await invoke<string>("diagnostic_report");
+                          await navigator.clipboard.writeText(report);
+                          showToast(t("logs.reportCopied"), "success");
+                        } catch (err) {
+                          showToast(t("logs.reportFailed", { error: String(err) }), "error");
+                        }
+                      }}>
+                        <ClipboardCopy size={12} /> {t("logs.copyReport")}
                       </button>
                     </div>
                   </div>

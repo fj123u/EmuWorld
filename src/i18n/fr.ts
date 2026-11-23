@@ -621,9 +621,12 @@ const fr = {
   // Logs
   logs: {
     title: "Fichiers de logs",
-    description: "Les logs sont sauvegardés dans des fichiers quotidiens (auto-suppression après 7 jours).",
+    description: "Les logs sont sauvegardés dans des fichiers quotidiens (gardés 14 jours). Les clés, jetons et adresses e-mail y sont masqués.",
     openFolder: "Ouvrir le dossier",
     openCurrent: "Ouvrir le log du jour",
+    copyReport: "Copier le rapport de diagnostic",
+    reportCopied: "Rapport copié : colle-le dans ton message. Ton nom d'utilisateur Windows, les clés et les e-mails y sont masqués.",
+    reportFailed: "Impossible de copier le rapport : {error}",
   },
 
   // Updates

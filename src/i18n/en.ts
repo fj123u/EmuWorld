@@ -623,9 +623,12 @@ const en: Translations = {
   // Logs
   logs: {
     title: "Log files",
-    description: "Logs are saved to daily files (auto-deleted after 7 days).",
+    description: "Logs are saved in daily files (kept 14 days). Keys, tokens and e-mail addresses are hidden in them.",
     openFolder: "Open folder",
     openCurrent: "Open today's log",
+    copyReport: "Copy the diagnostic report",
+    reportCopied: "Report copied: paste it in your message. Your Windows user name, keys and e-mails are hidden in it.",
+    reportFailed: "Could not copy the report: {error}",
   },
 
   // Updates

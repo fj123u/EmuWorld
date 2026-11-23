@@ -187,7 +187,23 @@ fn log_file_path() -> PathBuf {
     logs_dir.join(format!("emuworld_{}.log", date))
 }
 
+/// Writes a line to the logs (daily file + the Settings log view). Secrets
+/// are hidden whatever the caller wrote, and a line repeated back to back is
+/// written once, then counted (logging.rs).
 pub fn push_log(level: &str, msg: &str) {
+    static DEDUPER: OnceLock<Mutex<logging::Deduper>> = OnceLock::new();
+    let msg = logging::redact(msg);
+    let lines = DEDUPER
+        .get_or_init(|| Mutex::new(logging::Deduper::default()))
+        .lock()
+        .map(|mut d| d.feed(level, &msg))
+        .unwrap_or_else(|_| vec![(level.to_string(), msg.clone())]);
+    for (level, msg) in lines {
+        write_log_line(&level, &msg);
+    }
+}
+
+fn write_log_line(level: &str, msg: &str) {
     let now = chrono::Local::now();
     let timestamp = now.format("%H:%M:%S").to_string();
     let entry = format!("[{}] {} — {}", level, timestamp, msg);
@@ -212,7 +228,7 @@ pub fn push_log(level: &str, msg: &str) {
         let _ = file.write_all(file_entry.as_bytes());
     }
 
-    // Auto-cleanup: delete log files older than 7 days. Done once per app run —
+    // Auto-cleanup: delete log files older than 14 days. Done once per app run —
     // push_log is called hundreds of times during a scan (one line per cover
     // fetch), and listing the logs folder on every call was pure disk churn.
     static LOG_CLEANUP_DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -220,7 +236,7 @@ pub fn push_log(level: &str, msg: &str) {
         return;
     }
     if let Ok(entries) = fs::read_dir(emuworld_base_dir().join("logs")) {
-        let cutoff = now - chrono::Duration::days(7);
+        let cutoff = now - chrono::Duration::days(14);
         for entry in entries.flatten() {
             if let Ok(meta) = entry.metadata() {
                 if let Ok(modified) = meta.modified() {
@@ -377,6 +393,7 @@ mod launchbox;
 mod ps_games;
 mod steamgriddb;
 mod sessions;
+mod logging;
 
 /// The cover-search trace is a debugging aid, not an archive: past this size it
 /// starts over (it had reached 12 MB on a real library).
@@ -469,7 +486,10 @@ fn get_config() -> AppConfig {
         let data = fs::read_to_string(&path).unwrap_or_default();
         serde_json::from_str(&data).unwrap_or_default()
     } else {
-        push_log("INFO", "Aucune config existante, utilisation des valeurs par défaut");
+        static TOLD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if !TOLD.swap(true, AtomicOrdering::Relaxed) {
+            push_log("INFO", "Aucune config existante, utilisation des valeurs par défaut");
+        }
         AppConfig::default()
     };
 
@@ -4516,6 +4536,17 @@ fn get_rgs_constructeurs() -> Vec<RgsConstructeurInfo> {
 
 #[tauri::command]
 async fn get_rgs_consoles(constructeur_id: String) -> Result<Vec<RgsConsoleInfo>, String> {
+    let what = format!("fabricant {}", constructeur_id);
+    push_log("INFO", &format!("RetroGameSets: consoles: {}", what));
+    let result = get_rgs_consoles_inner(constructeur_id).await;
+    match &result {
+        Ok(v) => push_log("INFO", &format!("RetroGameSets: consoles: {} → {}", what, format!("{} console(s)", v.len()))),
+        Err(e) => push_log("ERROR", &format!("RetroGameSets: consoles: {} → échec: {}", what, e)),
+    }
+    result
+}
+
+async fn get_rgs_consoles_inner(constructeur_id: String) -> Result<Vec<RgsConsoleInfo>, String> {
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0")
         .timeout(std::time::Duration::from_secs(10))
@@ -4556,6 +4587,17 @@ async fn get_rgs_consoles(constructeur_id: String) -> Result<Vec<RgsConsoleInfo>
 
 #[tauri::command]
 async fn get_rgs_liens(console_id: String) -> Result<Vec<RgsLien>, String> {
+    let what = format!("console {}", console_id);
+    push_log("INFO", &format!("RetroGameSets: liens: {}", what));
+    let result = get_rgs_liens_inner(console_id).await;
+    match &result {
+        Ok(v) => push_log("INFO", &format!("RetroGameSets: liens: {} → {}", what, format!("{} lien(s)", v.len()))),
+        Err(e) => push_log("ERROR", &format!("RetroGameSets: liens: {} → échec: {}", what, e)),
+    }
+    result
+}
+
+async fn get_rgs_liens_inner(console_id: String) -> Result<Vec<RgsLien>, String> {
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0")
         .timeout(std::time::Duration::from_secs(10))
@@ -5255,6 +5297,17 @@ fn get_vimm_consoles() -> Result<Vec<VimmConsole>, String> {
 
 #[tauri::command]
 async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGame>, String> {
+    let what = format!("{} — lettre {}", console_slug, letter);
+    push_log("INFO", &format!("Liste Vimm: {}", what));
+    let result = browse_vimm_inner(console_slug, letter).await;
+    match &result {
+        Ok(v) => push_log("INFO", &format!("Liste Vimm: {} → {}", what, format!("{} jeu(x)", v.len()))),
+        Err(e) => push_log("ERROR", &format!("Liste Vimm: {} → échec: {}", what, e)),
+    }
+    result
+}
+
+async fn browse_vimm_inner(console_slug: String, letter: String) -> Result<Vec<VimmGame>, String> {
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         .timeout(std::time::Duration::from_secs(20))
@@ -5339,6 +5392,17 @@ async fn browse_vimm(console_slug: String, letter: String) -> Result<Vec<VimmGam
 
 #[tauri::command]
 async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<VimmGame>, String> {
+    let what = format!("'{}' ({})", query, console_slug.as_deref().unwrap_or("toutes consoles"));
+    push_log("INFO", &format!("Recherche Vimm: {}", what));
+    let result = search_vimm_inner(query, console_slug).await;
+    match &result {
+        Ok(v) => push_log("INFO", &format!("Recherche Vimm: {} → {}", what, format!("{} jeu(x)", v.len()))),
+        Err(e) => push_log("ERROR", &format!("Recherche Vimm: {} → échec: {}", what, e)),
+    }
+    result
+}
+
+async fn search_vimm_inner(query: String, console_slug: Option<String>) -> Result<Vec<VimmGame>, String> {
     if query.trim().len() < 2 { return Ok(vec![]); }
     let client = reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -6025,6 +6089,7 @@ fn get_ra_credentials() -> retroachievements::RAConfig {
 
 #[tauri::command]
 async fn get_ra_game_progress(game_name: String, console: String) -> Result<retroachievements::RAGameInfo, String> {
+    push_log("INFO", &format!("RetroAchievements: progression de '{}' ({})", game_name, console));
     let config = retroachievements::load_config();
     if config.username.is_empty() || config.api_key.is_empty() {
         return Err("RetroAchievements credentials not configured".to_string());
@@ -6164,6 +6229,7 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
 
 #[tauri::command]
 async fn get_ra_completed_games() -> Result<Vec<retroachievements::RACompletedGame>, String> {
+    push_log("INFO", "RetroAchievements: jeux terminés demandés");
     let config = retroachievements::load_config();
     if config.username.is_empty() || config.api_key.is_empty() {
         return Err("RetroAchievements credentials not configured".to_string());
@@ -6301,7 +6367,11 @@ async fn fetch_game_guide_data(game_name: String, console: String) -> Result<Gam
 
 #[tauri::command]
 fn save_b2_config(key_id: String, app_key: String, bucket_id: String, bucket_name: String) -> Result<(), String> {
-    cloud_backup::save_config(&cloud_backup::B2Config { key_id, app_key, bucket_id, bucket_name })
+    // The bucket name only: the keys never go to the log.
+    let what = format!("Sauvegarde cloud B2 configurée (bucket '{}')", bucket_name);
+    let r = cloud_backup::save_config(&cloud_backup::B2Config { key_id, app_key, bucket_id, bucket_name });
+    log_action(&what, &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
@@ -6343,6 +6413,7 @@ async fn backup_saves_to_cloud() -> Result<String, String> {
 
 #[tauri::command]
 async fn list_cloud_backups() -> Result<Vec<cloud_backup::CloudFile>, String> {
+    push_log("INFO", "Liste des sauvegardes cloud");
     let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         return Err("Backblaze B2 not configured.".to_string());
@@ -6378,6 +6449,7 @@ async fn restore_cloud_backup(file_id: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn delete_cloud_backup(file_id: String, file_name: String) -> Result<String, String> {
+    push_log("INFO", &format!("Sauvegarde cloud supprimée: {}", file_name));
     let b2_config = cloud_backup::load_config()?;
     if b2_config.key_id.is_empty() || b2_config.app_key.is_empty() {
         return Err("Backblaze B2 not configured.".to_string());
@@ -6401,42 +6473,58 @@ fn get_playtime() -> Result<playtime::PlaytimeStore, String> {
 
 #[tauri::command]
 fn toggle_favorite(console: String, name: String) -> Result<bool, String> {
-    playtime::toggle_favorite(&console, &name)
+    let r = playtime::toggle_favorite(&console, &name);
+    log_action(&format!("Favori: '{}' ({})", name, console), &r, |fav| if *fav { "ajouté".to_string() } else { "retiré".to_string() });
+    r
 }
 
 #[tauri::command]
 fn set_game_rating(console: String, name: String, rating: u8) -> Result<(), String> {
-    playtime::set_rating(&console, &name, rating)
+    let r = playtime::set_rating(&console, &name, rating);
+    log_action(&format!("Note: '{}' ({}) → {} étoile(s)", name, console, rating), &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
 fn set_game_notes(console: String, name: String, notes: String) -> Result<(), String> {
-    playtime::set_notes(&console, &name, &notes)
+    let r = playtime::set_notes(&console, &name, &notes);
+    log_action(&format!("Notes: '{}' ({}) — {} caractère(s)", name, console, notes.chars().count()), &r, |_| "enregistrées".to_string());
+    r
 }
 
 #[tauri::command]
 fn create_collection(name: String) -> Result<Vec<playtime::GameCollection>, String> {
-    playtime::create_collection(&name)
+    let r = playtime::create_collection(&name);
+    log_action(&format!("Collection créée: '{}'", name), &r, |c| format!("{} collection(s)", c.len()));
+    r
 }
 
 #[tauri::command]
 fn delete_collection(name: String) -> Result<Vec<playtime::GameCollection>, String> {
-    playtime::delete_collection(&name)
+    let r = playtime::delete_collection(&name);
+    log_action(&format!("Collection supprimée: '{}'", name), &r, |c| format!("{} collection(s)", c.len()));
+    r
 }
 
 #[tauri::command]
 fn rename_collection(old_name: String, new_name: String) -> Result<Vec<playtime::GameCollection>, String> {
-    playtime::rename_collection(&old_name, &new_name)
+    let r = playtime::rename_collection(&old_name, &new_name);
+    log_action(&format!("Collection renommée: '{}' → '{}'", old_name, new_name), &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
 fn add_to_collection(collection_name: String, game_key: String) -> Result<(), String> {
-    playtime::add_to_collection(&collection_name, &game_key)
+    let r = playtime::add_to_collection(&collection_name, &game_key);
+    log_action(&format!("Collection '{}': + {}", collection_name, game_key), &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
 fn remove_from_collection(collection_name: String, game_key: String) -> Result<(), String> {
-    playtime::remove_from_collection(&collection_name, &game_key)
+    let r = playtime::remove_from_collection(&collection_name, &game_key);
+    log_action(&format!("Collection '{}': − {}", collection_name, game_key), &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
@@ -6459,7 +6547,10 @@ fn clear_playtime() -> Result<(), String> {
 /// user, before any further sync runs.
 #[tauri::command]
 fn overwrite_playtime(store: playtime::PlaytimeStore) -> Result<(), String> {
-    playtime::overwrite(store)
+    let what = format!("Temps de jeu remplacé par la copie du cloud: {} jeu(x), {} collection(s)", store.games.len(), store.collections.len());
+    let r = playtime::overwrite(store);
+    log_action(&what, &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
@@ -6528,17 +6619,26 @@ fn check_achievements(
 
 #[tauri::command]
 fn unlock_achievement(id: String) -> Option<achievements::Achievement> {
-    achievements::unlock_single(&id)
+    let unlocked = achievements::unlock_single(&id);
+    if unlocked.is_some() {
+        push_log("INFO", &format!("Succès débloqué: {}", id));
+    }
+    unlocked
 }
 
 #[tauri::command]
 fn clear_achievements() -> Result<(), String> {
-    achievements::clear()
+    let r = achievements::clear();
+    log_action("Succès locaux effacés (déconnexion)", &r, |_| "ok".to_string());
+    r
 }
 
 #[tauri::command]
 fn overwrite_achievements(unlocked: std::collections::HashMap<String, String>) -> Result<(), String> {
-    achievements::overwrite(unlocked)
+    let what = format!("Succès remplacés par la copie du cloud: {} débloqué(s)", unlocked.len());
+    let r = achievements::overwrite(unlocked);
+    log_action(&what, &r, |_| "ok".to_string());
+    r
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -6562,6 +6662,7 @@ fn get_current_playing(state: tauri::State<'_, Mutex<CurrentPlayingState>>) -> (
 
 #[tauri::command]
 fn migrate_covers_to_webp() -> Result<String, String> {
+    push_log("INFO", "Conversion des covers en WebP demandée");
     let config = get_config();
     let covers_dir = PathBuf::from(&config.covers_directory);
     if !covers_dir.exists() { return Ok("No covers directory".to_string()); }
@@ -6730,6 +6831,7 @@ fn get_screenshots(game_name: String, console: String) -> Vec<ScreenshotEntry> {
 
 #[tauri::command]
 fn delete_screenshot(path: String) -> Result<(), String> {
+    push_log("INFO", &format!("Capture supprimée: {}", path));
     let screenshots_dir = emuworld_base_dir().join("screenshots");
     let canonical = fs::canonicalize(&path).map_err(|e| format!("Invalid path: {}", e))?;
     let canonical_base = fs::canonicalize(&screenshots_dir).unwrap_or(screenshots_dir);
@@ -6742,6 +6844,7 @@ fn delete_screenshot(path: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn watch_roms_directory(app: tauri::AppHandle) -> Result<(), String> {
+    push_log("INFO", &format!("Surveillance du dossier ROMs: {}", get_config().roms_directory));
     use notify::{Watcher, RecursiveMode, Event, EventKind};
     use std::sync::mpsc;
 
@@ -6810,6 +6913,72 @@ fn log_event(level: String, message: String) {
     push_log(level, &message);
 }
 
+/// Logs a user action and how it went: "what → result", or "what → échec: …".
+fn log_action<T>(what: &str, result: &Result<T, String>, ok: impl Fn(&T) -> String) {
+    match result {
+        Ok(v) => push_log("INFO", &format!("{} → {}", what, ok(v))),
+        Err(e) => push_log("ERROR", &format!("{} → échec: {}", what, e)),
+    }
+}
+
+/// Windows version as `ver` prints it ("Microsoft Windows [version 10.0.26200.1234]").
+fn system_description() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let ver = std::process::Command::new("cmd")
+            .args(["/C", "ver"])
+            .creation_flags(0x08000000)
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        if let Some(ver) = ver {
+            return format!("{} ({})", ver, std::env::consts::ARCH);
+        }
+    }
+    format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+fn startup_info() -> logging::StartupInfo {
+    let config_found = config_path().exists();
+    let config = get_config();
+    let ra = retroachievements::load_config();
+    logging::StartupInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        system: system_description(),
+        portable: is_portable_mode(),
+        data_dir: emuworld_base_dir().to_string_lossy().to_string(),
+        roms_dir: config.roms_directory.clone(),
+        emulators_dir: config.emulators_directory.clone(),
+        covers_dir: config.covers_directory.clone(),
+        config_found,
+        installed_emulators: get_installed_emulators(),
+        iidb_key: iidb_api::api_key().is_some(),
+        sgdb_key: steamgriddb::api_key().is_some(),
+        retroachievements: !ra.username.is_empty() && !ra.api_key.is_empty(),
+        bandwidth_limit_kbps: config.bandwidth_limit_kbps,
+    }
+}
+
+/// The header written at each start: version, system, folders, what is set up.
+fn log_startup() {
+    for line in logging::startup_lines(&startup_info()) {
+        push_log("INFO", &line);
+    }
+}
+
+/// "Copier le rapport de diagnostic" (Settings → Logs): the start-up header
+/// and the end of today's log, the user's folder name and secrets hidden.
+#[tauri::command]
+fn diagnostic_report() -> String {
+    push_log("INFO", "Rapport de diagnostic demandé");
+    let header = logging::startup_lines(&startup_info());
+    let today = fs::read_to_string(log_file_path()).unwrap_or_default();
+    let home = std::env::var("USERPROFILE").ok();
+    logging::diagnostic_report(&header, &logging::tail(&today, 400), home.as_deref())
+}
+
 #[tauri::command]
 fn get_logs() -> Vec<String> {
     app_logs().lock().map(|l| l.clone()).unwrap_or_default()
@@ -6832,6 +7001,7 @@ fn get_logs_directory() -> String {
 
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
+    push_log("INFO", &format!("Ouverture dans l'explorateur: {}", path));
     #[cfg(target_os = "windows")]
     {
         let path_lower = path.to_lowercase();
@@ -7159,6 +7329,7 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
 
 #[tauri::command]
 fn save_emulator_version(emulator_id: String, version: String) -> Result<(), String> {
+    push_log("INFO", &format!("Version enregistrée: {} {}", emulator_id, version));
     let path = emuworld_base_dir().join("emulator_versions.json");
     let mut versions: std::collections::HashMap<String, String> = if let Ok(data) = fs::read_to_string(&path) {
         serde_json::from_str(&data).unwrap_or_default()
@@ -7430,6 +7601,16 @@ fn import_config(json: String) -> Result<(), String> {
 }
 
 pub fn run() {
+    // A panic goes to the log file with where it happened, then on as usual.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let payload = info.payload();
+        let message = payload.downcast_ref::<&str>().map(|s| s.to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "?".to_string());
+        push_log("ERROR", &logging::panic_line(&message, info.location().map(|l| (l.file(), l.line()))));
+        default_hook(info);
+    }));
     tauri::Builder::default()
         .manage(discord_rpc::RpcState::new())
         .manage(Mutex::new(CurrentPlayingState::default()))
@@ -7451,6 +7632,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init())
         .setup(|app| {
+            log_startup();
             #[cfg(desktop)]
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
@@ -7615,6 +7797,7 @@ pub fn run() {
             discord_rpc::discord_set_playing,
             discord_rpc::discord_clear,
             get_logs,
+            diagnostic_report,
             clear_logs,
             get_cover_url,
             check_roms_health,
@@ -7656,8 +7839,13 @@ pub fn run() {
                 std::thread::sleep(std::time::Duration::from_millis(300));
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running EmuWorld");
+        .build(tauri::generate_context!())
+        .expect("error while running EmuWorld")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                push_log("INFO", "===== EmuWorld fermé =====");
+            }
+        });
 }
 
 #[cfg(test)]
@@ -8320,6 +8508,19 @@ mod tests {
         assert_eq!(switch2_edition_base("Mario Kart World [0400C3F00006E000]", ns2), None);
         assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition", "Nintendo Switch"), None);
         assert_eq!(switch2_edition_base("Switch 2 Edition", ns2), None);
+    }
+
+    #[test]
+    fn every_log_line_is_cleaned_and_actions_say_how_they_went() {
+        // Other tests log at the same time: look for our own lines.
+        let logged = |needle: &str| super::app_logs().lock().unwrap().iter().any(|l| l.contains(needle));
+        super::push_log("INFO", "requête https://api.example.com/?key=SECRET42&q=zelda-logtest");
+        assert!(logged("key=<masqué>&q=zelda-logtest"));
+        assert!(!logged("SECRET42"));
+        super::log_action("Favori: 'Zelda logtest' (NES)", &Ok::<bool, String>(true), |f| if *f { "ajouté".into() } else { "retiré".into() });
+        assert!(logged("Favori: 'Zelda logtest' (NES) → ajouté"));
+        super::log_action("Collection créée: 'RPG logtest'", &Err::<(), String>("disque plein".into()), |_| "ok".into());
+        assert!(super::app_logs().lock().unwrap().iter().any(|l| l.starts_with("[ERROR]") && l.ends_with("Collection créée: 'RPG logtest' → échec: disque plein")));
     }
 
     #[test]

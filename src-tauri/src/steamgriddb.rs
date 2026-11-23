@@ -21,7 +21,6 @@ use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub const API_BASE: &str = "https://www.steamgriddb.com/api/v2";
-pub const SITE: &str = "https://www.steamgriddb.com";
 
 /// Portrait grids only (the cards are 3:4), still images, nothing NSFW,
 /// joke or flashing.

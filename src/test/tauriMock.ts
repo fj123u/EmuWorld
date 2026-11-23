@@ -108,6 +108,7 @@ export function defaultHandlers(): Record<string, Handler> {
     iidb_cover_choices: () => [],
     get_sgdb_status: () => ({ configured: false }),
     get_sessions: () => [],
+    diagnostic_report: () => "EmuWorld — rapport de diagnostic · ===== EmuWorld 3.1.1 démarré =====",
     set_sgdb_api_key: () => ({ configured: true }),
     clear_sgdb_api_key: () => null,
     sgdb_cover_choices: () => [],
