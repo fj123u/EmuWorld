@@ -550,7 +550,7 @@ fn get_installed_emulators() -> Vec<String> {
     // Check retroarch-* emulators by core presence in shared retroarch/
     let ra_dir = emu_dir.join("retroarch");
     if ra_dir.exists() {
-        if let Some(ra_exe) = find_executable(&ra_dir, "retroarch.exe") {
+        if let Some(ra_exe) = find_executable(&ra_dir, emulators::RETROARCH_EXE) {
             let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
             let catalog = emulators::get_catalog();
             for emu in &catalog {
@@ -609,7 +609,7 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
     // For shared RetroArch: only download base if not already installed
-    let ra_already_installed = is_shared_retroarch && find_executable(&install_dir, "retroarch.exe").is_some();
+    let ra_already_installed = is_shared_retroarch && find_executable(&install_dir, emulators::RETROARCH_EXE).is_some();
 
     // If installing a retroarch-* core but RetroArch base is not installed, install RetroArch first
     if is_shared_retroarch && !ra_already_installed {
@@ -624,7 +624,7 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         fs::create_dir_all(&install_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
 
         // Download RetroArch base using streaming to avoid timeout on large files
-        let ra_url = "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z";
+        let ra_url = emulators::retroarch_url();
         push_log("INFO", &format!("Téléchargement RetroArch depuis: {}", ra_url));
 
         let response = client
@@ -681,9 +681,12 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
 
         fs::remove_file(&archive_path).ok();
 
-        if find_executable(&install_dir, "retroarch.exe").is_none() {
-            push_log("ERROR", "retroarch.exe introuvable après extraction");
-            return Err("RetroArch installation failed: retroarch.exe not found after extraction.".to_string());
+        if find_executable(&install_dir, emulators::RETROARCH_EXE).is_none() {
+            push_log("ERROR", &format!("{} introuvable après extraction", emulators::RETROARCH_EXE));
+            return Err(format!("RetroArch installation failed: {} not found after extraction.", emulators::RETROARCH_EXE));
+        }
+        if let Some(ra_exe) = find_executable(&install_dir, emulators::RETROARCH_EXE) {
+            make_executable(&ra_exe).map_err(|e| format!("RetroArch: {}", e))?;
         }
         push_log("INFO", "RetroArch base installé avec succès");
     }
@@ -721,7 +724,12 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         }
 
         // Stream to disk for large files (>50 MB), buffer in memory for small ones
-        let archive_ext = if emu.archive_type == "7z" { "7z" } else { "zip" };
+        let archive_ext = match emu.archive_type.as_str() {
+            "7z" => "7z",
+            "tar.gz" => "tar.gz",
+            "appimage" => "AppImage",
+            _ => "zip",
+        };
         let archive_path = install_dir.join(format!("archive.{}", archive_ext));
 
         if total_size > 50_000_000 {
@@ -779,6 +787,17 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
                 push_log("ERROR", &format!("Extraction 7z échouée: {}", e));
                 format!("7z extraction failed: {}", e)
             })?;
+        } else if emu.archive_type == "tar.gz" {
+            extract_tar_gz(&archive_path, &install_dir).map_err(|e| {
+                push_log("ERROR", &format!("Extraction tar.gz échouée: {}", e));
+                format!("tar.gz extraction failed: {}", e)
+            })?;
+        } else if emu.archive_type == "appimage" {
+            // The program itself: kept under the catalog's name.
+            fs::rename(&archive_path, install_dir.join(&emu.executable_name)).map_err(|e| {
+                push_log("ERROR", &format!("AppImage impossible à placer: {}", e));
+                format!("AppImage install failed: {}", e)
+            })?;
         } else {
             return Err(format!("Unsupported archive type: {}", emu.archive_type));
         }
@@ -794,9 +813,16 @@ async fn install_emulator_from(emulator_id: String, app_handle: tauri::AppHandle
         }));
     }
 
-    // Verify executable exists
-    if find_executable(&install_dir, &emu.executable_name).is_none() {
-        return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
+    // Verify executable exists (and can run: archives often lose the bit)
+    match find_executable(&install_dir, &emu.executable_name) {
+        Some(exe) => make_executable(&exe).map_err(|e| {
+            push_log("ERROR", &format!("{} non exécutable: {}", exe.display(), e));
+            format!("Installation failed: {}", e)
+        })?,
+        None => {
+            push_log("ERROR", &format!("{} introuvable après l'installation de {}", emu.executable_name, emu.id));
+            return Err(format!("Installation failed: Executable '{}' not found in the extracted files.", emu.executable_name));
+        }
     }
 
     // Download setup files (keys, firmware, BIOS, cores)
@@ -922,9 +948,73 @@ fn extract_zip(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Stri
             if let Some(p) = outpath.parent() { fs::create_dir_all(p).ok(); }
             let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
             std::io::copy(&mut entry, &mut outfile).map_err(|e| e.to_string())?;
+            #[cfg(unix)]
+            if let Some(mode) = entry.unix_mode() {
+                use std::os::unix::fs::PermissionsExt;
+                fs::set_permissions(&outpath, fs::Permissions::from_mode(mode & 0o777)).ok();
+            }
         }
     }
     Ok(())
+}
+
+/// tar.gz extraction (Linux builds) that stays inside `dest`, like the 7z one.
+/// Files and folders only: links are skipped, a link could point anywhere.
+fn extract_tar_gz(archive_path: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    let file = fs::File::open(archive_path).map_err(|e| e.to_string())?;
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(file));
+    let mut skipped = 0usize;
+    for entry in archive.entries().map_err(|e| e.to_string())? {
+        let mut entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.path().map_err(|e| e.to_string())?.to_string_lossy().to_string();
+        let kind = entry.header().entry_type();
+        let Some(out) = archive_entry_path(dest, &name) else {
+            if name.trim_matches(['.', '/']).is_empty() {
+                continue; // "./": the archive's root
+            }
+            skipped += 1;
+            push_log("WARN", &format!("Archive tar.gz : entrée refusée (chemin hors du dossier) : {:?}", name));
+            continue;
+        };
+        if kind.is_dir() {
+            fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+        } else if kind.is_file() {
+            if let Some(parent) = out.parent() {
+                fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            entry.unpack(&out).map_err(|e| e.to_string())?;
+        } else {
+            skipped += 1;
+        }
+    }
+    if skipped > 0 {
+        push_log("WARN", &format!("Archive tar.gz {} : {} entrée(s) ignorée(s) (liens ou chemins refusés)", archive_path.display(), skipped));
+    }
+    Ok(())
+}
+
+/// Lets a downloaded program run (zip and 7z extraction may lose the bit).
+#[cfg(unix)]
+fn make_executable(path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = fs::metadata(path)?.permissions().mode();
+    if mode & 0o111 != 0o111 {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode | 0o755))?;
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn make_executable(_path: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+/// `name` in one of the PATH folders.
+#[cfg_attr(windows, allow(dead_code))]
+fn find_in_path(name: &str) -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|dir| dir.join(name))
+        .find(|p| p.is_file())
 }
 
 /// Where an archive entry may be written: under `dest`, never outside.
@@ -983,8 +1073,14 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
         }
     }
     // System-installed 7-Zip
-    candidates.push(PathBuf::from(r"C:\Program Files\7-Zip\7z.exe"));
-    candidates.push(PathBuf::from(r"C:\Program Files (x86)\7-Zip\7z.exe"));
+    #[cfg(windows)]
+    {
+        candidates.push(PathBuf::from(r"C:\Program Files\7-Zip\7z.exe"));
+        candidates.push(PathBuf::from(r"C:\Program Files (x86)\7-Zip\7z.exe"));
+    }
+    // Linux: the 7zip / p7zip-full packages
+    #[cfg(not(windows))]
+    candidates.extend(["7zz", "7z", "7za"].iter().filter_map(|name| find_in_path(name)));
 
     for sz_path in &candidates {
         if sz_path.exists() {
@@ -1012,16 +1108,32 @@ fn extract_7z(archive_path: &PathBuf, install_dir: &PathBuf) -> Result<(), Strin
     decompress_7z_safely(archive_path, install_dir)
 }
 
-/// "zip" or "7z" for an archive the installer can extract, from its file name.
+/// The installer's archive type ("zip", "7z", "tar.gz", "appimage") of a
+/// file, from its name.
 fn archive_type_of(name: &str) -> Option<&'static str> {
     let lower = name.to_lowercase();
     if lower.ends_with(".zip") {
         Some("zip")
     } else if lower.ends_with(".7z") {
         Some("7z")
+    } else if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        Some("tar.gz")
+    } else if lower.ends_with(".appimage") {
+        Some("appimage")
     } else {
         None
     }
+}
+
+/// Whether a release file is the x86-64 build of an emulator for `os`.
+fn is_x64_asset_for(name: &str, os: &str) -> bool {
+    if os == "windows" {
+        return is_windows_x64_asset(name);
+    }
+    let name = name.to_lowercase();
+    (name.contains("linux") || name.ends_with(".appimage"))
+        && (name.contains("x64") || name.contains("x86_64") || name.contains("amd64") || name.contains("linux64"))
+        && !name.contains("dbg")
 }
 
 /// The file of a newer release that replaces the catalog's archive.
@@ -1033,7 +1145,7 @@ fn archive_type_of(name: &str) -> Option<&'static str> {
 /// other archive type. Projects that renamed their files fall back to the
 /// only plausible Windows 64-bit archive; when several remain, none is
 /// chosen: no update is better than the wrong program.
-fn release_asset_for(catalog_url: &str, catalog_version: &str, latest_version: &str, assets: &[(String, String)]) -> Option<(String, &'static str)> {
+fn release_asset_for(catalog_url: &str, catalog_version: &str, latest_version: &str, assets: &[(String, String)], os: &str) -> Option<(String, &'static str)> {
     let pick = |(name, url): &(String, String)| archive_type_of(name).map(|kind| (url.clone(), kind));
     let catalog_file = catalog_url.rsplit('/').next().unwrap_or("").to_lowercase();
     let expected = if catalog_version.is_empty() {
@@ -1051,13 +1163,14 @@ fn release_asset_for(catalog_url: &str, catalog_version: &str, latest_version: &
     }
 
     const NOT_THE_PROGRAM: [&str; 11] = ["installer", "symbols", "pdb", "dbg", "debug", "libretro", "arm64", "aarch64", "room", "src", "source"];
+    let for_os = |lower: &str| if os == "windows" { lower.contains("win") } else { lower.contains("linux") || lower.ends_with(".appimage") };
     let candidates: Vec<&(String, String)> = assets.iter()
         .filter(|(name, _)| {
             let lower = name.to_lowercase();
-            archive_type_of(&lower).is_some() && lower.contains("win") && !NOT_THE_PROGRAM.iter().any(|word| lower.contains(word))
+            archive_type_of(&lower).is_some() && for_os(&lower) && !NOT_THE_PROGRAM.iter().any(|word| lower.contains(word))
         })
         .collect();
-    let x64: Vec<&(String, String)> = candidates.iter().copied().filter(|(name, _)| is_windows_x64_asset(name)).collect();
+    let x64: Vec<&(String, String)> = candidates.iter().copied().filter(|(name, _)| is_x64_asset_for(name, os)).collect();
     match (x64.as_slice(), candidates.as_slice()) {
         ([only], _) => pick(only),
         ([], [only]) => pick(only),
@@ -1220,7 +1333,7 @@ fn uninstall_emulator(emulator_id: String) -> Result<String, String> {
         let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
         if let Some(emu) = catalog.iter().find(|e| e.id == id_lower) {
             if let Some(core) = &emu.core_name {
-                if let Some(ra_exe) = find_executable(&ra_dir, "retroarch.exe") {
+                if let Some(ra_exe) = find_executable(&ra_dir, emulators::RETROARCH_EXE) {
                     let cores_dir = ra_exe.parent().unwrap_or(&ra_dir).join("cores");
                     let core_path = cores_dir.join(core);
                     if core_path.exists() {
@@ -1307,12 +1420,13 @@ async fn launch_emulator(
     // Check if we should redirect to RetroArch for RA support
     let ra_config = retroachievements::load_config();
     let ra_active = !ra_config.token.is_empty() && !ra_config.username.is_empty();
-    let ra_core = retroachievements::retroarch_core_for_emulator(&emu.id);
+    let ra_core_file = retroachievements::retroarch_core_for_emulator(&emu.id).map(emulators::core_file);
+    let ra_core = ra_core_file.as_deref();
     let use_retroarch = ra_active && ra_core.is_some() && rom_path.is_some();
 
     let (install_dir, exe_path, effective_id) = if use_retroarch {
         let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-        let ra_exe = find_executable(&ra_dir, "retroarch.exe");
+        let ra_exe = find_executable(&ra_dir, emulators::RETROARCH_EXE);
         if let Some(exe) = ra_exe {
             println!("[Launch] RA active — redirecting {} to RetroArch", emu.id);
             let effective_ra_dir = exe.parent().unwrap_or(&ra_dir).to_path_buf();
@@ -1322,7 +1436,7 @@ async fn launch_emulator(
                 fs::create_dir_all(&cores_dir).ok();
                 if !cores_dir.join(core_name).exists() {
                     println!("[Launch] Core '{}' missing — downloading...", core_name);
-                    let correct_url = format!("https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip", core_name);
+                    let correct_url = emulators::core_url(core_name);
                     if let Ok(dl_client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
                         if let Ok(resp) = dl_client.get(&correct_url).send().await {
                             if resp.status().is_success() {
@@ -1367,7 +1481,7 @@ async fn launch_emulator(
                     if !cores_dir.join(core_name).exists() {
                         println!("[Launch] Core '{}' missing for {} — downloading...", core_name, emu.id);
                         push_log("INFO", &format!("Téléchargement du core {} en cours...", core_name));
-                        let core_url = format!("https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip", core_name);
+                        let core_url = emulators::core_url(core_name);
                         if let Ok(dl_client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
                             if let Ok(resp) = dl_client.get(&core_url).send().await {
                                 if resp.status().is_success() {
@@ -1753,18 +1867,44 @@ fn find_executable(dir: &PathBuf, name: &str) -> Option<PathBuf> {
         }
     }
 
-    // 3. Fallback: first .exe that isn't an uninstaller
+    // 3. Fallback: the first program that isn't an uninstaller
     for entry in walkdir::WalkDir::new(dir).max_depth(5) {
         if let Ok(e) = entry {
             if e.file_type().is_file() {
                 let file_name = e.file_name().to_string_lossy().to_lowercase();
-                if file_name.ends_with(".exe") && !file_name.contains("uninstall") && !file_name.contains("setup") {
+                if is_fallback_program(&file_name, has_executable_bit(e.path()), std::env::consts::OS) {
                     return Some(e.path().to_path_buf());
                 }
             }
         }
     }
     None
+}
+
+/// A file `find_executable` may fall back to: an `.exe` on Windows; on Linux
+/// an AppImage or an executable file without extension (not a `.so` library
+/// or a `.sh` script). Never an uninstaller, a setup or (Linux) an updater.
+fn is_fallback_program(file_name_lower: &str, executable_bit: bool, os: &str) -> bool {
+    if file_name_lower.contains("uninstall") || file_name_lower.contains("setup") {
+        return false;
+    }
+    if os == "windows" {
+        file_name_lower.ends_with(".exe")
+    } else {
+        !file_name_lower.contains("updater")
+            && (file_name_lower.ends_with(".appimage") || (executable_bit && !file_name_lower.contains('.')))
+    }
+}
+
+#[cfg(unix)]
+fn has_executable_bit(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    fs::metadata(path).map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn has_executable_bit(_path: &std::path::Path) -> bool {
+    false
 }
 
 static SCAN_CANCELLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -6139,21 +6279,24 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
     }
 
     // Find the actual RetroArch exe to determine the real base dir (handles nested folders)
-    let effective_ra_dir = find_executable(&ra_dir, "retroarch.exe")
+    let effective_ra_dir = find_executable(&ra_dir, emulators::RETROARCH_EXE)
         .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
         .unwrap_or_else(|| ra_dir.clone());
 
     let cores_dir = effective_ra_dir.join("cores");
     fs::create_dir_all(&cores_dir).map_err(|e| e.to_string())?;
 
-    let cores = vec![
+    let cores: Vec<(String, &str)> = [
         ("mesen_libretro.dll", "NES"),
         ("mgba_libretro.dll", "GBA/GB/GBC"),
         ("snes9x_libretro.dll", "SNES"),
         ("mupen64plus_next_libretro.dll", "N64"),
         ("melonds_libretro.dll", "DS"),
         ("flycast_libretro.dll", "Dreamcast"),
-    ];
+    ]
+    .into_iter()
+    .map(|(dll, label)| (emulators::core_file(dll), label))
+    .collect();
 
     let client = reqwest::Client::builder()
         .user_agent("EmuWorld/0.2.0")
@@ -6162,7 +6305,6 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
         .map_err(|e| e.to_string())?;
 
     let mut downloaded = Vec::new();
-    let base_url = "https://buildbot.libretro.com/nightly/windows/x86_64/latest/";
 
     for (core_file, label) in &cores {
         let dest = cores_dir.join(core_file);
@@ -6171,8 +6313,7 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
             continue;
         }
 
-        let zip_name = core_file.replace(".dll", ".dll.zip");
-        let url = format!("{}{}", base_url, zip_name);
+        let url = emulators::core_url(core_file);
         println!("[RA Cores] Downloading {} from {}", core_file, url);
 
         use tauri::Emitter;
@@ -6192,7 +6333,7 @@ async fn download_ra_cores(app_handle: tauri::AppHandle) -> Result<Vec<String>, 
                                     // File name only: a core never needs a folder, and a raw
                                     // entry name could point outside the cores folder.
                                     let Some(name) = file.enclosed_name().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string())) else { continue };
-                                    if name.ends_with(".dll") {
+                                    if name.ends_with(emulators::core_extension()) {
                                         let out_path = cores_dir.join(&name);
                                         if let Ok(mut out) = fs::File::create(&out_path) {
                                             let _ = std::io::copy(&mut file, &mut out);
@@ -7356,9 +7497,9 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                             // "v1.2", "release-1.2" and shadPS4's "v.0.21.0" all mean their number.
                             let latest = tag.trim_start_matches('v').trim_start_matches('.').trim_start_matches("release-");
                             if latest != current && !latest.is_empty() {
-                                match release_asset_for(&emu.download_url, catalog_ver, latest, &release_assets(&json)) {
+                                match release_asset_for(&emu.download_url, catalog_ver, latest, &release_assets(&json), std::env::consts::OS) {
                                     Some((dl_url, _)) => updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url }),
-                                    None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier Windows reconnu dans la release", emu.id, latest)),
+                                    None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier reconnu pour ce système dans la release", emu.id, latest)),
                                 }
                             }
                         }
@@ -7373,9 +7514,9 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                         if let Some(release) = releases.first() {
                             if let Some(tag) = release["tag_name"].as_str() {
                                 if tag != current {
-                                    match release_asset_for(&emu.download_url, catalog_ver, tag, &release_assets(release)) {
+                                    match release_asset_for(&emu.download_url, catalog_ver, tag, &release_assets(release), std::env::consts::OS) {
                                         Some((dl_url, _)) => updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: tag.to_string(), download_url: dl_url }),
-                                        None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier Windows reconnu dans la release", emu.id, tag)),
+                                        None => push_log("WARN", &format!("Mise à jour {} {} ignorée: aucun fichier reconnu pour ce système dans la release", emu.id, tag)),
                                     }
                                 }
                             }
@@ -7390,7 +7531,7 @@ async fn check_emulator_updates() -> Result<Vec<EmulatorUpdate>, String> {
                         if let Some(cap) = regex::Regex::new(r"Dolphin (\d+)").ok().and_then(|re| re.captures(&text)) {
                             let latest = cap.get(1).map(|m| m.as_str()).unwrap_or("");
                             if !latest.is_empty() && latest != current {
-                                let dl_url = format!("https://dl.dolphin-emu.org/releases/{}/dolphin-{}-x64.7z", latest, latest);
+                                let dl_url = emulators::dolphin_download_url(latest, std::env::consts::OS);
                                 updates.push(EmulatorUpdate { id: emu.id.clone(), name: emu.name.clone(), current_version: current.to_string(), latest_version: latest.to_string(), download_url: dl_url });
                             }
                         }
@@ -8454,7 +8595,7 @@ mod tests {
             names.iter().map(|n| (n.to_string(), format!("https://example.test/{}", n))).collect()
         };
         let pick = |catalog_url: &str, catalog_ver: &str, latest: &str, names: &[&str]| {
-            release_asset_for(catalog_url, catalog_ver, latest, &assets(names))
+            release_asset_for(catalog_url, catalog_ver, latest, &assets(names), "windows")
                 .map(|(url, kind)| (url.rsplit('/').next().unwrap().to_string(), kind))
         };
 
@@ -8489,6 +8630,92 @@ mod tests {
         // Nothing usable, or no way to tell which one: no update rather than the wrong program.
         assert_eq!(pick("https://x.test/a/emu-1.0-win64.zip", "1.0", "2.0", &["emu-2.0-win64-installer.exe", "emu-2.0-linux.zip"]), None);
         assert_eq!(pick("https://x.test/a/emu-windows-msvc-1.0.zip", "1.0", "2.0", &["emu-libretro-windows-x86_64-2.0.zip", "emu-windows-a-2.0.zip", "emu-windows-b-2.0.zip"]), None);
+    }
+
+    // On Linux an update takes the Linux file of the release (AppImage, tar.gz).
+    #[test]
+    fn a_linux_update_installs_the_linux_file_of_the_new_release() {
+        let assets = |names: &[&str]| -> Vec<(String, String)> {
+            names.iter().map(|n| (n.to_string(), format!("https://example.test/{}", n))).collect()
+        };
+        let pick = |catalog_url: &str, catalog_ver: &str, latest: &str, names: &[&str]| {
+            release_asset_for(catalog_url, catalog_ver, latest, &assets(names), "linux")
+                .map(|(url, kind)| (url.rsplit('/').next().unwrap().to_string(), kind))
+        };
+        assert_eq!(
+            pick("https://github.com/mgba-emu/mgba/releases/download/0.10.5/mGBA-0.10.5-appimage-x64.appimage", "0.10.5", "0.11.0",
+                &["mGBA-0.11.0-win64.7z", "mGBA-0.11.0-appimage-arm64.appimage", "mGBA-0.11.0-appimage-x64.appimage"]),
+            Some(("mGBA-0.11.0-appimage-x64.appimage".to_string(), "appimage")));
+        assert_eq!(
+            pick("https://git.ryujinx.app/projects/Ryubing/releases/download/1.3.3/ryujinx-1.3.3-linux_x64.tar.gz", "1.3.3", "1.3.4",
+                &["ryujinx-1.3.4-win_x64.zip", "ryujinx-1.3.4-linux_arm64.tar.gz", "ryujinx-1.3.4-linux_x64.tar.gz"]),
+            Some(("ryujinx-1.3.4-linux_x64.tar.gz".to_string(), "tar.gz")));
+        // Renamed: the only Linux x86-64 program, not the debug or ARM build.
+        assert_eq!(
+            pick("https://github.com/xemu-project/xemu/releases/download/v0.8.135/xemu-0.8.135-x86_64.AppImage", "0.8.135", "0.9.0",
+                &["xemu-0.9.0-dbg-x86_64.AppImage", "xemu-0.9.0-aarch64.AppImage", "xemu-v0.9.0-linux-x86_64.AppImage", "xemu-0.9.0-windows-x86_64.zip"]),
+            Some(("xemu-v0.9.0-linux-x86_64.AppImage".to_string(), "appimage")));
+        // A Windows-only release offers nothing on Linux.
+        assert_eq!(pick("https://x.test/a/emu-1.0-linux-x64.zip", "1.0", "2.0", &["emu-2.0-windows-x64.zip"]), None);
+        assert_eq!(archive_type_of("Cemu-2.6-x86_64.AppImage"), Some("appimage"));
+        assert_eq!(archive_type_of("kyty.TAR.GZ"), Some("tar.gz"));
+        assert!(trusted_update_archive("ppsspp", "https://github.com/hrydgard/ppsspp/releases/download/v1.21.0/PPSSPP-v1.21.0-anylinux-x86_64.AppImage").is_some());
+    }
+
+    #[test]
+    fn tar_gz_builds_extract_inside_the_install_folder() {
+        let root = fake_library("targz", &[]);
+        fs::create_dir_all(&root).unwrap();
+        let archive = root.join("emu.tar.gz");
+        {
+            let gz = flate2::write::GzEncoder::new(fs::File::create(&archive).unwrap(), flate2::Compression::fast());
+            let mut tar = tar::Builder::new(gz);
+            let mut add = |name: &str, data: &[u8], mode: u32| {
+                let mut header = tar::Header::new_gnu();
+                header.set_size(data.len() as u64);
+                header.set_mode(mode);
+                header.set_entry_type(tar::EntryType::Regular);
+                // set_path refuses "..": write the raw name like a crafted archive would.
+                let bytes = name.as_bytes();
+                header.as_old_mut().name[..bytes.len()].copy_from_slice(bytes);
+                header.set_cksum();
+                tar.append(&header, data).unwrap();
+            };
+            add("publish/Ryujinx", b"program", 0o755);
+            add("publish/libSDL2.so", b"lib", 0o744);
+            add("../evil.sh", b"evil", 0o755);
+            tar.into_inner().unwrap().finish().unwrap();
+        }
+        let dest = root.join("ryubing");
+        extract_tar_gz(&archive, &dest).unwrap();
+        assert_eq!(fs::read(dest.join("publish").join("Ryujinx")).unwrap(), b"program");
+        assert!(!root.join("evil.sh").exists(), "a path climbing out of the folder is refused");
+        assert_eq!(find_executable(&dest, "Ryujinx"), Some(dest.join("publish").join("Ryujinx")));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |p: &std::path::Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&dest.join("publish").join("Ryujinx")), 0o755, "the program keeps its executable bit");
+            let lost = dest.join("publish").join("libSDL2.so");
+            fs::set_permissions(&lost, fs::Permissions::from_mode(0o644)).unwrap();
+            make_executable(&lost).unwrap();
+            assert_eq!(mode(&lost), 0o755);
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_fallback_program_is_one_that_runs_on_this_os() {
+        assert!(is_fallback_program("mgba.exe", false, "windows"));
+        assert!(!is_fallback_program("uninstall.exe", false, "windows"));
+        assert!(!is_fallback_program("mgba.appimage", false, "windows"));
+        assert!(is_fallback_program("mgba.appimage", false, "linux"));
+        assert!(is_fallback_program("ryujinx", true, "linux"));
+        assert!(!is_fallback_program("ryujinx", false, "linux"), "a file without the executable bit");
+        assert!(!is_fallback_program("libsdl2.so", true, "linux"), "a library");
+        assert!(!is_fallback_program("ryujinx.sh", true, "linux"), "a script");
+        assert!(!is_fallback_program("kyty_updater", true, "linux"), "the updater");
+        assert!(!is_fallback_program("mgba.exe", false, "linux"));
     }
 
     #[test]
@@ -8760,7 +8987,8 @@ mod tests {
     fn every_normalized_folder_name_is_a_catalog_console() {
         // normalize_console_folder output is compared to catalog consoles:
         // a name that exists nowhere in the catalog silently breaks detection.
-        let catalog = emulators::get_catalog();
+        // (The Windows catalog: on Linux a console may have no emulator yet.)
+        let catalog = emulators::catalog_for("windows");
         let aliases = [
             "psp", "ps1", "psx", "ps2", "ps3", "ps4", "ps5", "n64", "nds", "ds", "3ds", "gc", "gamecube", "wii", "wiiu",
             "nes", "famicom", "snes", "super famicom", "gba", "gb", "game boy", "gbc", "game boy color",
@@ -8779,9 +9007,14 @@ mod tests {
 
     #[test]
     fn catalog_is_consistent() {
-        let catalog = emulators::get_catalog();
+        for os in ["windows", "linux"] {
+            catalog_is_consistent_on(&emulators::catalog_for(os));
+        }
+    }
+
+    fn catalog_is_consistent_on(catalog: &[emulators::EmulatorInfo]) {
         let mut ids = std::collections::HashSet::new();
-        for e in &catalog {
+        for e in catalog {
             assert!(ids.insert(e.id.clone()), "duplicate emulator id {}", e.id);
             assert_eq!(e.id, e.id.to_lowercase(), "emulator ids must be lowercase (folder names on disk): {}", e.id);
             assert!(!e.console.is_empty() && !e.name.is_empty(), "{} has an empty name/console", e.id);

@@ -46,7 +46,7 @@ pub fn update_info(id: &str) -> Option<UpdateSource> {
         "mesen" => Some(UpdateSource::GitHub("SourMesen/Mesen2", "2.1.1")),
         "mgba" => Some(UpdateSource::GitHub("mgba-emu/mgba", "0.10.5")),
         "snes9x" => Some(UpdateSource::GitHub("snes9xgit/snes9x", "1.63")),
-        "dolphin" => Some(UpdateSource::DolphinEmu("2412")),
+        "dolphin" => Some(UpdateSource::DolphinEmu(if cfg!(windows) { "2412" } else { LINUX_DOLPHIN_VERSION })),
         "melonds" => Some(UpdateSource::GitHub("melonDS-emu/melonDS", "1.1")),
         "azahar" => Some(UpdateSource::GitHub("azahar-emu/azahar", "2125.1.2")),
         "cemu" => Some(UpdateSource::GitHub("cemu-project/Cemu", "2.6")),
@@ -65,8 +65,127 @@ pub fn update_info(id: &str) -> Option<UpdateSource> {
     }
 }
 
-/// Returns the built-in catalog of supported emulators.
+const WINDOWS_RETROARCH_URL: &str = "https://buildbot.libretro.com/stable/1.20.0/windows/x86_64/RetroArch.7z";
+const LINUX_RETROARCH_URL: &str = "https://buildbot.libretro.com/stable/1.20.0/linux/x86_64/RetroArch.7z";
+const LINUX_RETROARCH_EXE: &str = "RetroArch-Linux-x86_64.AppImage";
+const LINUX_DOLPHIN_VERSION: &str = "2609b";
+const WINDOWS_CORES: &str = "https://buildbot.libretro.com/nightly/windows/x86_64/latest/";
+
+/// RetroArch's program on this OS (the Linux archive holds an AppImage).
+#[cfg(windows)]
+pub const RETROARCH_EXE: &str = "retroarch.exe";
+#[cfg(not(windows))]
+pub const RETROARCH_EXE: &str = LINUX_RETROARCH_EXE;
+
+/// The RetroArch archive for this OS.
+pub fn retroarch_url() -> &'static str {
+    if cfg!(windows) { WINDOWS_RETROARCH_URL } else { LINUX_RETROARCH_URL }
+}
+
+/// A libretro core's file on `os`: the catalog names the Windows DLL
+/// ("mesen_libretro.dll"), Linux loads "mesen_libretro.so".
+pub fn core_file_for(windows_name: &str, os: &str) -> String {
+    match windows_name.strip_suffix(".dll") {
+        Some(stem) if os != "windows" => format!("{}.so", stem),
+        _ => windows_name.to_string(),
+    }
+}
+
+/// [`core_file_for`] on this OS.
+pub fn core_file(windows_name: &str) -> String {
+    core_file_for(windows_name, std::env::consts::OS)
+}
+
+/// The libretro buildbot's zip of a core file for `os`.
+pub fn core_url_for(core_file: &str, os: &str) -> String {
+    let platform = if os == "windows" { "windows" } else { "linux" };
+    format!("https://buildbot.libretro.com/nightly/{}/x86_64/latest/{}.zip", platform, core_file)
+}
+
+/// [`core_url_for`] on this OS.
+pub fn core_url(core_file: &str) -> String {
+    core_url_for(core_file, std::env::consts::OS)
+}
+
+/// Extension of a libretro core on this OS.
+pub fn core_extension() -> &'static str {
+    if cfg!(windows) { ".dll" } else { ".so" }
+}
+
+/// Dolphin's download for a release ("2609b") on `os`.
+pub fn dolphin_download_url(version: &str, os: &str) -> String {
+    let file = if os == "windows" { format!("dolphin-{}-x64.7z", version) } else { format!("dolphin-{}-x64.AppImage", version) };
+    format!("https://dl.dolphin-emu.org/releases/{}/{}", version, file)
+}
+
+/// (download url, executable, archive type) of an emulator's Linux build,
+/// checked on the release pages on 2026-11-23. AppImages are saved under a
+/// fixed name so launching and updating never depend on the release's file
+/// name. None: no Linux build (Project64 — RetroArch N64 covers the
+/// console) or one too experimental to offer (Xenia).
+fn linux_build(id: &str) -> Option<(String, &'static str, &'static str)> {
+    let gh = |repo: &str, tag: &str, file: &str| format!("https://github.com/{}/releases/download/{}/{}", repo, tag, file);
+    Some(match id {
+        "mesen" => (gh("SourMesen/Mesen2", "2.1.1", "Mesen_2.1.1_Linux_x64.zip"), "Mesen", "zip"),
+        "mgba" => (gh("mgba-emu/mgba", "0.10.5", "mGBA-0.10.5-appimage-x64.appimage"), "mGBA.AppImage", "appimage"),
+        "snes9x" => (gh("snes9xgit/snes9x", "1.63", "Snes9x-1.63-x86_64.AppImage"), "Snes9x.AppImage", "appimage"),
+        "dolphin" => (dolphin_download_url(LINUX_DOLPHIN_VERSION, "linux"), "Dolphin.AppImage", "appimage"),
+        "melonds" => (gh("melonDS-emu/melonDS", "1.1", "melonDS-1.1-appimage-x86_64.zip"), "melonDS-x86_64.AppImage", "zip"),
+        "azahar" => (gh("azahar-emu/azahar", "2125.1.2", "azahar.AppImage"), "azahar.AppImage", "appimage"),
+        "cemu" => (gh("cemu-project/Cemu", "v2.6", "Cemu-2.6-x86_64.AppImage"), "Cemu.AppImage", "appimage"),
+        "ryubing" => ("https://git.ryujinx.app/projects/Ryubing/releases/download/1.3.3/ryujinx-1.3.3-linux_x64.tar.gz".to_string(), "Ryujinx", "tar.gz"),
+        "lichii" => (gh("zortos293/Lichii", "build-160", "lichii-linux-x86_64-pgo.AppImage"), "lichii.AppImage", "appimage"),
+        "duckstation" => (gh("stenzek/duckstation", "latest", "DuckStation-x64.AppImage"), "DuckStation.AppImage", "appimage"),
+        "pcsx2" => (gh("PCSX2/pcsx2", "v2.6.3", "pcsx2-v2.6.3-linux-appimage-x64-Qt.AppImage"), "pcsx2-qt.AppImage", "appimage"),
+        "rpcs3" => (gh("RPCS3/rpcs3-binaries-linux", "build-ffeb16fe1ec7a6a62ac317270dab20197b060ef9", "rpcs3-v0.0.37-18146-ffeb16fe_linux64.AppImage"), "rpcs3.AppImage", "appimage"),
+        "ppsspp" => (gh("hrydgard/ppsspp", "v1.20.3", "PPSSPP-v1.20.3-anylinux-x86_64.AppImage"), "PPSSPP.AppImage", "appimage"),
+        "flycast" => (gh("flyinghead/flycast", "v2.6", "flycast-x86_64.AppImage"), "flycast.AppImage", "appimage"),
+        "xemu" => (gh("xemu-project/xemu", "v0.8.135", "xemu-0.8.135-x86_64.AppImage"), "xemu.AppImage", "appimage"),
+        "shadps4" => (gh("shadps4-emu/shadPS4", "v.0.21.0", "shadps4-linux-sdl-0.21.0.zip"), "Shadps4-sdl.AppImage", "zip"),
+        "kytyps5" => (gh("KytyPS5/KytyPS5", "KytyPS5-2026-11-11-bc934ef", "KytyPS5-2026-11-11-bc934ef-Linux-x86_64.tar.gz"), "kyty_emulator", "tar.gz"),
+        _ => return None,
+    })
+}
+
+/// The catalog's entry as it installs on Linux, or None when the emulator
+/// has no Linux build.
+fn linux_variant(mut emu: EmulatorInfo) -> Option<EmulatorInfo> {
+    if emu.id.starts_with("retroarch") {
+        emu.download_url = LINUX_RETROARCH_URL.to_string();
+        emu.executable_name = LINUX_RETROARCH_EXE.to_string();
+        emu.archive_type = "7z".to_string();
+        emu.core_name = emu.core_name.map(|core| core_file_for(&core, "linux"));
+        for sf in &mut emu.setup_files {
+            if let Some(core) = sf.url.strip_prefix(WINDOWS_CORES).and_then(|f| f.strip_suffix(".zip")) {
+                sf.url = core_url_for(&core_file_for(core, "linux"), "linux");
+            }
+        }
+        return Some(emu);
+    }
+    let (url, exe, kind) = linux_build(&emu.id)?;
+    emu.download_url = url;
+    emu.executable_name = exe.to_string();
+    emu.archive_type = kind.to_string();
+    Some(emu)
+}
+
+/// The catalog for `os` ("windows", or the Linux builds anywhere else).
+pub fn catalog_for(os: &str) -> Vec<EmulatorInfo> {
+    let catalog = windows_catalog();
+    if os == "windows" {
+        catalog
+    } else {
+        catalog.into_iter().filter_map(linux_variant).collect()
+    }
+}
+
+/// Returns the built-in catalog of supported emulators for this OS.
 pub fn get_catalog() -> Vec<EmulatorInfo> {
+    catalog_for(std::env::consts::OS)
+}
+
+/// The catalog's Windows builds (the reference: other OSes derive from it).
+fn windows_catalog() -> Vec<EmulatorInfo> {
     vec![
         // ═══════════════════════════════════════════════════════════
         //  NINTENDO
@@ -1022,4 +1141,63 @@ pub fn get_catalog() -> Vec<EmulatorInfo> {
             setup_files: vec![],
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Archive kinds the installer handles. "appimage" is a whole program in
+    /// one file: kept as it is (named `executable_name`) and made executable.
+    const ARCHIVE_TYPES: [&str; 4] = ["zip", "7z", "tar.gz", "appimage"];
+
+    #[test]
+    fn every_linux_build_is_a_real_linux_download() {
+        let linux = catalog_for("linux");
+        let windows = catalog_for("windows");
+        assert!(linux.len() >= windows.len() - 2, "only Project64 and Xenia have no Linux build");
+        for id in ["project64", "xenia"] {
+            assert!(linux.iter().all(|e| e.id != id), "{} has no Linux build to offer", id);
+        }
+        for e in &linux {
+            let url = e.download_url.to_lowercase();
+            assert!(url.starts_with("https://"), "{}: {}", e.id, e.download_url);
+            assert!(!url.contains("win"), "{}: a Windows file on Linux: {}", e.id, e.download_url);
+            assert!(ARCHIVE_TYPES.contains(&e.archive_type.as_str()), "{}: unknown archive type {}", e.id, e.archive_type);
+            assert!(!e.executable_name.to_lowercase().ends_with(".exe"), "{}: {}", e.id, e.executable_name);
+            if e.archive_type == "appimage" {
+                assert!(e.executable_name.ends_with(".AppImage"), "{}: an AppImage is saved as one", e.id);
+            }
+            if let Some(core) = &e.core_name {
+                assert!(core.ends_with("_libretro.so"), "{}: Linux loads .so cores, not {}", e.id, core);
+            }
+            for sf in &e.setup_files {
+                assert!(!sf.url.contains("/windows/") && !sf.url.contains(".dll"), "{}: Windows core {}", e.id, sf.url);
+            }
+        }
+        // RetroArch cores come from the Linux buildbot.
+        let nes = linux.iter().find(|e| e.id == "retroarch-nes").unwrap();
+        assert_eq!(nes.core_name.as_deref(), Some("mesen_libretro.so"));
+        assert_eq!(nes.setup_files[0].url, "https://buildbot.libretro.com/nightly/linux/x86_64/latest/mesen_libretro.so.zip");
+        assert_eq!(nes.executable_name, "RetroArch-Linux-x86_64.AppImage");
+        // The BIOS files stay the same.
+        let segacd = |cat: &[EmulatorInfo]| cat.iter().find(|e| e.id == "retroarch-segacd").unwrap().setup_files.iter().skip(1).map(|s| s.url.clone()).collect::<Vec<_>>();
+        assert_eq!(segacd(&linux), segacd(&windows));
+    }
+
+    #[test]
+    fn the_windows_catalog_is_unchanged() {
+        for e in catalog_for("windows") {
+            assert!(e.archive_type == "zip" || e.archive_type == "7z", "{}", e.id);
+            assert!(e.executable_name.to_lowercase().ends_with(".exe"), "{}", e.id);
+            if let Some(core) = &e.core_name {
+                assert!(core.ends_with(".dll"), "{}", e.id);
+            }
+        }
+        assert_eq!(core_file_for("mesen_libretro.dll", "windows"), "mesen_libretro.dll");
+        assert_eq!(core_file_for("mesen_libretro.dll", "linux"), "mesen_libretro.so");
+        assert_eq!(core_url_for("mgba_libretro.dll", "windows"), "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mgba_libretro.dll.zip");
+        assert_eq!(dolphin_download_url("2609b", "windows"), "https://dl.dolphin-emu.org/releases/2609b/dolphin-2609b-x64.7z");
+        assert_eq!(dolphin_download_url("2609b", "linux"), "https://dl.dolphin-emu.org/releases/2609b/dolphin-2609b-x64.AppImage");
+    }
 }

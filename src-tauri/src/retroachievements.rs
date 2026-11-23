@@ -357,7 +357,7 @@ pub fn inject_ra_config_into_emulators(emulators_dir: &str, username: &str, toke
 fn find_retroarch_cfg(base: &PathBuf) -> Option<PathBuf> {
     // Try direct location first
     let direct = base.join("retroarch.cfg");
-    if direct.exists() || base.join("retroarch.exe").exists() {
+    if direct.exists() || base.join(crate::emulators::RETROARCH_EXE).exists() {
         return Some(direct);
     }
     // Search one level deep for retroarch.exe and put cfg next to it
@@ -365,7 +365,7 @@ fn find_retroarch_cfg(base: &PathBuf) -> Option<PathBuf> {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                if path.join("retroarch.exe").exists() {
+                if path.join(crate::emulators::RETROARCH_EXE).exists() {
                     return Some(path.join("retroarch.cfg"));
                 }
             }

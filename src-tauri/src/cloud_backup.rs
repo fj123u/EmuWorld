@@ -288,13 +288,13 @@ fn dir_has_save_files(dir: &PathBuf) -> bool {
 }
 
 fn find_retroarch_base(install_dir: &PathBuf) -> PathBuf {
-    if install_dir.join("retroarch.exe").exists() {
+    if install_dir.join(crate::emulators::RETROARCH_EXE).exists() {
         return install_dir.clone();
     }
     if let Ok(entries) = fs::read_dir(install_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.is_dir() && path.join("retroarch.exe").exists() {
+            if path.is_dir() && path.join(crate::emulators::RETROARCH_EXE).exists() {
                 return path;
             }
         }

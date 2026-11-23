@@ -45,14 +45,14 @@ pub struct SaveState {
 /// RetroArch's own folder (the one holding retroarch.exe) under the emulators directory.
 pub fn retroarch_dir(emulators_directory: &Path) -> Option<PathBuf> {
     let base = emulators_directory.join("retroarch");
-    if base.join("retroarch.exe").exists() {
+    if base.join(crate::emulators::RETROARCH_EXE).exists() {
         return Some(base);
     }
     fs::read_dir(&base)
         .ok()?
         .flatten()
         .map(|e| e.path())
-        .find(|p| p.is_dir() && p.join("retroarch.exe").exists())
+        .find(|p| p.is_dir() && p.join(crate::emulators::RETROARCH_EXE).exists())
 }
 
 /// Resolves `savestate_directory` from retroarch.cfg (`:\states` is relative

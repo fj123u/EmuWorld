@@ -100,7 +100,8 @@ Tests : un test « chaque émulateur Linux a une URL https, un archive_type conn
 ## Avancement
 
 - **Étapes 1–2 faites le 2026-11-23** (fa75c0d, c834b14) : `winapi` réservé à Windows ; `dpapi.rs` → AES-256-GCM + clé `.secret_key` en 0600 hors Windows ; corbeille freedesktop (`trash`) ; `process_running` via `/proc/*/comm` ; capture d'écran via grim / gnome-screenshot / spectacle / scrot / ImageMagick ; `/etc/os-release` dans l'en-tête des logs ; `open_path` avec les mêmes garde-fous partout (`xdg-open`). Job CI `ubuntu-22.04` : le backend compile et ses 161 tests passent sous Linux.
-- Reste : étape 3 (catalogue Linux, tar.gz, AppImage `chmod +x`, cores `.so`), 4 (lancement, chemins de config RetroArch / saves), 5 (overlay et raccourcis X11/Wayland), 6 (packaging .deb + AppImage + updater + job release), 7 (test réel en VM).
+- **Étape 3 faite le 2026-11-23** : `emulators::catalog_for(os)` dérive le catalogue Linux du catalogue Windows (`linux_build(id)` : URL vérifiées sur les releases, AppImage enregistrées sous un nom fixe comme `mGBA.AppImage`) ; Project64 et Xenia masqués sous Linux ; RetroArch Linux (`RetroArch-Linux-x86_64.AppImage`, `emulators::RETROARCH_EXE`) et cores `.so` du buildbot Linux (`core_file` / `core_url`) ; extraction tar.gz sûre (`extract_tar_gz`, liens ignorés), AppImage gardée telle quelle, bit exécutable conservé (zip) ou ajouté (`make_executable`), 7-Zip cherché dans le PATH (`7zz`/`7z`/`7za`), repli « premier programme » par OS, mises à jour qui prennent le fichier Linux de la release, Dolphin Linux en AppImage (2609b). Ligne de changelog à écrire quand la build Linux sortira (étape 6).
+- Reste : 4 (lancement, chemins de config RetroArch / saves), 5 (overlay et raccourcis X11/Wayland), 6 (packaging .deb + AppImage + updater + job release), 7 (test réel en VM).
 
 ## 5. Ordre de travail proposé
 

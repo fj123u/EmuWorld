@@ -174,7 +174,7 @@ async fn ensure_core(cores_dir: &Path, core_name: &str) -> Result<PathBuf, Strin
     }
     push_log("INFO", &format!("Netplay: core {} manquant, téléchargement…", core_name));
     fs::create_dir_all(cores_dir).map_err(|e| e.to_string())?;
-    let url = format!("https://buildbot.libretro.com/nightly/windows/x86_64/latest/{}.zip", core_name);
+    let url = crate::emulators::core_url(core_name);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(60))
         .build()
@@ -287,14 +287,14 @@ async fn launch_inner(
     }
 
     let ra_dir = PathBuf::from(&config.emulators_directory).join("retroarch");
-    let ra_exe = crate::find_executable(&ra_dir, "retroarch.exe").ok_or("RetroArch n'est pas installé (nécessaire pour le netplay)")?;
+    let ra_exe = crate::find_executable(&ra_dir, crate::emulators::RETROARCH_EXE).ok_or("RetroArch n'est pas installé (nécessaire pour le netplay)")?;
     let ra_root = ra_exe.parent().unwrap_or(&ra_dir).to_path_buf();
     let core_name = emu
         .core_name
-        .as_deref()
-        .or_else(|| crate::retroachievements::retroarch_core_for_emulator(&emu.id))
+        .clone()
+        .or_else(|| crate::retroachievements::retroarch_core_for_emulator(&emu.id).map(crate::emulators::core_file))
         .ok_or("Pas de netplay pour cette console")?;
-    let core = ensure_core(&ra_root.join("cores"), core_name).await?;
+    let core = ensure_core(&ra_root.join("cores"), &core_name).await?;
 
     let work = crate::emuworld_base_dir().join("netplay");
     let logs = crate::emuworld_base_dir().join("logs");
