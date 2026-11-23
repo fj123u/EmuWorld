@@ -97,6 +97,11 @@ Tests : un test « chaque émulateur Linux a une URL https, un archive_type conn
 - Job de tests sur chaque push : ajouter `ubuntu-22.04` pour que `cargo test` attrape tout code Windows non protégé.
 - Les deux jobs uploadent dans la même release ; `latest.json` fusionné (tauri-action le fait si `releaseId` partagé).
 
+## Avancement
+
+- **Étapes 1–2 faites le 2026-11-23** (fa75c0d, c834b14) : `winapi` réservé à Windows ; `dpapi.rs` → AES-256-GCM + clé `.secret_key` en 0600 hors Windows ; corbeille freedesktop (`trash`) ; `process_running` via `/proc/*/comm` ; capture d'écran via grim / gnome-screenshot / spectacle / scrot / ImageMagick ; `/etc/os-release` dans l'en-tête des logs ; `open_path` avec les mêmes garde-fous partout (`xdg-open`). Job CI `ubuntu-22.04` : le backend compile et ses 161 tests passent sous Linux.
+- Reste : étape 3 (catalogue Linux, tar.gz, AppImage `chmod +x`, cores `.so`), 4 (lancement, chemins de config RetroArch / saves), 5 (overlay et raccourcis X11/Wayland), 6 (packaging .deb + AppImage + updater + job release), 7 (test réel en VM).
+
 ## 5. Ordre de travail proposé
 
 1. **Compiler sous Linux** : `cfg` sur `winapi`/`dpapi`, stubs ; CI Ubuntu `cargo check` + `cargo test`. (petit, débloque tout)
