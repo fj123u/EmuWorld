@@ -13,6 +13,13 @@ describe("CI workflow", () => {
     expect(ci).toMatch(/run: npx tauri build --debug --no-bundle/);
   });
 
+  it("builds and tests the backend on Linux too (port for 3.2.0)", () => {
+    expect(ci).toMatch(/runs-on: ubuntu-22\.04/);
+    expect(ci).toMatch(/libwebkit2gtk-4\.1-dev/);
+    const linux = ci.slice(ci.indexOf("runs-on: ubuntu-22.04"));
+    expect(linux).toMatch(/run: cargo test --manifest-path src-tauri\/Cargo\.toml/);
+  });
+
   it("still type-checks and runs both test suites", () => {
     expect(ci).toMatch(/run: npx tsc --noEmit/);
     expect(ci).toMatch(/run: npm test/);

@@ -8,6 +8,9 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  { version: "3.2.0", date: "2026-11-23", changes: [
+    "📂 Réglages → Logs : « Ouvrir le log du jour » ouvre bien le fichier (le bouton n'acceptait que des dossiers et ne faisait rien)",
+  ] },
   { version: "3.1.1", date: "2026-11-23", changes: [
     "📋 Logs refaits : en-tête à chaque démarrage (version, Windows, dossiers, émulateurs installés, clés configurées), plus de lignes répétées en boucle, erreurs de l'interface et plantages enregistrés, actions (favoris, notes, collections, recherches du Store, sauvegardes cloud…) tracées avec leur résultat, et clés, jetons et e-mails toujours masqués",
     "🩺 Réglages → Logs : bouton « Copier le rapport de diagnostic » à envoyer quand quelque chose ne marche pas (ton nom d'utilisateur Windows y est masqué) ; les logs sont gardés 14 jours",

@@ -57,3 +57,30 @@ jobs:
       # packages that broke the 2.7.1 release — show up before tagging.
       - name: Build the Tauri app
         run: npx tauri build --debug --no-bundle
+
+  # Linux port (3.2.0, scratch/linux_port.md): the backend must build and
+  # pass its tests on Ubuntu too, so Windows-only code is caught at once.
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system libraries (WebKitGTK, GTK, udev for the gamepad)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libudev-dev libssl-dev
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Rust tests on Linux
+        run: cargo test --manifest-path src-tauri/Cargo.toml

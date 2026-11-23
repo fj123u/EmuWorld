@@ -282,9 +282,10 @@ fn move_to_recycle_bin(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Linux: the freedesktop trash (~/.local/share/Trash), like the recycle bin.
 #[cfg(not(windows))]
 fn move_to_recycle_bin(path: &Path) -> Result<(), String> {
-    fs::remove_file(path).map_err(|e| e.to_string())
+    trash::delete(path).map_err(|e| e.to_string())
 }
 
 fn ra_states_location() -> Result<(PathBuf, StatesLayout), String> {

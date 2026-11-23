@@ -1639,17 +1639,8 @@ async fn launch_emulator(
                 let deadline = std::time::Instant::now() + max_wait;
                 std::thread::sleep(std::time::Duration::from_secs(2)); // brief grace period
                 while std::time::Instant::now() < deadline {
-                    let output = std::process::Command::new("tasklist")
-                        .args(["/FI", &format!("IMAGENAME eq {}", exe_name), "/FO", "CSV", "/NH"])
-                        .output();
-                    match output {
-                        Ok(out) => {
-                            let stdout = String::from_utf8_lossy(&out.stdout);
-                            if !stdout.to_lowercase().contains(&exe_name.to_lowercase()) {
-                                break; // process gone
-                            }
-                        }
-                        Err(_) => break,
+                    if process_running(&exe_name) != Some(true) {
+                        break; // process gone (or no way to tell)
                     }
                     std::thread::sleep(poll_interval);
                 }
@@ -6709,7 +6700,6 @@ fn migrate_covers_to_webp() -> Result<String, String> {
 #[tauri::command]
 fn take_screenshot(game_name: String, console: String) -> Result<String, String> {
     push_log("INFO", &format!("Screenshot: '{}' ({})", game_name, console));
-    use std::process::Command as Cmd;
 
     let mut base = emuworld_base_dir();
     base.push("screenshots");
@@ -6724,6 +6714,15 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
     let filepath = base.join(&filename);
     let path_str = filepath.to_string_lossy().to_string();
 
+    capture_screen(&filepath, &path_str)?;
+    push_log("INFO", &format!("Screenshot enregistré: {}", path_str));
+    Ok(filepath.to_string_lossy().to_string())
+}
+
+/// The whole screen into `filepath` (PNG).
+#[cfg(target_os = "windows")]
+fn capture_screen(_filepath: &std::path::Path, path_str: &str) -> Result<(), String> {
+    use std::process::Command as Cmd;
     let safe_path = path_str.replace('\\', "/").replace('\'', "").replace('$', "").replace('`', "");
     let ps_script = format!(
         "Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap($b.Width, $b.Height); $g = [System.Drawing.Graphics]::FromImage($bmp); $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save('{}'); $g.Dispose(); $bmp.Dispose()",
@@ -6744,8 +6743,33 @@ fn take_screenshot(game_name: String, console: String) -> Result<String, String>
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Screenshot failed: {}", stderr));
     }
+    Ok(())
+}
 
-    Ok(filepath.to_string_lossy().to_string())
+/// Linux: the first screenshot tool found (Wayland's grim, GNOME, KDE, X11).
+#[cfg(not(target_os = "windows"))]
+fn capture_screen(filepath: &std::path::Path, _path_str: &str) -> Result<(), String> {
+    for (program, args) in linux_screenshot_commands(filepath) {
+        match std::process::Command::new(program).args(&args).output() {
+            Ok(out) if out.status.success() && filepath.exists() => return Ok(()),
+            Ok(out) => push_log("WARN", &format!("Screenshot: {} a échoué ({})", program, String::from_utf8_lossy(&out.stderr).trim())),
+            Err(_) => {} // not installed: try the next one
+        }
+    }
+    Err("Aucun outil de capture trouvé (grim, gnome-screenshot, spectacle, scrot ou ImageMagick)".to_string())
+}
+
+/// Screenshot tools to try on Linux, in order, with their arguments.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn linux_screenshot_commands(filepath: &std::path::Path) -> Vec<(&'static str, Vec<String>)> {
+    let f = filepath.to_string_lossy().to_string();
+    vec![
+        ("grim", vec![f.clone()]),
+        ("gnome-screenshot", vec!["-f".into(), f.clone()]),
+        ("spectacle", vec!["-b".into(), "-n".into(), "-f".into(), "-o".into(), f.clone()]),
+        ("scrot", vec!["-o".into(), f.clone()]),
+        ("import", vec!["-window".into(), "root".into(), f]),
+    ]
 }
 
 #[derive(Serialize, Clone)]
@@ -6913,6 +6937,33 @@ fn log_event(level: String, message: String) {
     push_log(level, &message);
 }
 
+/// Whether a process named `exe_name` runs (None: cannot tell).
+#[cfg(target_os = "windows")]
+fn process_running(exe_name: &str) -> Option<bool> {
+    let out = std::process::Command::new("tasklist")
+        .args(["/FI", &format!("IMAGENAME eq {}", exe_name), "/FO", "CSV", "/NH"])
+        .output()
+        .ok()?;
+    Some(String::from_utf8_lossy(&out.stdout).to_lowercase().contains(&exe_name.to_lowercase()))
+}
+
+/// Linux: the names in /proc/<pid>/comm (cut at 15 characters by the kernel).
+#[cfg(not(target_os = "windows"))]
+fn process_running(exe_name: &str) -> Option<bool> {
+    let entries = fs::read_dir("/proc").ok()?;
+    Some(entries.flatten().any(|e| {
+        fs::read_to_string(e.path().join("comm")).map(|comm| comm_matches(&comm, exe_name)).unwrap_or(false)
+    }))
+}
+
+/// `comm` (the kernel's process name, at most 15 bytes) is the one of `exe_name`.
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn comm_matches(comm: &str, exe_name: &str) -> bool {
+    let want: String = exe_name.to_lowercase().chars().take(15).collect();
+    let comm = comm.trim().to_lowercase();
+    !comm.is_empty() && comm == want
+}
+
 /// Logs a user action and how it went: "what → result", or "what → échec: …".
 fn log_action<T>(what: &str, result: &Result<T, String>, ok: impl Fn(&T) -> String) {
     match result {
@@ -6937,7 +6988,22 @@ fn system_description() -> String {
             return format!("{} ({})", ver, std::env::consts::ARCH);
         }
     }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(name) = fs::read_to_string("/etc/os-release").ok().and_then(|t| os_release_name(&t)) {
+            return format!("{} ({})", name, std::env::consts::ARCH);
+        }
+    }
     format!("{} ({})", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+/// PRETTY_NAME of /etc/os-release ("Ubuntu 24.04.1 LTS").
+#[cfg_attr(target_os = "windows", allow(dead_code))]
+fn os_release_name(text: &str) -> Option<String> {
+    text.lines()
+        .find_map(|l| l.strip_prefix("PRETTY_NAME="))
+        .map(|v| v.trim().trim_matches('"').to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn startup_info() -> logging::StartupInfo {
@@ -6999,40 +7065,50 @@ fn get_logs_directory() -> String {
     emuworld_base_dir().join("logs").to_string_lossy().to_string()
 }
 
+/// A path `open_path` may show: an existing file or folder inside the
+/// EmuWorld folders (data, ROMs, emulators, covers), never a URL, a network
+/// share, a `shell:` target or a path climbing out with `..`.
+fn open_path_allowed(path: &str, roots: &[PathBuf]) -> Result<PathBuf, String> {
+    let lower = path.to_lowercase();
+    if lower.starts_with("shell:") || lower.starts_with("\\\\") || lower.starts_with("http") || lower.starts_with("ftp") || lower.contains("..") {
+        return Err("Type de chemin non autorisé".to_string());
+    }
+    let p = PathBuf::from(path);
+    if !p.exists() {
+        return Err("Ce chemin n'existe pas".to_string());
+    }
+    let canonical = fs::canonicalize(&p).unwrap_or(p.clone());
+    let inside = roots.iter().any(|root| fs::canonicalize(root).map(|r| canonical.starts_with(&r)).unwrap_or(false));
+    if !inside {
+        return Err("Seuls les dossiers EmuWorld peuvent être ouverts".to_string());
+    }
+    Ok(p)
+}
+
 #[tauri::command]
 fn open_path(path: String) -> Result<(), String> {
     push_log("INFO", &format!("Ouverture dans l'explorateur: {}", path));
+    let config = get_config();
+    let roots = [
+        emuworld_base_dir(),
+        PathBuf::from(&config.roms_directory),
+        PathBuf::from(&config.emulators_directory),
+        PathBuf::from(&config.covers_directory),
+    ];
+    let p = open_path_allowed(&path, &roots).map_err(|e| {
+        push_log("WARN", &format!("Ouverture refusée ({}): {}", e, path));
+        e
+    })?;
     #[cfg(target_os = "windows")]
-    {
-        let path_lower = path.to_lowercase();
-        if path_lower.starts_with("shell:")
-            || path_lower.starts_with("\\\\")
-            || path_lower.starts_with("http")
-            || path_lower.starts_with("ftp")
-            || path_lower.contains("..")
-        {
-            return Err("Type de chemin non autorisé".to_string());
-        }
-        let p = PathBuf::from(&path);
-        if !p.is_dir() {
-            return Err("Ce chemin n'est pas un dossier valide".to_string());
-        }
-        let config = get_config();
-        let allowed_roots = [
-            emuworld_base_dir(),
-            PathBuf::from(&config.roms_directory),
-            PathBuf::from(&config.emulators_directory),
-            PathBuf::from(&config.covers_directory),
-        ];
-        let canonical = fs::canonicalize(&p).unwrap_or(p.clone());
-        let is_allowed = allowed_roots.iter().any(|root| {
-            if let Ok(cr) = fs::canonicalize(root) { canonical.starts_with(&cr) } else { false }
-        });
-        if !is_allowed {
-            return Err("Seuls les dossiers EmuWorld peuvent être ouverts".to_string());
-        }
-        Command::new("explorer").arg(&path).spawn().map_err(|e| e.to_string())?;
-    }
+    let opener = "explorer";
+    #[cfg(target_os = "macos")]
+    let opener = "open";
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let opener = "xdg-open";
+    Command::new(opener).arg(&p).spawn().map_err(|e| {
+        push_log("ERROR", &format!("{} impossible à lancer: {}", opener, e));
+        e.to_string()
+    })?;
     Ok(())
 }
 
@@ -8508,6 +8584,34 @@ mod tests {
         assert_eq!(switch2_edition_base("Mario Kart World [0400C3F00006E000]", ns2), None);
         assert_eq!(switch2_edition_base("Super Mario Bros Wonder Switch 2 Edition", "Nintendo Switch"), None);
         assert_eq!(switch2_edition_base("Switch 2 Edition", ns2), None);
+    }
+
+    #[test]
+    fn the_system_helpers_work_off_windows_too() {
+        // /proc/<pid>/comm keeps 15 characters.
+        assert!(super::comm_matches("rpcs3\n", "rpcs3"));
+        assert!(super::comm_matches("duckstation-qt-\n", "duckstation-qt-x64-ReleaseLTCG"));
+        assert!(!super::comm_matches("rpcs3-other\n", "rpcs3"));
+        assert!(!super::comm_matches("", "rpcs3"));
+        let os = "NAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\n";
+        assert_eq!(super::os_release_name(os).as_deref(), Some("Ubuntu 24.04.1 LTS"));
+        assert_eq!(super::os_release_name("NAME=x"), None);
+        let tools = super::linux_screenshot_commands(std::path::Path::new("/tmp/shot.png"));
+        assert_eq!(tools[0], ("grim", vec!["/tmp/shot.png".to_string()]));
+        assert!(tools.iter().all(|(_, args)| args.iter().any(|a| a == "/tmp/shot.png")));
+    }
+
+    #[test]
+    fn open_path_only_opens_existing_paths_inside_emuworld_folders() {
+        let root = fake_library("openpath", &["NES/Zelda.nes", "logs/emuworld.log"]);
+        let roots = [root.clone()];
+        assert!(super::open_path_allowed(&root.join("NES").to_string_lossy(), &roots).is_ok(), "a folder");
+        assert!(super::open_path_allowed(&root.join("logs").join("emuworld.log").to_string_lossy(), &roots).is_ok(), "a file (the day's log)");
+        assert!(super::open_path_allowed(&root.join("missing").to_string_lossy(), &roots).is_err());
+        assert!(super::open_path_allowed(&std::env::temp_dir().to_string_lossy(), &roots).is_err(), "outside");
+        assert!(super::open_path_allowed("https://example.com", &roots).is_err());
+        assert!(super::open_path_allowed(&format!("{}/../x", root.to_string_lossy()), &roots).is_err());
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
