@@ -5,6 +5,7 @@
     "resources": [],
     "category": "Game",
     "shortDescription": "Emulator launcher: library, covers, playtime, netplay",
+    "longDescription": "EmuWorld installs emulators, scans your ROM library, fetches box art, tracks playtime and achievements, and plays online with friends (netplay, lobbies).",
     "linux": {
       "deb": {
         "depends": ["7zip | p7zip-full", "mame-tools"],

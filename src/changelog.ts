@@ -11,6 +11,7 @@ export const CHANGELOG: ChangelogEntry[] = [
   { version: "3.2.0", date: "2026-11-23", changes: [
     "📂 Réglages → Logs : « Ouvrir le log du jour » ouvre bien le fichier (le bouton n'acceptait que des dossiers et ne faisait rien)",
     "🎮 L'overlay en jeu s'ouvre et se ferme aussi à la manette : Select + R3 en même temps",
+    "🐧 EmuWorld arrive sur Linux : paquet .deb (Ubuntu 22.04+, Debian 12+, Mint…) et AppImage, avec les émulateurs en version Linux, RetroArch portable et les mises à jour automatiques",
   ] },
   { version: "3.1.1", date: "2026-11-23", changes: [
     "📋 Logs refaits : en-tête à chaque démarrage (version, Windows, dossiers, émulateurs installés, clés configurées), plus de lignes répétées en boucle, erreurs de l'interface et plantages enregistrés, actions (favoris, notes, collections, recherches du Store, sauvegardes cloud…) tracées avec leur résultat, et clés, jetons et e-mails toujours masqués",
