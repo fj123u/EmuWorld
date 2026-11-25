@@ -5582,6 +5582,16 @@ async fn search_vimm(query: String, console_slug: Option<String>) -> Result<Vec<
     result
 }
 
+/// Whether a Vimm search answer has results to read: Vimm answers 404 when
+/// nothing matches (or the query is too short), which is no game, not a failure.
+fn vimm_search_outcome(status: u16) -> Result<bool, String> {
+    match status {
+        200..=299 => Ok(true),
+        404 => Ok(false),
+        other => Err(format!("Vimm search HTTP {}", other)),
+    }
+}
+
 async fn search_vimm_inner(query: String, console_slug: Option<String>) -> Result<Vec<VimmGame>, String> {
     if query.trim().len() < 2 { return Ok(vec![]); }
     let client = reqwest::Client::builder()
@@ -5596,8 +5606,8 @@ async fn search_vimm_inner(query: String, console_slug: Option<String>) -> Resul
         format!("https://vimm.net/vault/?p=list&q={}", urlencoding::encode(query.trim()))
     };
     let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err(format!("Vimm search HTTP {}", response.status()));
+    if !vimm_search_outcome(response.status().as_u16())? {
+        return Ok(vec![]);
     }
     let html = response.text().await.map_err(|e| e.to_string())?;
 
@@ -5765,8 +5775,11 @@ fn vimm_dest_dir(console: &str) -> Result<PathBuf, String> {
 
 /// Pages the Vimm download window may show: Vimm, its download servers and
 /// Cloudflare's check. Anything else (ads, other sites) is refused.
+/// Linux's WebKitGTK also asks for every frame of the page: Cloudflare's
+/// check builds its own in `about:blank` / `about:srcdoc` frames (content
+/// written by the page itself), and crashes when one of them is refused.
 fn vimm_window_allows(url: &tauri::Url) -> bool {
-    if url.as_str() == "about:blank" {
+    if url.as_str() == "about:blank" || url.as_str() == "about:srcdoc" {
         return true;
     }
     if url.scheme() != "https" {
@@ -5775,6 +5788,17 @@ fn vimm_window_allows(url: &tauri::Url) -> bool {
     match url.host_str() {
         Some(h) => h == "vimm.net" || h.ends_with(".vimm.net") || h == "challenges.cloudflare.com",
         None => false,
+    }
+}
+
+/// A URL of the Vimm window as the log shows it: without the query (Vimm's
+/// download links carry a token), and `about:` pages as they are (their
+/// origin reads "null").
+fn vimm_log_url(url: &tauri::Url) -> String {
+    if url.scheme() == "about" {
+        url.as_str().to_string()
+    } else {
+        format!("{}{}", url.origin().ascii_serialization(), url.path())
     }
 }
 
@@ -5886,7 +5910,7 @@ async fn download_vimm_in_window(
                 let _ = nav_tx.send(VimmWindowEvent::ReachedServer);
             }
             // Without the query: Vimm's download links carry a token.
-            push_log(if ok { "INFO" } else { "WARN" }, &format!("Fenêtre Vimm: navigation {} → {}{}", if ok { "acceptée" } else { "refusée" }, url.origin().ascii_serialization(), url.path()));
+            push_log(if ok { "INFO" } else { "WARN" }, &format!("Fenêtre Vimm: navigation {} → {}", if ok { "acceptée" } else { "refusée" }, vimm_log_url(url)));
             ok
         })
         .on_page_load(move |win, payload| {
@@ -8146,11 +8170,27 @@ mod tests {
         assert!(ok("https://dl3.vimm.net/?mediaId=1"));
         assert!(ok("https://challenges.cloudflare.com/cdn-cgi/challenge-platform/x"));
         assert!(ok("about:blank"));
+        assert!(ok("about:srcdoc"), "Cloudflare's frames under Linux's WebKitGTK");
+        assert!(!ok("about:config"));
         assert!(!ok("http://vimm.net/vault/1"), "plain http");
         assert!(!ok("https://vimm.net.evil.com/"));
         assert!(!ok("https://notvimm.net/"));
         assert!(!ok("https://ads.example.com/"));
         assert!(!ok("file:///C:/Windows/win.ini"));
+    }
+
+    #[test]
+    fn vimm_window_logs_readable_urls_without_tokens() {
+        let log = |u: &str| super::vimm_log_url(&u.parse().unwrap());
+        assert_eq!(log("about:srcdoc"), "about:srcdoc");
+        assert_eq!(log("https://dl3.vimm.net/download?mediaId=1&token=secret"), "https://dl3.vimm.net/download");
+    }
+
+    #[test]
+    fn an_empty_vimm_search_is_no_result_not_an_error() {
+        assert_eq!(super::vimm_search_outcome(404), Ok(false));
+        assert_eq!(super::vimm_search_outcome(200), Ok(true));
+        assert!(super::vimm_search_outcome(503).is_err());
     }
 
     #[test]

@@ -123,7 +123,7 @@ async fn index_for(client: &reqwest::Client, system: &str) -> Option<Arc<Index>>
         Some(names) => names,
         None => {
             let url = format!("https://thumbnails.libretro.com/{}/Named_Boxarts/", urlencoding::encode(system));
-            push_log("INFO", &format!("Covers: liste libretro de '{}' téléchargée (correspondance approchée)", system));
+            push_log("INFO", &format!("Covers: téléchargement de la liste libretro de '{}' (correspondance approchée)", system));
             let resp = client.get(&url).timeout(std::time::Duration::from_secs(60)).send().await;
             let html = match resp {
                 Ok(r) if r.status().is_success() => r.text().await.ok()?,
